@@ -1,10 +1,52 @@
-/* Keep cursor SVG in sync with mainTableViewColumnResizeCursor.ts */
+/* Keep cursor SVG in sync with mainTableViewColumnResizeCursor.ts.
+   Portal list + Views resize chrome mirrors DW designerListColumnResize.scss. */
 $mtv-col-resize-cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cline x1='8' y1='3' x2='8' y2='17' stroke='%23303133' stroke-width='2'/%3E%3Cline x1='12' y1='3' x2='12' y2='17' stroke='%23303133' stroke-width='2'/%3E%3Cpath d='M4 10 L6.5 7 L6.5 13 Z' fill='%23303133'/%3E%3Cpath d='M16 10 L13.5 7 L13.5 13 Z' fill='%23303133'/%3E%3C/svg%3E")
   10 10,
   ew-resize;
 
+/* Header wrapper — same metrics as DW `.dwl-col-header` (compact, not inflated). */
+.portal-list-col-header,
+.mtv-data-grid .col-header-cell {
+  position: static;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 23px;
+  box-sizing: border-box;
+  padding-right: 12px;
+}
+
+.mtv-data-grid .el-table__header-wrapper th.mtv-resizable-col-header,
+.portal-list-grid .el-table__header-wrapper th {
+  position: relative;
+  overflow: visible !important;
+}
+
+.mtv-data-grid .el-table__header-wrapper th.mtv-resizable-col-header .cell,
+.portal-list-grid .el-table__header-wrapper th .cell {
+  position: static !important;
+  display: flex !important;
+  align-items: center;
+  width: 100% !important;
+  max-width: none !important;
+  overflow: visible !important;
+  text-overflow: clip;
+}
+
+.mtv-data-grid .el-table__header-wrapper th.mtv-resizable-col-header:has(.col-resize-handle:hover),
+.mtv-data-grid .el-table__header-wrapper th.mtv-resizable-col-header:has(.col-resize-handle.is-active),
+.portal-list-grid .el-table__header-wrapper th:has(.col-resize-handle:hover),
+.portal-list-grid .el-table__header-wrapper th:has(.col-resize-handle.is-active) {
+  z-index: 12;
+}
+
+/* Default: invisible. Hover/drag: thin blue edge — same as DW. */
 .mtv-data-grid .col-resize-handle,
-.mtv-data-grid th.mtv-resizable-col-header .col-resize-handle {
+.mtv-data-grid th.mtv-resizable-col-header .col-resize-handle,
+.portal-list-grid .col-resize-handle,
+.portal-list-grid th .col-resize-handle,
+.portal-list-col-header .col-resize-handle {
   position: absolute;
   top: 0;
   right: 0;
@@ -14,6 +56,7 @@ $mtv-col-resize-cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   z-index: 100;
   box-sizing: border-box;
   border-right: 2px solid transparent;
+  background-color: transparent;
   transition:
     border-color 0.12s ease,
     background-color 0.12s ease;
@@ -22,14 +65,23 @@ $mtv-col-resize-cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .mtv-data-grid .col-resize-handle:hover,
 .mtv-data-grid .col-resize-handle.is-active,
 .mtv-data-grid th.mtv-resizable-col-header .col-resize-handle:hover,
-.mtv-data-grid th.mtv-resizable-col-header .col-resize-handle.is-active {
+.mtv-data-grid th.mtv-resizable-col-header .col-resize-handle.is-active,
+.portal-list-grid .col-resize-handle:hover,
+.portal-list-grid .col-resize-handle.is-active,
+.portal-list-grid th .col-resize-handle:hover,
+.portal-list-grid th .col-resize-handle.is-active,
+.portal-list-col-header .col-resize-handle:hover,
+.portal-list-col-header .col-resize-handle.is-active {
   cursor: $mtv-col-resize-cursor;
   border-right-color: #409eff;
   background-color: rgba(64, 158, 255, 0.18);
 }
 
 .mtv-data-grid .col-resize-handle.is-active,
-.mtv-data-grid th.mtv-resizable-col-header .col-resize-handle.is-active {
+.mtv-data-grid th.mtv-resizable-col-header .col-resize-handle.is-active,
+.portal-list-grid .col-resize-handle.is-active,
+.portal-list-grid th .col-resize-handle.is-active,
+.portal-list-col-header .col-resize-handle.is-active {
   border-right-width: 3px;
   background-color: rgba(64, 158, 255, 0.28);
 }

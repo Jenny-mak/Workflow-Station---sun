@@ -200,6 +200,30 @@ body {
   z-index: 99999 !important;
 }
 
+// Portal list grids: column resize + header cell layout mirror DW
+// `designerListColumnResize.scss` (see mainTableViewColumnResizeCursor.scss).
+.portal-list-grid.el-table .el-table__header-wrapper,
+.portal-list-grid.el-table .el-table__header {
+  overflow: visible;
+}
+
+/* Adjacent .cell padding can sit above the absolute handle — same trap as
+   Playwright "cell intercepts pointer events". Keep hit target usable. */
+.portal-list-grid.el-table th.el-table__cell > .cell {
+  pointer-events: none;
+}
+
+.portal-list-grid.el-table th.el-table__cell > .cell .portal-list-col-header,
+.portal-list-grid.el-table th.el-table__cell > .cell .portal-list-col-header *,
+.portal-list-grid.el-table th.el-table__cell > .cell .col-resize-handle {
+  pointer-events: auto;
+}
+
+.mtv-data-grid.el-table th.el-table__cell {
+  position: relative;
+  overflow: visible !important;
+}
+
 // 弹窗 / 抽屉内表单：字段名（label）完整显示、不折行，且同一表单内
 // 各行输入框左边缘对齐 —— 保留 label-width 作为统一宽度，仅当文字超出时
 // 由 min-width 撑开（不折行、不被输入框遮挡）。
