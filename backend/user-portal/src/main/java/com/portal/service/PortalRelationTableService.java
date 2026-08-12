@@ -25,6 +25,22 @@ public interface PortalRelationTableService {
                                                       int page, int size, String search);
 
     /**
+     * 只读分页查询表数据（可选服务端 sort / column filters；filters 为 MTV 同形 JSON 字符串）。
+     */
+    PageResponse<Map<String, Object>> queryTableData(Long tableId, String userId,
+                                                      int page, int size, String search,
+                                                      String sortField, String sortDirection,
+                                                      String filters);
+
+    /**
+     * 只读分页查询表数据（含可选 groupBy；whitelist = 表字段；返回 groupCounts）。
+     */
+    PageResponse<Map<String, Object>> queryTableData(Long tableId, String userId,
+                                                      int page, int size, String search,
+                                                      String sortField, String sortDirection,
+                                                      String filters, String groupBy);
+
+    /**
      * 导出 CSV
      */
     String exportCsv(Long tableId, String userId, int maxRows);

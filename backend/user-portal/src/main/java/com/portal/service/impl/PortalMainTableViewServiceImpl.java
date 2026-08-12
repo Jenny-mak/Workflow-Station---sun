@@ -5,16 +5,24 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.portal.component.FunctionUnitAccessComponent;
 import com.portal.component.MainTableViewAccessResolver;
 import com.portal.component.MainTableViewAccessResolver.AccessRule;
-import com.portal.component.MainTableViewInvolvementChecker;
+import com.portal.component.MainTableViewJdbcQuery;
+import com.portal.component.MainTableViewJdbcQuery.MainInstanceRow;
+import com.portal.component.MainTableViewJdbcQuery.MainPageResult;
+import com.portal.component.MainTableViewJdbcQuery.QuerySpec;
+import com.portal.component.MainTableViewJdbcQuery.SubPageResult;
+import com.portal.component.MainTableViewJdbcQuery.SubRow;
 import com.portal.component.ProcessComponent;
 import com.portal.dto.MainTableViewImportResult;
 import com.portal.dto.ProcessInstanceInfo;
 import com.portal.dto.ProcessStartRequest;
 import com.portal.dto.MainTableViewPortalDtos.FunctionUnitViewMenuItem;
+import com.portal.dto.MainTableViewPortalDtos.MainTableViewColumnFilter;
 import com.portal.dto.MainTableViewPortalDtos.MainTableViewDataPage;
 import com.portal.dto.MainTableViewPortalDtos.MainTableViewDataRow;
 import com.portal.dto.MainTableViewPortalDtos.MainTableViewFieldColumn;
+import com.portal.dto.MainTableViewPortalDtos.MainTableViewGroupCount;
 import com.portal.util.MainTableViewFkDisplaySupport;
+import com.portal.util.MainTableViewSqlQueryCompiler.FieldMeta;
 import com.portal.dto.MainTableViewPortalDtos.MainTableViewSummary;
 import com.portal.entity.ProcessInstance;
 import com.portal.repository.ProcessInstanceRepository;
@@ -23,10 +31,6 @@ import com.portal.util.PortalMainTableViewCsvUtils;
 import com.portal.util.PortalMainTableViewFilterUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,7 +55,7 @@ public class PortalMainTableViewServiceImpl implements PortalMainTableViewServic
     private final ObjectMapper objectMapper;
     private final FunctionUnitAccessComponent functionUnitAccessComponent;
     private final MainTableViewAccessResolver mainTableViewAccessResolver;
-    private final MainTableViewInvolvementChecker mainTableViewInvolvementChecker;
+    private final MainTableViewJdbcQuery mainTableViewJdbcQuery;
     private final ProcessInstanceRepository processInstanceRepository;
     private final ProcessComponent processComponent;
 
@@ -148,37 +152,177 @@ public class PortalMainTableViewServiceImpl implements PortalMainTableViewServic
 
     @Override
     @Transactional(readOnly = true)
-    public MainTableViewDataPage queryViewData(String userId, Long viewId, int page, int size, String search) {
+    public MainTableViewDataPage queryViewData(
+            String userId,
+            Long viewId,
+            int page,
+            int size,
+            String search,
+            List<MainTableViewColumnFilter> columnFilters,
+            String sortField,
+            String sortDirection,
+            String groupBy) {
         ViewDefinition view = loadPublishedView(viewId);
         assertFuAccess(userId, view.functionUnitCode());
         assertViewAccess(userId, view);
 
         List<MainTableViewFieldColumn> columns = visibleColumns(view);
-        List<Map<String, Object>> allRows = loadAndProjectRows(userId, view, search);
-        PortalMainTableViewFilterUtils.applyViewSort(allRows, view.sortConfig());
+        Set<String> visibleFields = columns.stream()
+                .map(MainTableViewFieldColumn::fieldName)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        List<MainTableViewColumnFilter> safeFilters = sanitizeColumnFilters(columnFilters, visibleFields);
+        String safeSortField = sanitizeFieldRef(sortField, visibleFields);
+        String safeGroupBy = sanitizeFieldRef(groupBy, visibleFields);
 
         int safeSize = Math.min(Math.max(size, 1), 200);
         int safePage = Math.max(page, 0);
-        int from = safePage * safeSize;
-        int to = Math.min(from + safeSize, allRows.size());
-        List<Map<String, Object>> pageSlice = from >= allRows.size()
-                ? List.of()
-                : allRows.subList(from, to);
 
-        List<MainTableViewDataRow> rows = pageSlice.stream()
-                .map(r -> MainTableViewDataRow.builder()
-                        .processInstanceId(String.valueOf(r.get("_processInstanceId")))
-                        .values(stripInternalKeys(r))
-                        .build())
-                .toList();
+        QuerySpec spec = buildQuerySpec(userId, view, columns, visibleFields, safeFilters,
+                search, safeSortField, sortDirection, safeGroupBy);
+
+        List<MainTableViewDataRow> rows;
+        long total;
+        List<MainTableViewGroupCount> groupCounts;
+        if ("SUB".equalsIgnoreCase(view.tableType())) {
+            SubPageResult result = mainTableViewJdbcQuery.querySub(spec, safePage, safeSize);
+            total = result.total();
+            groupCounts = result.groupCounts();
+            rows = result.rows().stream()
+                    .map(r -> toDataRow(projectSubJdbcRow(r, view)))
+                    .toList();
+        } else {
+            MainPageResult result = mainTableViewJdbcQuery.queryMain(spec, safePage, safeSize);
+            total = result.total();
+            groupCounts = result.groupCounts();
+            rows = result.rows().stream()
+                    .map(r -> toDataRow(projectMainJdbcRow(r, view)))
+                    .toList();
+        }
 
         return MainTableViewDataPage.builder()
                 .columns(columns)
                 .rows(rows)
-                .total(allRows.size())
+                .total(total)
                 .page(safePage)
                 .size(safeSize)
+                .groupCounts(groupCounts)
                 .build();
+    }
+
+    private QuerySpec buildQuerySpec(
+            String userId,
+            ViewDefinition view,
+            List<MainTableViewFieldColumn> columns,
+            Set<String> visibleFields,
+            List<MainTableViewColumnFilter> safeFilters,
+            String search,
+            String sortField,
+            String sortDirection,
+            String groupBy) {
+        List<FieldMeta> fieldMetas = view.fields().stream()
+                .map(f -> new FieldMeta(
+                        f.fieldName(),
+                        Boolean.TRUE.equals(f.systemField()),
+                        f.columnType(),
+                        f.lookupSourceField()))
+                .toList();
+        // Designer filter_config may include a non-filter "toolbar" key — compiler ignores empty trees.
+        Map<String, Object> designerFilter = new LinkedHashMap<>();
+        if (view.filterConfig() != null) {
+            designerFilter.putAll(view.filterConfig());
+        }
+        designerFilter.remove("toolbar");
+        return new QuerySpec(
+                view.functionUnitCode(),
+                fieldMetas,
+                visibleFields,
+                designerFilter,
+                view.sortConfig(),
+                safeFilters,
+                search,
+                sortField,
+                sortDirection,
+                groupBy,
+                view.restrictToInvolvedUsers(),
+                userId,
+                view.subBindingKeys(),
+                mainTableViewAccessResolver.isSystemAdministrator(userId));
+    }
+
+    private MainTableViewDataRow toDataRow(Map<String, Object> projected) {
+        return MainTableViewDataRow.builder()
+                .processInstanceId(String.valueOf(projected.get("_processInstanceId")))
+                .values(stripInternalKeys(projected))
+                .build();
+    }
+
+    private Map<String, Object> projectMainJdbcRow(MainInstanceRow row, ViewDefinition view) {
+        ProcessInstance pi = ProcessInstance.builder()
+                .id(row.id())
+                .status(row.status())
+                .startTime(row.startTime())
+                .startUserId(row.startUserId())
+                .startUserName(row.startUserName())
+                .currentNode(row.currentNode())
+                .variables(row.variables() != null ? row.variables() : Map.of())
+                .build();
+        return projectInstanceRow(pi, view);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> projectSubJdbcRow(SubRow row, ViewDefinition view) {
+        Map<String, Object> mainVars = stripInternalKeys(
+                row.mainVariables() != null ? row.mainVariables() : Map.of());
+        Map<String, FkSourceMeta> fkSource = loadFkSourceMeta(view.id());
+        Map<String, Object> source = row.subElem() != null ? row.subElem() : Map.of();
+        Map<String, Object> projected = new LinkedHashMap<>();
+        projected.put("_processInstanceId", row.processInstanceId());
+        for (ViewFieldDef field : view.fields()) {
+            if (!Boolean.TRUE.equals(field.visible())) {
+                continue;
+            }
+            if (Boolean.TRUE.equals(field.systemField())) {
+                projected.put(field.fieldName(), switch (field.fieldName()) {
+                    case "process_status" -> row.status();
+                    case "start_time" -> row.startTime();
+                    case "initiator" -> row.startUserName() != null ? row.startUserName() : row.startUserId();
+                    case "current_step" -> row.currentNode();
+                    default -> null;
+                });
+            } else {
+                projected.put(field.fieldName(),
+                        resolveProjectedFieldValue(source, field, mainVars, fkSource));
+            }
+        }
+        return projected;
+    }
+
+    private List<MainTableViewColumnFilter> sanitizeColumnFilters(
+            List<MainTableViewColumnFilter> filters,
+            Set<String> visibleFields) {
+        if (filters == null || filters.isEmpty()) {
+            return List.of();
+        }
+        List<MainTableViewColumnFilter> out = new ArrayList<>();
+        for (MainTableViewColumnFilter filter : filters) {
+            if (filter == null || !visibleFields.contains(filter.fieldName())) {
+                continue;
+            }
+            if (!PortalMainTableViewFilterUtils.isActiveColumnFilter(filter)) {
+                continue;
+            }
+            out.add(filter);
+        }
+        return out;
+    }
+
+    private String sanitizeFieldRef(String field, Set<String> visibleFields) {
+        if (field == null || field.isBlank()) {
+            return null;
+        }
+        String trimmed = field.trim();
+        return visibleFields.contains(trimmed) ? trimmed : null;
     }
 
     @Override
@@ -189,10 +333,23 @@ public class PortalMainTableViewServiceImpl implements PortalMainTableViewServic
         assertViewAccess(userId, view);
 
         List<MainTableViewFieldColumn> columns = visibleColumns(view);
-        List<Map<String, Object>> allRows = loadAndProjectRows(userId, view, null);
-        PortalMainTableViewFilterUtils.applyViewSort(allRows, view.sortConfig());
+        Set<String> visibleFields = columns.stream()
+                .map(MainTableViewFieldColumn::fieldName)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         int limit = Math.min(Math.max(maxRows, 1), 10000);
-        List<Map<String, Object>> slice = allRows.size() <= limit ? allRows : allRows.subList(0, limit);
+        QuerySpec spec = buildQuerySpec(userId, view, columns, visibleFields, List.of(),
+                null, null, null, null);
+
+        List<Map<String, Object>> slice;
+        if ("SUB".equalsIgnoreCase(view.tableType())) {
+            slice = mainTableViewJdbcQuery.querySubExport(spec, limit).stream()
+                    .map(r -> projectSubJdbcRow(r, view))
+                    .toList();
+        } else {
+            slice = mainTableViewJdbcQuery.queryMainExport(spec, limit).stream()
+                    .map(r -> projectMainJdbcRow(r, view))
+                    .toList();
+        }
 
         StringBuilder sb = new StringBuilder();
         sb.append(PortalMainTableViewCsvUtils.csvEscape(PROCESS_INSTANCE_ID_FIELD));
@@ -386,97 +543,6 @@ public class PortalMainTableViewServiceImpl implements PortalMainTableViewServic
             return Boolean.parseBoolean(raw);
         }
         return raw;
-    }
-
-    private List<Map<String, Object>> loadAndProjectRows(String userId, ViewDefinition view, String search) {
-        Pageable pageable = PageRequest.of(0, 5000, Sort.by(Sort.Direction.DESC, "startTime"));
-        Page<ProcessInstance> instances = processInstanceRepository
-                .findByFunctionUnitCodeOrderByStartTimeDesc(view.functionUnitCode(), pageable);
-
-        boolean isSub = "SUB".equalsIgnoreCase(view.tableType());
-        List<Map<String, Object>> rows = new ArrayList<>();
-        String needle = search != null ? search.trim().toLowerCase(Locale.ROOT) : null;
-        Set<String> seenSubKeys = new LinkedHashSet<>();
-        Map<String, Boolean> involvementCache = new HashMap<>();
-        boolean skipInvolvementFilter = mainTableViewAccessResolver.isSystemAdministrator(userId);
-
-        for (ProcessInstance pi : instances.getContent()) {
-            if (!skipInvolvementFilter && view.restrictToInvolvedUsers()) {
-                Boolean involved = involvementCache.computeIfAbsent(
-                        pi.getId(),
-                        id -> mainTableViewInvolvementChecker.isUserInvolved(userId, pi));
-                if (!Boolean.TRUE.equals(involved)) {
-                    continue;
-                }
-            }
-            List<Map<String, Object>> piRows = isSub
-                    ? projectSubTableRows(pi, view, seenSubKeys)
-                    : List.of(projectInstanceRow(pi, view));
-            for (Map<String, Object> row : piRows) {
-                if (!PortalMainTableViewFilterUtils.matchesFilter(row, view.filterConfig())) {
-                    continue;
-                }
-                if (needle != null && !needle.isEmpty()
-                        && !PortalMainTableViewFilterUtils.matchesSearch(row, needle)) {
-                    continue;
-                }
-                rows.add(row);
-            }
-        }
-        return rows;
-    }
-
-    /**
-     * Flatten a SUB-table view's rows from a process instance's {@code variables.__subTables__}.
-     * Each of the view-table's form bindings contributes a list keyed by its binding id; rows are
-     * deduplicated by primary-key signature so the same child row bound into multiple forms appears once.
-     */
-    @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> projectSubTableRows(ProcessInstance pi, ViewDefinition view,
-                                                          Set<String> seenSubKeys) {
-        Map<String, Object> vars = pi.getVariables();
-        if (vars == null) {
-            return List.of();
-        }
-        Object subTablesObj = vars.get("__subTables__");
-        if (!(subTablesObj instanceof Map<?, ?> subTables)) {
-            return List.of();
-        }
-        List<Map<String, Object>> out = new ArrayList<>();
-        Map<String, Object> mainVars = stripInternalKeys(vars);
-        Map<String, FkSourceMeta> fkSource = loadFkSourceMeta(view.id());
-        for (String bindingKey : view.subBindingKeys()) {
-            Object listObj = subTables.get(bindingKey);
-            if (!(listObj instanceof List<?> list)) {
-                continue;
-            }
-            for (Object item : list) {
-                if (!(item instanceof Map<?, ?> rowMap)) {
-                    continue;
-                }
-                Map<String, Object> source = (Map<String, Object>) rowMap;
-                // Dedup by process instance + the row's own id — NOT the binding key. The same physical
-                // sub-row is duplicated under every binding key that maps this table into a form (and
-                // sometimes under both numeric + named keys), so keying on bindingKey would emit it once
-                // per binding → identical rows repeated N times.
-                String rowId = String.valueOf(source.getOrDefault("id",
-                        source.getOrDefault("id_idw", source.hashCode())));
-                String sig = pi.getId() + "|" + rowId;
-                if (!seenSubKeys.add(sig)) {
-                    continue;
-                }
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("_processInstanceId", pi.getId());
-                for (ViewFieldDef field : view.fields()) {
-                    if (!Boolean.TRUE.equals(field.visible())) {
-                        continue;
-                    }
-                    row.put(field.fieldName(), resolveProjectedFieldValue(source, field, mainVars, fkSource));
-                }
-                out.add(row);
-            }
-        }
-        return out;
     }
 
     private Map<String, Object> projectInstanceRow(ProcessInstance pi, ViewDefinition view) {

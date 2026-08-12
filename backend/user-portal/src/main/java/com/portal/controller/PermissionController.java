@@ -1,5 +1,6 @@
 package com.portal.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.portal.component.PermissionComponent;
 import com.portal.component.RoleAccessComponent;
 import com.platform.common.dto.ApiResponse;
@@ -9,13 +10,14 @@ import com.portal.dto.PermissionRequestDto;
 import com.portal.dto.PermissionRequestListItem;
 import com.portal.entity.PermissionRequest;
 import com.portal.enums.PermissionRequestStatus;
+import com.portal.exception.PortalException;
+import com.portal.util.PortalColumnFilterSupport;
 import com.platform.common.i18n.I18nService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,9 +34,12 @@ import java.util.Objects;
 @Tag(name = "Permission Management", description = "Permission request and management APIs")
 public class PermissionController {
 
+    private static final int MAX_PAGE_SIZE = 200;
+
     private final PermissionComponent permissionComponent;
     private final RoleAccessComponent roleAccessComponent;
     private final I18nService i18nService;
+    private final ObjectMapper objectMapper;
 
     // ==================== New API endpoints ====================
 
@@ -278,21 +283,23 @@ public class PermissionController {
     // ==================== Approval API endpoints ====================
 
     @GetMapping("/approvals/pending")
-    @Operation(summary = "Get pending approvals", description = "Get permission requests the current user can approve")
+    @Operation(summary = "Get pending approvals", description = "Get permission requests the current user can approve. "
+            + "Supports filters/sortField/sortDirection/groupBy with SQL true pagination (no fetch cap).")
     public ApiResponse<PageResponse<PermissionRequest>> getPendingApprovals(
             @CurrentUserId String userId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        // Check approval permission
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sortField,
+            @RequestParam(required = false) String sortDirection,
+            @RequestParam(required = false) String filters,
+            @RequestParam(required = false) String groupBy) {
         if (!permissionComponent.isApprover(userId)) {
             return ApiResponse.error("500", i18nService.getMessage("portal.no_approval_permission"));
         }
-
         int safePage = Math.max(0, page);
-        int safeSize = Math.min(100, Math.max(1, size));
-        Page<PermissionRequest> result = permissionComponent.getPendingApprovalsForUser(
-                userId, PageRequest.of(safePage, safeSize));
-        return ApiResponse.success(PageResponse.of(result));
+        int safeSize = Math.min(MAX_PAGE_SIZE, Math.max(1, size));
+        return ApiResponse.success(permissionComponent.pagePendingApprovals(
+                userId, safePage, safeSize, parseFilters(filters), sortField, sortDirection, groupBy));
     }
 
     @PostMapping("/approvals/{requestId}/approve")
@@ -351,21 +358,23 @@ public class PermissionController {
     }
 
     @GetMapping("/approvals/history")
-    @Operation(summary = "Get approval history", description = "Get the current user's approval history records")
+    @Operation(summary = "Get approval history", description = "Get the current user's approval history records. "
+            + "Supports filters/sortField/sortDirection/groupBy with SQL true pagination (no fetch cap).")
     public ApiResponse<PageResponse<PermissionRequest>> getApprovalHistory(
             @CurrentUserId String userId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        // Check approval permission
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sortField,
+            @RequestParam(required = false) String sortDirection,
+            @RequestParam(required = false) String filters,
+            @RequestParam(required = false) String groupBy) {
         if (!permissionComponent.isApprover(userId)) {
             return ApiResponse.error("500", i18nService.getMessage("portal.no_approval_permission"));
         }
-
         int safePage = Math.max(0, page);
-        int safeSize = Math.min(100, Math.max(1, size));
-        Page<PermissionRequest> result = permissionComponent.getApprovalHistoryForUser(
-                userId, PageRequest.of(safePage, safeSize));
-        return ApiResponse.success(PageResponse.of(result));
+        int safeSize = Math.min(MAX_PAGE_SIZE, Math.max(1, size));
+        return ApiResponse.success(permissionComponent.pageApprovalHistory(
+                userId, safePage, safeSize, parseFilters(filters), sortField, sortDirection, groupBy));
     }
 
     // ==================== Legacy API endpoints (kept for compatibility) ====================
@@ -390,17 +399,32 @@ public class PermissionController {
     }
 
     @GetMapping("/requests")
-    @Operation(summary = "Get my request records")
+    @Operation(summary = "Get my request records",
+            description = "Optional status filter. For completed history (non-PENDING), pass excludePending=true "
+                    + "so page total excludes PENDING. When status is set, status wins and excludePending is ignored. "
+                    + "Supports filters/sortField/sortDirection/groupBy (SQL whitelist).")
     public ApiResponse<PageResponse<PermissionRequestListItem>> getMyRequests(
             @CurrentUserId String userId,
             @RequestParam(required = false) PermissionRequestStatus status,
+            @RequestParam(required = false, defaultValue = "false") boolean excludePending,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sortField,
+            @RequestParam(required = false) String sortDirection,
+            @RequestParam(required = false) String filters,
+            @RequestParam(required = false) String groupBy) {
         int safePage = Math.max(0, page);
-        int safeSize = Math.min(100, Math.max(1, size));
-        Page<PermissionRequestListItem> result = permissionComponent.getMyRequests(
-                userId, status, PageRequest.of(safePage, safeSize));
-        return ApiResponse.success(PageResponse.of(result));
+        int safeSize = Math.min(MAX_PAGE_SIZE, Math.max(1, size));
+        var result = permissionComponent.getMyRequests(
+                userId,
+                status,
+                excludePending,
+                PageRequest.of(safePage, safeSize),
+                parseFilters(filters),
+                sortField,
+                sortDirection,
+                groupBy);
+        return ApiResponse.success(result.toPageResponse());
     }
 
     @GetMapping("/requests/{requestId}")
@@ -459,5 +483,13 @@ public class PermissionController {
             return currentUserId;
         }
         return o.toString().trim();
+    }
+
+    private Map<String, Map<String, Object>> parseFilters(String filtersJson) {
+        try {
+            return PortalColumnFilterSupport.parseFiltersJson(filtersJson, objectMapper);
+        } catch (IllegalArgumentException ex) {
+            throw new PortalException("400", ex.getMessage());
+        }
     }
 }

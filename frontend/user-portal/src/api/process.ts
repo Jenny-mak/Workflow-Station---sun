@@ -93,8 +93,19 @@ export const processApi = {
     return request.post<ProcessInstance>(`/processes/${processKey}/start`, data)
   },
 
-  // 获取我的申请列表
-  getMyApplications(params: { page?: number; size?: number; status?: string }) {
+  // 获取我的申请列表（page/size + optional keyword/sort/filters/groupBy — server-authoritative）
+  getMyApplications(params: {
+    page?: number
+    size?: number
+    status?: string
+    keyword?: string
+    sortField?: string
+    sortDirection?: 'ASC' | 'DESC'
+    /** MTV-shaped filters JSON string */
+    filters?: string
+    /** Whitelist same as sortField; response may include groupCounts */
+    groupBy?: string
+  }) {
     return request.get('/processes/my-applications', { params })
   },
 
@@ -138,16 +149,42 @@ export const processApi = {
     return request.delete(`/processes/${processKey}/draft`)
   },
   
-  // 获取草稿列表
-  getDraftList() {
-    return request.get<Array<{
-      id: number
-      processDefinitionKey: string
-      processDefinitionName: string
-      formData: Record<string, unknown>
-      createdAt: string
-      updatedAt: string
-    }>>('/processes/drafts')
+  /**
+   * Draft list. When `page` is provided, returns PageResponse `{ content, totalElements }`.
+   * When omitted, returns the full array (legacy).
+   */
+  getDraftList(params?: {
+    page?: number
+    size?: number
+    sortField?: string
+    sortDirection?: 'ASC' | 'DESC'
+    filters?: string
+    groupBy?: string
+  }) {
+    return request.get<
+      | Array<{
+          id: number
+          processDefinitionKey: string
+          processDefinitionName: string
+          formData: Record<string, unknown>
+          createdAt: string
+          updatedAt: string
+        }>
+      | {
+          content: Array<{
+            id: number
+            processDefinitionKey: string
+            processDefinitionName: string
+            formData: Record<string, unknown>
+            createdAt: string
+            updatedAt: string
+          }>
+          totalElements: number
+          page?: number
+          size?: number
+          groupCounts?: Record<string, number>
+        }
+    >('/processes/drafts', { params })
   },
   
   // 根据ID删除草稿

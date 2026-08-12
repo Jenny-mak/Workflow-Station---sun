@@ -134,72 +134,126 @@
 
           <el-table
             v-loading="dataLoading"
-            :data="dataRows"
+            class="portal-list-grid"
+            :data="displayDataRows"
             stripe
             style="width: 100%;"
+            table-layout="fixed"
+            :span-method="relationSpanMethod"
+            :row-class-name="groupRowClassName"
           >
             <el-table-column
-              v-for="col in columns"
+              v-for="(col, idx) in orderedColumns"
               :key="col"
               :prop="col"
-              :label="columnLabel(col)"
-              :min-width="isTimestampColumn(col) ? 180 : 120"
-              sortable
+              :width="colWidth(col, isTimestampColumn(col) ? 180 : 140)"
               show-overflow-tooltip
             >
+              <template #header>
+                <PortalListColumnHeader
+                  :label="columnLabel(col)"
+                  :width="colWidth(col, isTimestampColumn(col) ? 180 : 140)"
+                  :has-filter="hasFilter(col)"
+                  :sort-direction="sortDirection(col)"
+                  :is-grouped="isGrouped(col)"
+                  :can-move-left="canMoveLeft(col)"
+                  :can-move-right="canMoveRight(col)"
+                  :date-like="isTimestampColumn(col)"
+                  @sort-asc="onSort(col, 'ASC')"
+                  @sort-desc="onSort(col, 'DESC')"
+                  @group-by="onGroup(col)"
+                  @filter="openFilter(col, columnLabel(col))"
+                  @clear-filter="onClearColumnFilter(col)"
+                  @move-left="moveLeft(col)"
+                  @move-right="moveRight(col)"
+                  @resize="(w) => onColResize(col, w)"
+                  @resize-end="onColResizeEnd"
+                />
+              </template>
               <template #default="{ row }">
-                {{ isTimestampColumn(col) ? formatHKT(row[col]) : formatRelationCellDisplay(row[col]) }}
+                <template v-if="isPortalListGroupHeader(row)">
+                  <div
+                    v-if="idx === 0"
+                    class="group-header-cell"
+                  >
+                    <strong>{{ row._groupLabel }}</strong>
+                    <span class="group-count">({{ row._groupCount }})</span>
+                  </div>
+                </template>
+                <template v-else>
+                  {{ isTimestampColumn(col) ? formatHKT(row[col]) : formatRelationCellDisplay(row[col]) }}
+                </template>
               </template>
             </el-table-column>
             <el-table-column
               v-if="canWrite"
-              label="Actions"
-              width="200"
+              :width="colWidth('actions', 200)"
               fixed="right"
               align="center"
             >
+              <template #header>
+                <PortalListColumnHeader
+                  :label="'Actions'"
+                  :width="colWidth('actions', 200)"
+                  :sortable="false"
+                  :filterable="false"
+                  :groupable="false"
+                  :movable="false"
+                  @resize="(w) => onColResize('actions', w)"
+                  @resize-end="onColResizeEnd"
+                />
+              </template>
               <template #default="{ row }">
-                <el-button
-                  link
-                  type="primary"
-                  size="small"
-                  @click="openEditDialog(row)"
-                >
-                  Edit
-                </el-button>
-                <el-button
-                  v-if="isRowInactive(row)"
-                  link
-                  type="success"
-                  size="small"
-                  @click="handleChangeStatus(row, 'ACTIVE')"
-                >
-                  Active
-                </el-button>
-                <el-button
-                  v-else
-                  link
-                  type="warning"
-                  size="small"
-                  @click="handleChangeStatus(row, 'INACTIVE')"
-                >
-                  Inactive
-                </el-button>
+                <template v-if="!isPortalListGroupHeader(row)">
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    @click="openEditDialog(row)"
+                  >
+                    Edit
+                  </el-button>
+                  <el-button
+                    v-if="isRowInactive(row)"
+                    link
+                    type="success"
+                    size="small"
+                    @click="handleChangeStatus(row, 'ACTIVE')"
+                  >
+                    Active
+                  </el-button>
+                  <el-button
+                    v-else
+                    link
+                    type="warning"
+                    size="small"
+                    @click="handleChangeStatus(row, 'INACTIVE')"
+                  >
+                    Inactive
+                  </el-button>
+                </template>
               </template>
             </el-table-column>
           </el-table>
 
-          <el-pagination
-            v-if="totalElements > 0"
-            style="margin-top: 16px; justify-content: flex-end;"
-            background
-            layout="total, sizes, prev, pager, next"
+          <PortalListPagination
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
             :total="totalElements"
-            :page-size="pageSize"
-            :current-page="currentPage"
-            :page-sizes="[10, 20, 50, 100]"
-            @current-change="handlePageChange"
-            @size-change="handleSizeChange"
+            :disabled="dataLoading"
+            @change="fetchData"
+          />
+
+          <PortalListFilterDialog
+            v-model="filterDialogVisible"
+            :title="filterDialogField
+              ? `${t('mainTableView.colFilterBy')}: ${filterDialogField.label}`
+              : t('mainTableView.colFilterBy')"
+            :initial="filterDialogField
+              ? colState.filters[filterDialogField.field]
+              : null"
+            @apply="onApplyColumnFilter"
+            @clear="onClearColumnFilter()"
           />
         </template>
         <el-empty
@@ -391,6 +445,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Search, Download, Plus, Upload, ArrowDown, Expand, Fold } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { relationTableApi, type RelationTableDTO, type RelationFieldDef, type RelationImportResult, type LookupConfig } from '@/api/relationTable'
@@ -398,7 +453,21 @@ import type { LookupFilterCondition } from '@/utils/lookupFilterConditions'
 import LookupField from '@/components/lookup/LookupField.vue'
 import LookupViewDisplay from '@/components/lookup/LookupViewDisplay.vue'
 import { buildDerivedFilterConditions, resolveDerivedLookup, normalizeLookupValueForSave, formatRelationCellDisplay, type FieldLike } from '@/components/lookup/useLookupBehaviors'
+import PortalListPagination from '@/components/portal-list/PortalListPagination.vue'
+import PortalListColumnHeader from '@/components/portal-list/PortalListColumnHeader.vue'
+import PortalListFilterDialog from '@/components/portal-list/PortalListFilterDialog.vue'
+import { usePortalListColumnState } from '@/composables/usePortalListColumnState'
+import { PORTAL_LIST_DEFAULT_PAGE_SIZE } from '@/constants/portalListPagination'
+import {
+  applyGroupHeaders,
+  isPortalListGroupHeader,
+  normalizeGroupCounts,
+  portalListGroupSpanMethod,
+  type PortalListColumnFilter,
+  type PortalListSortDirection,
+} from '@/utils/portalListGridRuntime'
 
+const { t } = useI18n()
 const SYSTEM_FIELDS = new Set(['created_at', 'created_by', 'updated_at', 'updated_by', 'status'])
 
 const route = useRoute()
@@ -413,14 +482,57 @@ const searchKeyword = ref('')
 const tableSearchKeyword = ref('')
 const tableListCollapsed = ref(false)
 const currentPage = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(PORTAL_LIST_DEFAULT_PAGE_SIZE)
 const totalElements = ref(0)
 const dataRows = ref<Record<string, any>[]>([])
+const dataGroupCounts = ref<Record<string, number> | null>(null)
 const columns = ref<string[]>([])
 // 字段名 → 显示名 映射，用于表头展示 Display Name 而非 Field Name
 const fieldDisplayNames = ref<Record<string, string>>({})
 
+const columnListId = computed(() =>
+  selectedTableId.value != null ? `relation-table-${selectedTableId.value}` : 'relation-table-none',
+)
+const {
+  state: colState,
+  filterDialogVisible,
+  filterDialogField,
+  width: colWidth,
+  onResize: onColResize,
+  onResizeEnd: onColResizeEnd,
+  toggleSort,
+  toggleGroup,
+  moveLeft,
+  moveRight,
+  canMoveLeft,
+  canMoveRight,
+  ensureOrder,
+  orderedColumnFields,
+  openFilter,
+  applyFilter,
+  clearFilter,
+  hasFilter,
+  sortDirection,
+  isGrouped,
+  activeFilters,
+} = usePortalListColumnState(columnListId)
+
 const columnLabel = (col: string): string => fieldDisplayNames.value[col] || col
+
+const orderedColumns = computed(() => orderedColumnFields(columns.value))
+
+/** Server groupBy + groupCounts when present; else page-local header counts. */
+const displayDataRows = computed(() =>
+  applyGroupHeaders(dataRows.value, colState.groupBy, undefined, dataGroupCounts.value),
+)
+
+function groupRowClassName({ row }: { row: unknown }) {
+  return isPortalListGroupHeader(row) ? 'group-header-row' : ''
+}
+
+function relationSpanMethod({ row, columnIndex }: { row: unknown; columnIndex: number }) {
+  return portalListGroupSpanMethod(row, columnIndex, orderedColumns.value.length, 0)
+}
 
 const selectedTable = computed(() =>
   tables.value.find(t => t.id === selectedTableId.value) ?? null
@@ -502,31 +614,71 @@ const fetchData = async () => {
   if (!selectedTableId.value) return
   dataLoading.value = true
   try {
+    const filters = activeFilters()
     const params: Record<string, any> = {
       page: currentPage.value - 1,
-      size: pageSize.value
+      size: pageSize.value,
     }
     if (searchKeyword.value) {
       params.search = searchKeyword.value
+    }
+    if (colState.sort?.field) {
+      params.sortField = colState.sort.field
+      params.sortDirection = colState.sort.direction
+    }
+    if (Object.keys(filters).length) {
+      params.filters = JSON.stringify(filters)
+    }
+    if (colState.groupBy) {
+      params.groupBy = colState.groupBy
     }
     const res: any = await relationTableApi.queryTableData(selectedTableId.value, params)
     // Handle both wrapped (ApiResponse) and unwrapped response formats
     const pageData = res?.data ?? res
     dataRows.value = pageData?.content || []
     totalElements.value = pageData?.totalElements || 0
+    dataGroupCounts.value = normalizeGroupCounts(pageData?.groupCounts)
 
     if (dataRows.value.length > 0) {
       // `status` is surfaced for the Active/Inactive toggle but is not a displayable data column.
       columns.value = Object.keys(dataRows.value[0]).filter(c => c !== 'status')
+      ensureOrder(columns.value)
+    } else if (columns.value.length) {
+      ensureOrder(columns.value)
     } else {
       columns.value = []
     }
   } catch (e) {
     console.error('Failed to load table data:', e)
     dataRows.value = []
+    dataGroupCounts.value = null
   } finally {
     dataLoading.value = false
   }
+}
+
+function onSort(field: string, direction: PortalListSortDirection) {
+  toggleSort(field, direction)
+  currentPage.value = 1
+  fetchData()
+}
+
+function onGroup(field: string) {
+  toggleGroup(field)
+  currentPage.value = 1
+  fetchData()
+}
+
+function onApplyColumnFilter(filter: PortalListColumnFilter) {
+  applyFilter(filter)
+  currentPage.value = 1
+  fetchData()
+}
+
+function onClearColumnFilter(field?: string) {
+  clearFilter(field)
+  currentPage.value = 1
+  fetchData()
 }
 
 const fetchDisplayNames = async () => {
@@ -553,17 +705,6 @@ const handleSelectTable = (index: string) => {
   fieldDisplayNames.value = {}
   fetchDisplayNames()
   fetchFieldDefs()
-  fetchData()
-}
-
-const handlePageChange = (page: number) => {
-  currentPage.value = page
-  fetchData()
-}
-
-const handleSizeChange = (size: number) => {
-  pageSize.value = size
-  currentPage.value = 1
   fetchData()
 }
 
@@ -888,5 +1029,23 @@ onMounted(fetchTables)
   display: flex;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.group-header-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.group-count {
+  color: var(--el-text-color-secondary);
+  font-weight: normal;
+  font-size: 12px;
+}
+
+:deep(.group-header-row) {
+  background: var(--el-fill-color-light) !important;
+  cursor: default;
+  font-weight: 600;
 }
 </style>

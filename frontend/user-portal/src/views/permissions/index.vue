@@ -30,6 +30,7 @@
       <el-table
         v-else
         v-loading="loadingMyBuRoles"
+        class="portal-list-grid"
         :data="myBuRoles"
         stripe
       >
@@ -85,6 +86,7 @@
       <el-table
         v-else
         v-loading="loadingExitBu"
+        class="portal-list-grid"
         :data="exitBuRows"
         stripe
       >
@@ -154,6 +156,7 @@
         <el-tabs
           v-model="myRequestTab"
           class="list-tabs"
+          @tab-change="onMyRequestTabChange"
         >
           <el-tab-pane name="inProgress">
             <template #label>
@@ -168,93 +171,138 @@
               v-if="pendingList.length === 0 && !loadingPending"
               :description="t('permission.noPendingRequests')"
             />
-            <el-table
-              v-else
-              v-loading="loadingPending"
-              :data="pendingList"
-              stripe
-            >
-              <el-table-column
-                prop="requestType"
-                :label="t('permission.requestType')"
-                width="160"
+            <template v-else>
+              <el-table
+                v-loading="loadingPending"
+                class="portal-list-grid"
+                :data="displayPendingRows"
+                stripe
+                table-layout="fixed"
+                :span-method="pendingSpanMethod"
+                :row-class-name="groupRowClassName"
               >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getRequestTypeTag(row.requestType)"
-                    size="small"
-                  >
-                    {{ getRequestTypeLabel(row.requestType) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.requestTarget')"
-                min-width="150"
-              >
-                <template #default="{ row }">
-                  {{ getTargetName(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.beneficiaryColumn')"
-                width="130"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  {{ row.applicantUsername || row.applicantId || '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.submittedByColumn')"
-                width="120"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  <span v-if="row.submittedByUserId && row.submittedByUserId !== row.applicantId">
-                    {{ row.submittedByUsername || row.submittedByUserId }}
-                    <el-tag
-                      size="small"
-                      type="info"
-                      class="proxy-tag"
-                    >{{ t('permission.proxyBadge') }}</el-tag>
-                  </span>
-                  <span v-else>{{ t('permission.selfBeneficiary') }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="reason"
-                :label="t('permission.reason')"
-                min-width="150"
-                show-overflow-tooltip
+                <el-table-column
+                  v-for="(field, idx) in orderedPendingFields"
+                  :key="field"
+                  :prop="field"
+                  :width="pendingColWidth(field, pendingWidthFallback(field))"
+                  :fixed="field === 'actions' ? 'right' : undefined"
+                  show-overflow-tooltip
+                >
+                  <template #header>
+                    <PortalListColumnHeader
+                      :label="pendingColumnLabel(field)"
+                      :width="pendingColWidth(field, pendingWidthFallback(field))"
+                      :has-filter="field !== 'actions' && pendingHasFilter(field)"
+                      :sort-direction="field !== 'actions' ? pendingSortDirection(field) : null"
+                      :is-grouped="field !== 'actions' && pendingIsGrouped(field)"
+                      :can-move-left="field !== 'actions' && pendingCanMoveLeft(field)"
+                      :can-move-right="field !== 'actions' && pendingCanMoveRight(field)"
+                      :sortable="field !== 'actions'"
+                      :filterable="field !== 'actions'"
+                      :groupable="field !== 'actions'"
+                      :movable="field !== 'actions'"
+                      :date-like="field === 'createdAt' || field === 'approvedAt'"
+                      @sort-asc="onPendingSort(field, 'ASC')"
+                      @sort-desc="onPendingSort(field, 'DESC')"
+                      @group-by="onPendingGroup(field)"
+                      @filter="pendingOpenFilter(field, pendingColumnLabel(field))"
+                      @clear-filter="onPendingClearFilter(field)"
+                      @move-left="pendingMoveLeft(field)"
+                      @move-right="pendingMoveRight(field)"
+                      @resize="(w) => pendingOnResize(field, w)"
+                      @resize-end="pendingOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    <template v-if="isPortalListGroupHeader(row)">
+                      <div
+                        v-if="idx === 0"
+                        class="group-header-cell"
+                      >
+                        <strong>{{ row._groupLabel }}</strong>
+                        <span class="group-count">({{ row._groupCount }})</span>
+                      </div>
+                    </template>
+                    <template v-else-if="field === 'requestType'">
+                      <el-tag
+                        :type="getRequestTypeTag(row.requestType)"
+                        size="small"
+                      >
+                        {{ getRequestTypeLabel(row.requestType) }}
+                      </el-tag>
+                    </template>
+                    <template v-else-if="field === 'requestTarget'">
+                      {{ getTargetName(row) }}
+                    </template>
+                    <template v-else-if="field === 'beneficiary'">
+                      {{ row.applicantUsername || row.applicantId || '-' }}
+                    </template>
+                    <template v-else-if="field === 'submittedBy'">
+                      <span v-if="row.submittedByUserId && row.submittedByUserId !== row.applicantId">
+                        {{ row.submittedByUsername || row.submittedByUserId }}
+                        <el-tag
+                          size="small"
+                          type="info"
+                          class="proxy-tag"
+                        >{{ t('permission.proxyBadge') }}</el-tag>
+                      </span>
+                      <span v-else>{{ t('permission.selfBeneficiary') }}</span>
+                    </template>
+                    <template v-else-if="field === 'reason'">
+                      {{ row.reason }}
+                    </template>
+                    <template v-else-if="field === 'createdAt'">
+                      {{ formatDateTime(row.createdAt) }}
+                    </template>
+                    <template v-else-if="field === 'status'">
+                      <el-tag
+                        :type="getStatusType(row.status)"
+                        size="small"
+                      >
+                        {{ getStatusLabel(row.status) }}
+                      </el-tag>
+                    </template>
+                    <template v-else-if="field === 'approvedAt'">
+                      {{ formatDateTime(row.approvedAt || row.updatedAt) }}
+                    </template>
+                    <template v-else-if="field === 'applicant'">
+                      {{ getApplicantDisplay(row) }}
+                    </template>
+                    <template v-else-if="field === 'actions'">
+                      <el-button
+                        v-if="canCancelAsBeneficiary(row)"
+                        type="danger"
+                        size="small"
+                        text
+                        @click="cancelRequest(row)"
+                      >
+                        {{ t('permission.cancelRequest') }}
+                      </el-button>
+                    </template>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <PortalListPagination
+                v-model:current-page="pendingPagination.page"
+                v-model:page-size="pendingPagination.size"
+                :disabled="loadingPending"
+                :total="pendingTotal"
+                :visible="true"
+                @change="onPendingPageChange"
               />
-              <el-table-column
-                prop="createdAt"
-                :label="t('permission.applyTime')"
-                width="160"
-              >
-                <template #default="{ row }">
-                  {{ formatDateTime(row.createdAt) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('common.actions')"
-                width="150"
-                fixed="right"
-              >
-                <template #default="{ row }">
-                  <el-button
-                    v-if="canCancelAsBeneficiary(row)"
-                    type="danger"
-                    size="small"
-                    text
-                    @click="cancelRequest(row)"
-                  >
-                    {{ t('permission.cancelRequest') }}
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
+              <PortalListFilterDialog
+                v-model="pendingFilterDialogVisible"
+                :title="pendingFilterDialogField
+                  ? `${t('mainTableView.colFilterBy')}: ${pendingFilterDialogField.label}`
+                  : t('mainTableView.colFilterBy')"
+                :initial="pendingFilterDialogField
+                  ? pendingColState.filters[pendingFilterDialogField.field]
+                  : null"
+                @apply="onPendingApplyFilter"
+                @clear="onPendingClearFilter()"
+              />
+            </template>
           </el-tab-pane>
 
           <el-tab-pane
@@ -265,100 +313,304 @@
               v-if="historyList.length === 0 && !loadingHistory"
               :description="t('permission.noRequests')"
             />
-            <el-table
-              v-else
-              v-loading="loadingHistory"
-              :data="historyList"
-              stripe
-            >
-              <el-table-column
-                prop="requestType"
-                :label="t('permission.requestType')"
-                width="140"
+            <template v-else>
+              <el-table
+                v-loading="loadingHistory"
+                class="portal-list-grid"
+                :data="displayHistoryRows"
+                stripe
+                table-layout="fixed"
+                :span-method="historySpanMethod"
+                :row-class-name="groupRowClassName"
               >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getRequestTypeTag(row.requestType)"
-                    size="small"
-                  >
-                    {{ getRequestTypeLabel(row.requestType) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.requestTarget')"
-                min-width="180"
-              >
-                <template #default="{ row }">
-                  {{ getTargetName(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.beneficiaryColumn')"
-                width="120"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  {{ row.applicantUsername || row.applicantId || '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.submittedByColumn')"
-                width="110"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  <span v-if="row.submittedByUserId && row.submittedByUserId !== row.applicantId">
-                    {{ row.submittedByUsername || row.submittedByUserId }}
-                  </span>
-                  <span v-else>—</span>
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="reason"
-                :label="t('permission.reason')"
-                min-width="150"
-                show-overflow-tooltip
+                <el-table-column
+                  prop="requestType"
+                  :width="historyColWidth('requestType', 140)"
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.requestType')"
+                      :width="historyColWidth('requestType', 140)"
+                      :has-filter="historyHasFilter('requestType')"
+                      :sort-direction="historySortDirection('requestType')"
+                      :is-grouped="historyIsGrouped('requestType')"
+                      :can-move-left="historyCanMoveLeft('requestType')"
+                      :can-move-right="historyCanMoveRight('requestType')"
+                      :date-like="false"
+                      @sort-asc="onHistorySort('requestType', 'ASC')"
+                      @sort-desc="onHistorySort('requestType', 'DESC')"
+                      @group-by="onHistoryGroup('requestType')"
+                      @filter="historyOpenFilter('requestType', t('permission.requestType'))"
+                      @clear-filter="onHistoryClearFilter('requestType')"
+                      @move-left="historyMoveLeft('requestType')"
+                      @move-right="historyMoveRight('requestType')"
+                      @resize="(w) => historyOnResize('requestType', w)"
+                      @resize-end="historyOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    <el-tag
+                      :type="getRequestTypeTag(row.requestType)"
+                      size="small"
+                    >
+                      {{ getRequestTypeLabel(row.requestType) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column :width="historyColWidth('requestTarget', 180)">
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.requestTarget')"
+                      :width="historyColWidth('requestTarget', 140)"
+                      :has-filter="historyHasFilter('requestTarget')"
+                      :sort-direction="historySortDirection('requestTarget')"
+                      :is-grouped="historyIsGrouped('requestTarget')"
+                      :can-move-left="historyCanMoveLeft('requestTarget')"
+                      :can-move-right="historyCanMoveRight('requestTarget')"
+                      :date-like="false"
+                      @sort-asc="onHistorySort('requestTarget', 'ASC')"
+                      @sort-desc="onHistorySort('requestTarget', 'DESC')"
+                      @group-by="onHistoryGroup('requestTarget')"
+                      @filter="historyOpenFilter('requestTarget', t('permission.requestTarget'))"
+                      @clear-filter="onHistoryClearFilter('requestTarget')"
+                      @move-left="historyMoveLeft('requestTarget')"
+                      @move-right="historyMoveRight('requestTarget')"
+                      @resize="(w) => historyOnResize('requestTarget', w)"
+                      @resize-end="historyOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ getTargetName(row) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  :width="historyColWidth('beneficiary', 130)"
+                  show-overflow-tooltip
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.beneficiaryColumn')"
+                      :width="historyColWidth('beneficiary', 140)"
+                      :has-filter="historyHasFilter('beneficiary')"
+                      :sort-direction="historySortDirection('beneficiary')"
+                      :is-grouped="historyIsGrouped('beneficiary')"
+                      :can-move-left="historyCanMoveLeft('beneficiary')"
+                      :can-move-right="historyCanMoveRight('beneficiary')"
+                      :date-like="false"
+                      @sort-asc="onHistorySort('beneficiary', 'ASC')"
+                      @sort-desc="onHistorySort('beneficiary', 'DESC')"
+                      @group-by="onHistoryGroup('beneficiary')"
+                      @filter="historyOpenFilter('beneficiary', t('permission.beneficiaryColumn'))"
+                      @clear-filter="onHistoryClearFilter('beneficiary')"
+                      @move-left="historyMoveLeft('beneficiary')"
+                      @move-right="historyMoveRight('beneficiary')"
+                      @resize="(w) => historyOnResize('beneficiary', w)"
+                      @resize-end="historyOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ row.applicantUsername || row.applicantId || '-' }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  :width="historyColWidth('submittedBy', 120)"
+                  show-overflow-tooltip
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.submittedByColumn')"
+                      :width="historyColWidth('submittedBy', 140)"
+                      :has-filter="historyHasFilter('submittedBy')"
+                      :sort-direction="historySortDirection('submittedBy')"
+                      :is-grouped="historyIsGrouped('submittedBy')"
+                      :can-move-left="historyCanMoveLeft('submittedBy')"
+                      :can-move-right="historyCanMoveRight('submittedBy')"
+                      :date-like="false"
+                      @sort-asc="onHistorySort('submittedBy', 'ASC')"
+                      @sort-desc="onHistorySort('submittedBy', 'DESC')"
+                      @group-by="onHistoryGroup('submittedBy')"
+                      @filter="historyOpenFilter('submittedBy', t('permission.submittedByColumn'))"
+                      @clear-filter="onHistoryClearFilter('submittedBy')"
+                      @move-left="historyMoveLeft('submittedBy')"
+                      @move-right="historyMoveRight('submittedBy')"
+                      @resize="(w) => historyOnResize('submittedBy', w)"
+                      @resize-end="historyOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    <span v-if="row.submittedByUserId && row.submittedByUserId !== row.applicantId">
+                      {{ row.submittedByUsername || row.submittedByUserId }}
+                    </span>
+                    <span v-else>—</span>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="reason"
+                  :width="historyColWidth('reason', 150)"
+                  show-overflow-tooltip
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.reason')"
+                      :width="historyColWidth('reason', 140)"
+                      :has-filter="historyHasFilter('reason')"
+                      :sort-direction="historySortDirection('reason')"
+                      :is-grouped="historyIsGrouped('reason')"
+                      :can-move-left="historyCanMoveLeft('reason')"
+                      :can-move-right="historyCanMoveRight('reason')"
+                      :date-like="false"
+                      @sort-asc="onHistorySort('reason', 'ASC')"
+                      @sort-desc="onHistorySort('reason', 'DESC')"
+                      @group-by="onHistoryGroup('reason')"
+                      @filter="historyOpenFilter('reason', t('permission.reason'))"
+                      @clear-filter="onHistoryClearFilter('reason')"
+                      @move-left="historyMoveLeft('reason')"
+                      @move-right="historyMoveRight('reason')"
+                      @resize="(w) => historyOnResize('reason', w)"
+                      @resize-end="historyOnResizeEnd"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="status"
+                  :width="historyColWidth('status', 110)"
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.status')"
+                      :width="historyColWidth('status', 140)"
+                      :has-filter="historyHasFilter('status')"
+                      :sort-direction="historySortDirection('status')"
+                      :is-grouped="historyIsGrouped('status')"
+                      :can-move-left="historyCanMoveLeft('status')"
+                      :can-move-right="historyCanMoveRight('status')"
+                      :date-like="false"
+                      @sort-asc="onHistorySort('status', 'ASC')"
+                      @sort-desc="onHistorySort('status', 'DESC')"
+                      @group-by="onHistoryGroup('status')"
+                      @filter="historyOpenFilter('status', t('permission.status'))"
+                      @clear-filter="onHistoryClearFilter('status')"
+                      @move-left="historyMoveLeft('status')"
+                      @move-right="historyMoveRight('status')"
+                      @resize="(w) => historyOnResize('status', w)"
+                      @resize-end="historyOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    <el-tag
+                      :type="getStatusType(row.status)"
+                      size="small"
+                    >
+                      {{ getStatusLabel(row.status) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="approverComment"
+                  :width="historyColWidth('approverComment', 150)"
+                  show-overflow-tooltip
+                >
+                  <template #header>
+                                                            <PortalListColumnHeader
+                      :label="t('approval.comment')"
+                      :width="apprPendingColWidth('approverComment', 140)"
+                      :has-filter="apprPendingHasFilter('approverComment')"
+                      :sort-direction="apprPendingSortDirection('approverComment')"
+                      :is-grouped="apprPendingIsGrouped('approverComment')"
+                      :can-move-left="apprPendingCanMoveLeft('approverComment')"
+                      :can-move-right="apprPendingCanMoveRight('approverComment')"
+                      :date-like="false"
+                      @sort-asc="onApprPendingSort('approverComment', 'ASC')"
+                      @sort-desc="onApprPendingSort('approverComment', 'DESC')"
+                      @group-by="onApprPendingGroup('approverComment')"
+                      @filter="apprPendingOpenFilter('approverComment', t('approval.comment'))"
+                      @clear-filter="onApprPendingClearFilter('approverComment')"
+                      @move-left="apprPendingMoveLeft('approverComment')"
+                      @move-right="apprPendingMoveRight('approverComment')"
+                      @resize="(w) => apprPendingOnResize('approverComment', w)"
+                      @resize-end="apprPendingOnResizeEnd"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="createdAt"
+                  :width="historyColWidth('createdAt', 170)"
+                >
+                  <template #header>
+                                                            <PortalListColumnHeader
+                      :label="t('permission.applyTime')"
+                      :width="apprPendingColWidth('createdAt', 140)"
+                      :has-filter="apprPendingHasFilter('createdAt')"
+                      :sort-direction="apprPendingSortDirection('createdAt')"
+                      :is-grouped="apprPendingIsGrouped('createdAt')"
+                      :can-move-left="apprPendingCanMoveLeft('createdAt')"
+                      :can-move-right="apprPendingCanMoveRight('createdAt')"
+                      :date-like="true"
+                      @sort-asc="onApprPendingSort('createdAt', 'ASC')"
+                      @sort-desc="onApprPendingSort('createdAt', 'DESC')"
+                      @group-by="onApprPendingGroup('createdAt')"
+                      @filter="apprPendingOpenFilter('createdAt', t('permission.applyTime'))"
+                      @clear-filter="onApprPendingClearFilter('createdAt')"
+                      @move-left="apprPendingMoveLeft('createdAt')"
+                      @move-right="apprPendingMoveRight('createdAt')"
+                      @resize="(w) => apprPendingOnResize('createdAt', w)"
+                      @resize-end="apprPendingOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ formatDateTime(row.createdAt) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="updatedAt"
+                  :width="historyColWidth('updatedAt', 170)"
+                >
+                  <template #header>
+                                                            <PortalListColumnHeader
+                      :label="t('permission.approvedAt')"
+                      :width="apprPendingColWidth('updatedAt', 140)"
+                      :has-filter="apprPendingHasFilter('updatedAt')"
+                      :sort-direction="apprPendingSortDirection('updatedAt')"
+                      :is-grouped="apprPendingIsGrouped('updatedAt')"
+                      :can-move-left="apprPendingCanMoveLeft('updatedAt')"
+                      :can-move-right="apprPendingCanMoveRight('updatedAt')"
+                      :date-like="true"
+                      @sort-asc="onApprPendingSort('updatedAt', 'ASC')"
+                      @sort-desc="onApprPendingSort('updatedAt', 'DESC')"
+                      @group-by="onApprPendingGroup('updatedAt')"
+                      @filter="apprPendingOpenFilter('updatedAt', t('permission.approvedAt'))"
+                      @clear-filter="onApprPendingClearFilter('updatedAt')"
+                      @move-left="apprPendingMoveLeft('updatedAt')"
+                      @move-right="apprPendingMoveRight('updatedAt')"
+                      @resize="(w) => apprPendingOnResize('updatedAt', w)"
+                      @resize-end="apprPendingOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ formatDateTime(row.updatedAt) }}
+                  </template>
+                </el-table-column>
+              </el-table>
+              <PortalListPagination
+                v-model:current-page="historyPagination.page"
+                v-model:page-size="historyPagination.size"
+                :disabled="loadingHistory"
+                :total="historyTotal"
+                :visible="true"
+                @change="onHistoryPageChange"
               />
-              <el-table-column
-                prop="status"
-                :label="t('permission.status')"
-                width="100"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getStatusType(row.status)"
-                    size="small"
-                  >
-                    {{ getStatusLabel(row.status) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="approverComment"
-                :label="t('approval.comment')"
-                min-width="150"
-                show-overflow-tooltip
+              <PortalListFilterDialog
+                v-model="historyFilterDialogVisible"
+                :title="historyFilterDialogField
+                  ? `${t('mainTableView.colFilterBy')}: ${historyFilterDialogField.label}`
+                  : t('mainTableView.colFilterBy')"
+                :initial="historyFilterDialogField
+                  ? historyColState.filters[historyFilterDialogField.field]
+                  : null"
+                @apply="onHistoryApplyFilter"
+                @clear="onHistoryClearFilter()"
               />
-              <el-table-column
-                prop="createdAt"
-                :label="t('permission.applyTime')"
-                width="160"
-              >
-                <template #default="{ row }">
-                  {{ formatDateTime(row.createdAt) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="updatedAt"
-                :label="t('permission.approvedAt')"
-                width="160"
-              >
-                <template #default="{ row }">
-                  {{ formatDateTime(row.updatedAt) }}
-                </template>
-              </el-table-column>
-            </el-table>
+            </template>
           </el-tab-pane>
         </el-tabs>
       </div>
@@ -382,90 +634,244 @@
               v-if="approverPendingList.length === 0 && !loadingApproverPending"
               :description="t('approval.noPendingApprovals')"
             />
-            <el-table
-              v-else
-              v-loading="loadingApproverPending"
-              :data="approverPendingList"
-              stripe
-            >
-              <el-table-column
-                prop="applicantId"
-                :label="t('permission.beneficiaryColumn')"
-                width="150"
+            <template v-else>
+              <el-table
+                v-loading="loadingApproverPending"
+                class="portal-list-grid"
+                :data="displayApprPendingRows"
+                stripe
+                table-layout="fixed"
+                :span-method="apprPendingSpanMethod"
+                :row-class-name="groupRowClassName"
               >
-                <template #default="{ row }">
-                  {{ getApplicantDisplay(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.submittedByColumn')"
-                width="130"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  {{ getSubmitterDisplay(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="requestType"
-                :label="t('permission.requestType')"
-                width="140"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getRequestTypeTag(row.requestType)"
-                    size="small"
-                  >
-                    {{ getRequestTypeLabel(row.requestType) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.requestTarget')"
-                min-width="180"
-              >
-                <template #default="{ row }">
-                  {{ getTargetName(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="reason"
-                :label="t('permission.reason')"
-                min-width="200"
-                show-overflow-tooltip
+                <el-table-column
+                  prop="applicantId"
+                  :width="apprPendingColWidth('applicantId', 150)"
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.beneficiaryColumn')"
+                      :width="apprHistoryColWidth('applicantId', 140)"
+                      :has-filter="apprHistoryHasFilter('applicantId')"
+                      :sort-direction="apprHistorySortDirection('applicantId')"
+                      :is-grouped="apprHistoryIsGrouped('applicantId')"
+                      :can-move-left="apprHistoryCanMoveLeft('applicantId')"
+                      :can-move-right="apprHistoryCanMoveRight('applicantId')"
+                      :date-like="false"
+                      @sort-asc="onApprHistorySort('applicantId', 'ASC')"
+                      @sort-desc="onApprHistorySort('applicantId', 'DESC')"
+                      @group-by="onApprHistoryGroup('applicantId')"
+                      @filter="apprHistoryOpenFilter('applicantId', t('permission.beneficiaryColumn'))"
+                      @clear-filter="onApprHistoryClearFilter('applicantId')"
+                      @move-left="apprHistoryMoveLeft('applicantId')"
+                      @move-right="apprHistoryMoveRight('applicantId')"
+                      @resize="(w) => apprHistoryOnResize('applicantId', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ getApplicantDisplay(row) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  :width="apprPendingColWidth('submittedBy', 140)"
+                  show-overflow-tooltip
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.submittedByColumn')"
+                      :width="apprHistoryColWidth('submittedBy', 140)"
+                      :has-filter="apprHistoryHasFilter('submittedBy')"
+                      :sort-direction="apprHistorySortDirection('submittedBy')"
+                      :is-grouped="apprHistoryIsGrouped('submittedBy')"
+                      :can-move-left="apprHistoryCanMoveLeft('submittedBy')"
+                      :can-move-right="apprHistoryCanMoveRight('submittedBy')"
+                      :date-like="false"
+                      @sort-asc="onApprHistorySort('submittedBy', 'ASC')"
+                      @sort-desc="onApprHistorySort('submittedBy', 'DESC')"
+                      @group-by="onApprHistoryGroup('submittedBy')"
+                      @filter="apprHistoryOpenFilter('submittedBy', t('permission.submittedByColumn'))"
+                      @clear-filter="onApprHistoryClearFilter('submittedBy')"
+                      @move-left="apprHistoryMoveLeft('submittedBy')"
+                      @move-right="apprHistoryMoveRight('submittedBy')"
+                      @resize="(w) => apprHistoryOnResize('submittedBy', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ getSubmitterDisplay(row) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="requestType"
+                  :width="apprPendingColWidth('requestType', 140)"
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.requestType')"
+                      :width="apprHistoryColWidth('requestType', 140)"
+                      :has-filter="apprHistoryHasFilter('requestType')"
+                      :sort-direction="apprHistorySortDirection('requestType')"
+                      :is-grouped="apprHistoryIsGrouped('requestType')"
+                      :can-move-left="apprHistoryCanMoveLeft('requestType')"
+                      :can-move-right="apprHistoryCanMoveRight('requestType')"
+                      :date-like="false"
+                      @sort-asc="onApprHistorySort('requestType', 'ASC')"
+                      @sort-desc="onApprHistorySort('requestType', 'DESC')"
+                      @group-by="onApprHistoryGroup('requestType')"
+                      @filter="apprHistoryOpenFilter('requestType', t('permission.requestType'))"
+                      @clear-filter="onApprHistoryClearFilter('requestType')"
+                      @move-left="apprHistoryMoveLeft('requestType')"
+                      @move-right="apprHistoryMoveRight('requestType')"
+                      @resize="(w) => apprHistoryOnResize('requestType', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    <el-tag
+                      :type="getRequestTypeTag(row.requestType)"
+                      size="small"
+                    >
+                      {{ getRequestTypeLabel(row.requestType) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column :width="apprPendingColWidth('requestTarget', 180)">
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.requestTarget')"
+                      :width="apprHistoryColWidth('requestTarget', 140)"
+                      :has-filter="apprHistoryHasFilter('requestTarget')"
+                      :sort-direction="apprHistorySortDirection('requestTarget')"
+                      :is-grouped="apprHistoryIsGrouped('requestTarget')"
+                      :can-move-left="apprHistoryCanMoveLeft('requestTarget')"
+                      :can-move-right="apprHistoryCanMoveRight('requestTarget')"
+                      :date-like="false"
+                      @sort-asc="onApprHistorySort('requestTarget', 'ASC')"
+                      @sort-desc="onApprHistorySort('requestTarget', 'DESC')"
+                      @group-by="onApprHistoryGroup('requestTarget')"
+                      @filter="apprHistoryOpenFilter('requestTarget', t('permission.requestTarget'))"
+                      @clear-filter="onApprHistoryClearFilter('requestTarget')"
+                      @move-left="apprHistoryMoveLeft('requestTarget')"
+                      @move-right="apprHistoryMoveRight('requestTarget')"
+                      @resize="(w) => apprHistoryOnResize('requestTarget', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ getTargetName(row) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="reason"
+                  :width="apprPendingColWidth('reason', 200)"
+                  show-overflow-tooltip
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.reason')"
+                      :width="apprHistoryColWidth('reason', 140)"
+                      :has-filter="apprHistoryHasFilter('reason')"
+                      :sort-direction="apprHistorySortDirection('reason')"
+                      :is-grouped="apprHistoryIsGrouped('reason')"
+                      :can-move-left="apprHistoryCanMoveLeft('reason')"
+                      :can-move-right="apprHistoryCanMoveRight('reason')"
+                      :date-like="false"
+                      @sort-asc="onApprHistorySort('reason', 'ASC')"
+                      @sort-desc="onApprHistorySort('reason', 'DESC')"
+                      @group-by="onApprHistoryGroup('reason')"
+                      @filter="apprHistoryOpenFilter('reason', t('permission.reason'))"
+                      @clear-filter="onApprHistoryClearFilter('reason')"
+                      @move-left="apprHistoryMoveLeft('reason')"
+                      @move-right="apprHistoryMoveRight('reason')"
+                      @resize="(w) => apprHistoryOnResize('reason', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="createdAt"
+                  :width="apprPendingColWidth('createdAt', 170)"
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.applyTime')"
+                      :width="apprHistoryColWidth('createdAt', 140)"
+                      :has-filter="apprHistoryHasFilter('createdAt')"
+                      :sort-direction="apprHistorySortDirection('createdAt')"
+                      :is-grouped="apprHistoryIsGrouped('createdAt')"
+                      :can-move-left="apprHistoryCanMoveLeft('createdAt')"
+                      :can-move-right="apprHistoryCanMoveRight('createdAt')"
+                      :date-like="true"
+                      @sort-asc="onApprHistorySort('createdAt', 'ASC')"
+                      @sort-desc="onApprHistorySort('createdAt', 'DESC')"
+                      @group-by="onApprHistoryGroup('createdAt')"
+                      @filter="apprHistoryOpenFilter('createdAt', t('permission.applyTime'))"
+                      @clear-filter="onApprHistoryClearFilter('createdAt')"
+                      @move-left="apprHistoryMoveLeft('createdAt')"
+                      @move-right="apprHistoryMoveRight('createdAt')"
+                      @resize="(w) => apprHistoryOnResize('createdAt', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ formatDateTime(row.createdAt) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  :width="apprPendingColWidth('actions', 180)"
+                  fixed="right"
+                >
+                  <template #header>
+                    <PortalListColumnHeader
+                      :label="t('common.actions')"
+                      :width="apprPendingColWidth('actions', 180)"
+                      :sortable="false"
+                      :filterable="false"
+                      :groupable="false"
+                      :movable="false"
+                      @resize="(w) => apprPendingOnResize('actions', w)"
+                      @resize-end="apprPendingOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    <el-button
+                      type="success"
+                      size="small"
+                      @click="showApproveDialog(row)"
+                    >
+                      {{ t('approval.approve') }}
+                    </el-button>
+                    <el-button
+                      type="danger"
+                      size="small"
+                      @click="showRejectDialog(row)"
+                    >
+                      {{ t('approval.reject') }}
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <PortalListPagination
+                v-model:current-page="approverPendingPagination.page"
+                v-model:page-size="approverPendingPagination.size"
+                :disabled="loadingApproverPending"
+                :total="approvalPendingTotal"
+                :visible="true"
+                @change="onApprPendingPageChange"
               />
-              <el-table-column
-                prop="createdAt"
-                :label="t('permission.applyTime')"
-                width="160"
-              >
-                <template #default="{ row }">
-                  {{ formatDateTime(row.createdAt) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('common.actions')"
-                width="180"
-                fixed="right"
-              >
-                <template #default="{ row }">
-                  <el-button
-                    type="success"
-                    size="small"
-                    @click="showApproveDialog(row)"
-                  >
-                    {{ t('approval.approve') }}
-                  </el-button>
-                  <el-button
-                    type="danger"
-                    size="small"
-                    @click="showRejectDialog(row)"
-                  >
-                    {{ t('approval.reject') }}
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
+              <PortalListFilterDialog
+                v-model="apprPendingFilterDialogVisible"
+                :title="apprPendingFilterDialogField
+                  ? `${t('mainTableView.colFilterBy')}: ${apprPendingFilterDialogField.label}`
+                  : t('mainTableView.colFilterBy')"
+                :initial="apprPendingFilterDialogField
+                  ? apprPendingColState.filters[apprPendingFilterDialogField.field]
+                  : null"
+                @apply="onApprPendingApplyFilter"
+                @clear="onApprPendingClearFilter()"
+              />
+            </template>
           </el-tab-pane>
 
           <el-tab-pane
@@ -476,82 +882,245 @@
               v-if="approverHistoryList.length === 0 && !loadingApproverHistory"
               :description="t('approval.noApprovalHistory')"
             />
-            <el-table
-              v-else
-              v-loading="loadingApproverHistory"
-              :data="approverHistoryList"
-              stripe
-            >
-              <el-table-column
-                prop="applicantId"
-                :label="t('permission.beneficiaryColumn')"
-                width="150"
+            <template v-else>
+              <el-table
+                v-loading="loadingApproverHistory"
+                class="portal-list-grid"
+                :data="displayApprHistoryRows"
+                stripe
+                table-layout="fixed"
+                :span-method="apprHistorySpanMethod"
+                :row-class-name="groupRowClassName"
               >
-                <template #default="{ row }">
-                  {{ getApplicantDisplay(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.submittedByColumn')"
-                width="130"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  {{ getSubmitterDisplay(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="requestType"
-                :label="t('permission.requestType')"
-                width="140"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getRequestTypeTag(row.requestType)"
-                    size="small"
-                  >
-                    {{ getRequestTypeLabel(row.requestType) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.requestTarget')"
-                min-width="180"
-              >
-                <template #default="{ row }">
-                  {{ getTargetName(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="status"
-                :label="t('permission.status')"
-                width="100"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getStatusType(row.status)"
-                    size="small"
-                  >
-                    {{ getStatusLabel(row.status) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="approverComment"
-                :label="t('approval.comment')"
-                min-width="150"
-                show-overflow-tooltip
+                <el-table-column
+                  prop="applicantId"
+                  :width="apprHistoryColWidth('applicantId', 150)"
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.beneficiaryColumn')"
+                      :width="apprHistoryColWidth('applicantId', 140)"
+                      :has-filter="apprHistoryHasFilter('applicantId')"
+                      :sort-direction="apprHistorySortDirection('applicantId')"
+                      :is-grouped="apprHistoryIsGrouped('applicantId')"
+                      :can-move-left="apprHistoryCanMoveLeft('applicantId')"
+                      :can-move-right="apprHistoryCanMoveRight('applicantId')"
+                      :date-like="false"
+                      @sort-asc="onApprHistorySort('applicantId', 'ASC')"
+                      @sort-desc="onApprHistorySort('applicantId', 'DESC')"
+                      @group-by="onApprHistoryGroup('applicantId')"
+                      @filter="apprHistoryOpenFilter('applicantId', t('permission.beneficiaryColumn'))"
+                      @clear-filter="onApprHistoryClearFilter('applicantId')"
+                      @move-left="apprHistoryMoveLeft('applicantId')"
+                      @move-right="apprHistoryMoveRight('applicantId')"
+                      @resize="(w) => apprHistoryOnResize('applicantId', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ getApplicantDisplay(row) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  :width="apprHistoryColWidth('submittedBy', 140)"
+                  show-overflow-tooltip
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.submittedByColumn')"
+                      :width="apprHistoryColWidth('submittedBy', 140)"
+                      :has-filter="apprHistoryHasFilter('submittedBy')"
+                      :sort-direction="apprHistorySortDirection('submittedBy')"
+                      :is-grouped="apprHistoryIsGrouped('submittedBy')"
+                      :can-move-left="apprHistoryCanMoveLeft('submittedBy')"
+                      :can-move-right="apprHistoryCanMoveRight('submittedBy')"
+                      :date-like="false"
+                      @sort-asc="onApprHistorySort('submittedBy', 'ASC')"
+                      @sort-desc="onApprHistorySort('submittedBy', 'DESC')"
+                      @group-by="onApprHistoryGroup('submittedBy')"
+                      @filter="apprHistoryOpenFilter('submittedBy', t('permission.submittedByColumn'))"
+                      @clear-filter="onApprHistoryClearFilter('submittedBy')"
+                      @move-left="apprHistoryMoveLeft('submittedBy')"
+                      @move-right="apprHistoryMoveRight('submittedBy')"
+                      @resize="(w) => apprHistoryOnResize('submittedBy', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ getSubmitterDisplay(row) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="requestType"
+                  :width="apprHistoryColWidth('requestType', 140)"
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.requestType')"
+                      :width="apprHistoryColWidth('requestType', 140)"
+                      :has-filter="apprHistoryHasFilter('requestType')"
+                      :sort-direction="apprHistorySortDirection('requestType')"
+                      :is-grouped="apprHistoryIsGrouped('requestType')"
+                      :can-move-left="apprHistoryCanMoveLeft('requestType')"
+                      :can-move-right="apprHistoryCanMoveRight('requestType')"
+                      :date-like="false"
+                      @sort-asc="onApprHistorySort('requestType', 'ASC')"
+                      @sort-desc="onApprHistorySort('requestType', 'DESC')"
+                      @group-by="onApprHistoryGroup('requestType')"
+                      @filter="apprHistoryOpenFilter('requestType', t('permission.requestType'))"
+                      @clear-filter="onApprHistoryClearFilter('requestType')"
+                      @move-left="apprHistoryMoveLeft('requestType')"
+                      @move-right="apprHistoryMoveRight('requestType')"
+                      @resize="(w) => apprHistoryOnResize('requestType', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    <el-tag
+                      :type="getRequestTypeTag(row.requestType)"
+                      size="small"
+                    >
+                      {{ getRequestTypeLabel(row.requestType) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column :width="apprHistoryColWidth('requestTarget', 180)">
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.requestTarget')"
+                      :width="apprHistoryColWidth('requestTarget', 140)"
+                      :has-filter="apprHistoryHasFilter('requestTarget')"
+                      :sort-direction="apprHistorySortDirection('requestTarget')"
+                      :is-grouped="apprHistoryIsGrouped('requestTarget')"
+                      :can-move-left="apprHistoryCanMoveLeft('requestTarget')"
+                      :can-move-right="apprHistoryCanMoveRight('requestTarget')"
+                      :date-like="false"
+                      @sort-asc="onApprHistorySort('requestTarget', 'ASC')"
+                      @sort-desc="onApprHistorySort('requestTarget', 'DESC')"
+                      @group-by="onApprHistoryGroup('requestTarget')"
+                      @filter="apprHistoryOpenFilter('requestTarget', t('permission.requestTarget'))"
+                      @clear-filter="onApprHistoryClearFilter('requestTarget')"
+                      @move-left="apprHistoryMoveLeft('requestTarget')"
+                      @move-right="apprHistoryMoveRight('requestTarget')"
+                      @resize="(w) => apprHistoryOnResize('requestTarget', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ getTargetName(row) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="status"
+                  :width="apprHistoryColWidth('status', 110)"
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('permission.status')"
+                      :width="apprHistoryColWidth('status', 140)"
+                      :has-filter="apprHistoryHasFilter('status')"
+                      :sort-direction="apprHistorySortDirection('status')"
+                      :is-grouped="apprHistoryIsGrouped('status')"
+                      :can-move-left="apprHistoryCanMoveLeft('status')"
+                      :can-move-right="apprHistoryCanMoveRight('status')"
+                      :date-like="false"
+                      @sort-asc="onApprHistorySort('status', 'ASC')"
+                      @sort-desc="onApprHistorySort('status', 'DESC')"
+                      @group-by="onApprHistoryGroup('status')"
+                      @filter="apprHistoryOpenFilter('status', t('permission.status'))"
+                      @clear-filter="onApprHistoryClearFilter('status')"
+                      @move-left="apprHistoryMoveLeft('status')"
+                      @move-right="apprHistoryMoveRight('status')"
+                      @resize="(w) => apprHistoryOnResize('status', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    <el-tag
+                      :type="getStatusType(row.status)"
+                      size="small"
+                    >
+                      {{ getStatusLabel(row.status) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="approverComment"
+                  :width="apprHistoryColWidth('approverComment', 150)"
+                  show-overflow-tooltip
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('approval.comment')"
+                      :width="apprHistoryColWidth('approverComment', 140)"
+                      :has-filter="apprHistoryHasFilter('approverComment')"
+                      :sort-direction="apprHistorySortDirection('approverComment')"
+                      :is-grouped="apprHistoryIsGrouped('approverComment')"
+                      :can-move-left="apprHistoryCanMoveLeft('approverComment')"
+                      :can-move-right="apprHistoryCanMoveRight('approverComment')"
+                      :date-like="false"
+                      @sort-asc="onApprHistorySort('approverComment', 'ASC')"
+                      @sort-desc="onApprHistorySort('approverComment', 'DESC')"
+                      @group-by="onApprHistoryGroup('approverComment')"
+                      @filter="apprHistoryOpenFilter('approverComment', t('approval.comment'))"
+                      @clear-filter="onApprHistoryClearFilter('approverComment')"
+                      @move-left="apprHistoryMoveLeft('approverComment')"
+                      @move-right="apprHistoryMoveRight('approverComment')"
+                      @resize="(w) => apprHistoryOnResize('approverComment', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="approvedAt"
+                  :width="apprHistoryColWidth('approvedAt', 170)"
+                >
+                  <template #header>
+                                        <PortalListColumnHeader
+                      :label="t('approval.processedAt')"
+                      :width="apprHistoryColWidth('approvedAt', 140)"
+                      :has-filter="apprHistoryHasFilter('approvedAt')"
+                      :sort-direction="apprHistorySortDirection('approvedAt')"
+                      :is-grouped="apprHistoryIsGrouped('approvedAt')"
+                      :can-move-left="apprHistoryCanMoveLeft('approvedAt')"
+                      :can-move-right="apprHistoryCanMoveRight('approvedAt')"
+                      :date-like="true"
+                      @sort-asc="onApprHistorySort('approvedAt', 'ASC')"
+                      @sort-desc="onApprHistorySort('approvedAt', 'DESC')"
+                      @group-by="onApprHistoryGroup('approvedAt')"
+                      @filter="apprHistoryOpenFilter('approvedAt', t('approval.processedAt'))"
+                      @clear-filter="onApprHistoryClearFilter('approvedAt')"
+                      @move-left="apprHistoryMoveLeft('approvedAt')"
+                      @move-right="apprHistoryMoveRight('approvedAt')"
+                      @resize="(w) => apprHistoryOnResize('approvedAt', w)"
+                      @resize-end="apprHistoryOnResizeEnd"
+                    />
+                  </template>
+                  <template #default="{ row }">
+                    {{ formatDateTime(row.approvedAt || row.updatedAt) }}
+                  </template>
+                </el-table-column>
+              </el-table>
+              <PortalListPagination
+                v-model:current-page="approverHistoryPagination.page"
+                v-model:page-size="approverHistoryPagination.size"
+                :disabled="loadingApproverHistory"
+                :total="approvalHistoryTotal"
+                :visible="true"
+                @change="onApprHistoryPageChange"
               />
-              <el-table-column
-                prop="approvedAt"
-                :label="t('approval.processedAt')"
-                width="160"
-              >
-                <template #default="{ row }">
-                  {{ formatDateTime(row.approvedAt || row.updatedAt) }}
-                </template>
-              </el-table-column>
-            </el-table>
+              <PortalListFilterDialog
+                v-model="apprHistoryFilterDialogVisible"
+                :title="apprHistoryFilterDialogField
+                  ? `${t('mainTableView.colFilterBy')}: ${apprHistoryFilterDialogField.label}`
+                  : t('mainTableView.colFilterBy')"
+                :initial="apprHistoryFilterDialogField
+                  ? apprHistoryColState.filters[apprHistoryFilterDialogField.field]
+                  : null"
+                @apply="onApprHistoryApplyFilter"
+                @clear="onApprHistoryClearFilter()"
+              />
+            </template>
           </el-tab-pane>
         </el-tabs>
       </div>
@@ -1029,10 +1598,168 @@ import {
   shouldShowPendingApprovalsBanner,
   type PrimaryWorkTab
 } from '@/utils/permissionWorkTabs'
+import PortalListPagination from '@/components/portal-list/PortalListPagination.vue'
+import PortalListColumnHeader from '@/components/portal-list/PortalListColumnHeader.vue'
+import PortalListFilterDialog from '@/components/portal-list/PortalListFilterDialog.vue'
+import { usePortalListColumnState } from '@/composables/usePortalListColumnState'
+import {
+  applyGroupHeaders,
+  isPortalListGroupHeader,
+  normalizeGroupCounts,
+  portalListGroupSpanMethod,
+  type PortalListColumnFilter,
+  type PortalListSortDirection,
+} from '@/utils/portalListGridRuntime'
+import type { PermissionRequestRecord } from '@/api/permission'
 
 const { t } = useI18n()
 const pendingApprovalStore = usePendingApprovalStore()
 const primaryWorkTab = ref<PrimaryWorkTab>('myRequests')
+
+const PENDING_FIELDS = ['requestType', 'requestTarget', 'beneficiary', 'submittedBy', 'reason', 'createdAt']
+const HISTORY_FIELDS = ['requestType', 'requestTarget', 'beneficiary', 'submittedBy', 'reason', 'status', 'approverComment', 'createdAt', 'updatedAt']
+const APPR_PENDING_FIELDS = ['requestType', 'requestTarget', 'applicant', 'beneficiary', 'submittedBy', 'reason', 'createdAt']
+const APPR_HISTORY_FIELDS = ['applicantId', 'submittedBy', 'requestType', 'requestTarget', 'status', 'createdAt', 'approvedAt']
+
+const pendingCols = usePortalListColumnState('permissions-pending')
+const {
+  state: pendingColState,
+  filterDialogVisible: pendingFilterDialogVisible,
+  filterDialogField: pendingFilterDialogField,
+  width: pendingColWidth,
+  onResize: pendingOnResize,
+  onResizeEnd: pendingOnResizeEnd,
+  toggleSort: pendingToggleSort,
+  toggleGroup: pendingToggleGroup,
+  moveLeft: pendingMoveLeft,
+  moveRight: pendingMoveRight,
+  canMoveLeft: pendingCanMoveLeft,
+  canMoveRight: pendingCanMoveRight,
+  ensureOrder: pendingEnsureOrder,
+  orderedColumnFields: pendingOrderedColumnFields,
+  openFilter: pendingOpenFilter,
+  applyFilter: pendingApplyFilter,
+  clearFilter: pendingClearFilter,
+  hasFilter: pendingHasFilter,
+  sortDirection: pendingSortDirection,
+  isGrouped: pendingIsGrouped,
+  activeFilters: pendingActiveFilters,
+} = pendingCols
+pendingEnsureOrder(PENDING_FIELDS)
+
+const historyCols = usePortalListColumnState('permissions-history')
+const {
+  state: historyColState,
+  filterDialogVisible: historyFilterDialogVisible,
+  filterDialogField: historyFilterDialogField,
+  width: historyColWidth,
+  onResize: historyOnResize,
+  onResizeEnd: historyOnResizeEnd,
+  toggleSort: historyToggleSort,
+  toggleGroup: historyToggleGroup,
+  moveLeft: historyMoveLeft,
+  moveRight: historyMoveRight,
+  canMoveLeft: historyCanMoveLeft,
+  canMoveRight: historyCanMoveRight,
+  ensureOrder: historyEnsureOrder,
+  orderedColumnFields: historyOrderedColumnFields,
+  openFilter: historyOpenFilter,
+  applyFilter: historyApplyFilter,
+  clearFilter: historyClearFilter,
+  hasFilter: historyHasFilter,
+  sortDirection: historySortDirection,
+  isGrouped: historyIsGrouped,
+  activeFilters: historyActiveFilters,
+} = historyCols
+historyEnsureOrder(HISTORY_FIELDS)
+
+const apprPendingCols = usePortalListColumnState('permissions-approver-pending')
+const {
+  state: apprPendingColState,
+  filterDialogVisible: apprPendingFilterDialogVisible,
+  filterDialogField: apprPendingFilterDialogField,
+  width: apprPendingColWidth,
+  onResize: apprPendingOnResize,
+  onResizeEnd: apprPendingOnResizeEnd,
+  toggleSort: apprPendingToggleSort,
+  toggleGroup: apprPendingToggleGroup,
+  moveLeft: apprPendingMoveLeft,
+  moveRight: apprPendingMoveRight,
+  canMoveLeft: apprPendingCanMoveLeft,
+  canMoveRight: apprPendingCanMoveRight,
+  ensureOrder: apprPendingEnsureOrder,
+  orderedColumnFields: apprPendingOrderedColumnFields,
+  openFilter: apprPendingOpenFilter,
+  applyFilter: apprPendingApplyFilter,
+  clearFilter: apprPendingClearFilter,
+  hasFilter: apprPendingHasFilter,
+  sortDirection: apprPendingSortDirection,
+  isGrouped: apprPendingIsGrouped,
+  activeFilters: apprPendingActiveFilters,
+} = apprPendingCols
+apprPendingEnsureOrder(APPR_PENDING_FIELDS)
+
+const apprHistoryCols = usePortalListColumnState('permissions-approver-history')
+const {
+  state: apprHistoryColState,
+  filterDialogVisible: apprHistoryFilterDialogVisible,
+  filterDialogField: apprHistoryFilterDialogField,
+  width: apprHistoryColWidth,
+  onResize: apprHistoryOnResize,
+  onResizeEnd: apprHistoryOnResizeEnd,
+  toggleSort: apprHistoryToggleSort,
+  toggleGroup: apprHistoryToggleGroup,
+  moveLeft: apprHistoryMoveLeft,
+  moveRight: apprHistoryMoveRight,
+  canMoveLeft: apprHistoryCanMoveLeft,
+  canMoveRight: apprHistoryCanMoveRight,
+  ensureOrder: apprHistoryEnsureOrder,
+  orderedColumnFields: apprHistoryOrderedColumnFields,
+  openFilter: apprHistoryOpenFilter,
+  applyFilter: apprHistoryApplyFilter,
+  clearFilter: apprHistoryClearFilter,
+  hasFilter: apprHistoryHasFilter,
+  sortDirection: apprHistorySortDirection,
+  isGrouped: apprHistoryIsGrouped,
+  activeFilters: apprHistoryActiveFilters,
+} = apprHistoryCols
+apprHistoryEnsureOrder(APPR_HISTORY_FIELDS)
+
+const orderedPendingFields = computed(() => [...pendingOrderedColumnFields(PENDING_FIELDS), 'actions'])
+const orderedHistoryFields = computed(() => historyOrderedColumnFields(HISTORY_FIELDS))
+const orderedApprPendingFields = computed(() => [...apprPendingOrderedColumnFields(APPR_PENDING_FIELDS), 'actions'])
+const orderedApprHistoryFields = computed(() => apprHistoryOrderedColumnFields(APPR_HISTORY_FIELDS))
+
+function permCell(row: PermissionRequestRecord, field: string): unknown {
+  switch (field) {
+    case 'requestType': return getRequestTypeLabel(row.requestType)
+    case 'requestTarget': return getTargetName(row)
+    case 'beneficiary': return row.applicantUsername || row.applicantId || '-'
+    case 'submittedBy':
+      return row.submittedByUserId && row.submittedByUserId !== row.applicantId
+        ? (row.submittedByUsername || row.submittedByUserId)
+        : t('permission.selfBeneficiary')
+    case 'applicant': return getApplicantDisplay(row)
+    case 'status': return getStatusLabel(row.status)
+    case 'createdAt': return formatDateTime(row.createdAt)
+    case 'approvedAt': return formatDateTime(row.approvedAt || row.updatedAt)
+    case 'processedAt': return formatDateTime(row.updatedAt || row.processedAt)
+    default: return (row as Record<string, unknown>)[field]
+  }
+}
+
+function buildDisplay(
+  rows: PermissionRequestRecord[],
+  state: { groupBy: string | null },
+  groupCounts: Record<string, number> | null,
+) {
+  return applyGroupHeaders(
+    rows as unknown as Record<string, unknown>[],
+    state.groupBy,
+    (r, f) => permCell(r as unknown as PermissionRequestRecord, f),
+    groupCounts,
+  )
+}
 
 // 纯展示/格式化辅助（状态、类型标签、目标名称、时间格式化等）
 const {
@@ -1061,6 +1788,12 @@ const {
   pendingList,
   historyList,
   pendingCount,
+  pendingTotal,
+  historyTotal,
+  pendingGroupCounts,
+  historyGroupCounts,
+  pendingPagination,
+  historyPagination,
   loadPendingRequests,
   loadHistoryRequests,
   cancelRequest
@@ -1081,18 +1814,213 @@ const {
   rejectComment,
   submittingApproval,
   approvalPendingCount,
+  approvalPendingTotal,
+  approvalHistoryTotal,
+  approvalPendingGroupCounts,
+  approvalHistoryGroupCounts,
+  approverPendingPagination,
+  approverHistoryPagination,
   checkApproverStatus,
   loadApproverPending,
-  onApprovalTabChange,
+  loadApproverHistory,
   showApproveDialog,
   showRejectDialog,
   handleApprove,
   handleReject
 } = useApprovals(t, {
-  loadPendingRequests,
-  loadHistoryRequests,
+  loadPendingRequests: () => {
+    void loadPendingRequests(chromeOpts(pendingColState, pendingActiveFilters))
+  },
+  loadHistoryRequests: () => {
+    void loadHistoryRequests(chromeOpts(historyColState, historyActiveFilters))
+  },
   fetchPendingCount: () => pendingApprovalStore.fetchPendingCount()
 })
+
+function chromeOpts(
+  state: { sort: { field: string; direction: PortalListSortDirection } | null; groupBy: string | null },
+  activeFilters: () => Record<string, PortalListColumnFilter>,
+) {
+  const filters = activeFilters()
+  return {
+    sortField: state.sort?.field,
+    sortDirection: state.sort?.direction,
+    filters: Object.keys(filters).length ? JSON.stringify(filters) : undefined,
+    groupBy: state.groupBy || undefined,
+  }
+}
+
+const displayPendingRows = computed(() => buildDisplay(
+  pendingList.value, pendingColState, normalizeGroupCounts(pendingGroupCounts.value),
+))
+const displayHistoryRows = computed(() => buildDisplay(
+  historyList.value, historyColState, normalizeGroupCounts(historyGroupCounts.value),
+))
+const displayApprPendingRows = computed(() => buildDisplay(
+  approverPendingList.value, apprPendingColState, normalizeGroupCounts(approvalPendingGroupCounts.value),
+))
+const displayApprHistoryRows = computed(() => buildDisplay(
+  approverHistoryList.value, apprHistoryColState, normalizeGroupCounts(approvalHistoryGroupCounts.value),
+))
+
+function groupRowClassName({ row }: { row: unknown }) {
+  return isPortalListGroupHeader(row) ? 'group-header-row' : ''
+}
+function pendingSpanMethod({ row, columnIndex }: { row: unknown; columnIndex: number }) {
+  return portalListGroupSpanMethod(row, columnIndex, PENDING_FIELDS.length, 0)
+}
+function historySpanMethod({ row, columnIndex }: { row: unknown; columnIndex: number }) {
+  return portalListGroupSpanMethod(row, columnIndex, HISTORY_FIELDS.length, 0)
+}
+function apprPendingSpanMethod({ row, columnIndex }: { row: unknown; columnIndex: number }) {
+  return portalListGroupSpanMethod(row, columnIndex, APPR_PENDING_FIELDS.length, 0)
+}
+function apprHistorySpanMethod({ row, columnIndex }: { row: unknown; columnIndex: number }) {
+  return portalListGroupSpanMethod(row, columnIndex, APPR_HISTORY_FIELDS.length, 0)
+}
+
+function reloadPending() {
+  void loadPendingRequests(chromeOpts(pendingColState, pendingActiveFilters))
+}
+function reloadHistory() {
+  void loadHistoryRequests(chromeOpts(historyColState, historyActiveFilters))
+}
+function reloadApprPending() {
+  void loadApproverPending(chromeOpts(apprPendingColState, apprPendingActiveFilters))
+}
+function reloadApprHistory() {
+  void loadApproverHistory(chromeOpts(apprHistoryColState, apprHistoryActiveFilters))
+}
+
+function onApprovalTabChange(tab: string | number) {
+  if (String(tab) === 'approvalHistory') {
+    reloadApprHistory()
+  }
+}
+
+function onPendingPageChange() {
+  reloadPending()
+}
+function onHistoryPageChange() {
+  reloadHistory()
+}
+function onApprPendingPageChange() {
+  reloadApprPending()
+}
+function onApprHistoryPageChange() {
+  reloadApprHistory()
+}
+
+function onPendingSort(field: string, direction: PortalListSortDirection) {
+  pendingToggleSort(field, direction)
+  pendingPagination.page = 1
+  reloadPending()
+}
+function onPendingGroup(field: string) {
+  pendingToggleGroup(field)
+  pendingPagination.page = 1
+  reloadPending()
+}
+function onPendingApplyFilter(filter: PortalListColumnFilter) {
+  pendingApplyFilter(filter)
+  pendingPagination.page = 1
+  reloadPending()
+}
+function onPendingClearFilter(field?: string) {
+  pendingClearFilter(field)
+  pendingPagination.page = 1
+  reloadPending()
+}
+
+function onHistorySort(field: string, direction: PortalListSortDirection) {
+  historyToggleSort(field, direction)
+  historyPagination.page = 1
+  reloadHistory()
+}
+function onHistoryGroup(field: string) {
+  historyToggleGroup(field)
+  historyPagination.page = 1
+  reloadHistory()
+}
+function onHistoryApplyFilter(filter: PortalListColumnFilter) {
+  historyApplyFilter(filter)
+  historyPagination.page = 1
+  reloadHistory()
+}
+function onHistoryClearFilter(field?: string) {
+  historyClearFilter(field)
+  historyPagination.page = 1
+  reloadHistory()
+}
+
+function onApprPendingSort(field: string, direction: PortalListSortDirection) {
+  apprPendingToggleSort(field, direction)
+  approverPendingPagination.page = 1
+  reloadApprPending()
+}
+function onApprPendingGroup(field: string) {
+  apprPendingToggleGroup(field)
+  approverPendingPagination.page = 1
+  reloadApprPending()
+}
+function onApprPendingApplyFilter(filter: PortalListColumnFilter) {
+  apprPendingApplyFilter(filter)
+  approverPendingPagination.page = 1
+  reloadApprPending()
+}
+function onApprPendingClearFilter(field?: string) {
+  apprPendingClearFilter(field)
+  approverPendingPagination.page = 1
+  reloadApprPending()
+}
+
+function onApprHistorySort(field: string, direction: PortalListSortDirection) {
+  apprHistoryToggleSort(field, direction)
+  approverHistoryPagination.page = 1
+  reloadApprHistory()
+}
+function onApprHistoryGroup(field: string) {
+  apprHistoryToggleGroup(field)
+  approverHistoryPagination.page = 1
+  reloadApprHistory()
+}
+function onApprHistoryApplyFilter(filter: PortalListColumnFilter) {
+  apprHistoryApplyFilter(filter)
+  approverHistoryPagination.page = 1
+  reloadApprHistory()
+}
+function onApprHistoryClearFilter(field?: string) {
+  apprHistoryClearFilter(field)
+  approverHistoryPagination.page = 1
+  reloadApprHistory()
+}
+
+function pendingColumnLabel(field: string): string {
+  const map: Record<string, string> = {
+    requestType: t('permission.requestType'),
+    requestTarget: t('permission.requestTarget'),
+    beneficiary: t('permission.beneficiaryColumn'),
+    submittedBy: t('permission.submittedByColumn'),
+    reason: t('permission.reason'),
+    createdAt: t('permission.applyTime'),
+    actions: t('common.actions'),
+    status: t('permission.status'),
+    processedAt: t('permission.processTime'),
+    approvedAt: t('approval.processedAt'),
+    updatedAt: t('permission.approvedAt'),
+    approverComment: t('approval.comment'),
+    applicant: t('permission.applicant'),
+    applicantId: t('permission.beneficiaryColumn'),
+  }
+  return map[field] ?? field
+}
+function pendingWidthFallback(field: string): number {
+  const map: Record<string, number> = {
+    requestType: 160, requestTarget: 160, beneficiary: 140, submittedBy: 130,
+    reason: 160, createdAt: 170, actions: 150, status: 120, processedAt: 170, applicant: 140,
+  }
+  return map[field] ?? 140
+}
 
 const showPendingApprovalsBanner = computed(() =>
   shouldShowPendingApprovalsBanner({
@@ -1101,11 +2029,19 @@ const showPendingApprovalsBanner = computed(() =>
   })
 )
 
+function onMyRequestTabChange(tab: string | number) {
+  if (String(tab) === 'completed') {
+    reloadHistory()
+  } else {
+    reloadPending()
+  }
+}
+
 function onPrimaryWorkDomainChange(domain: string | number | boolean) {
   if (domain === 'approvals') {
-    void loadApproverPending()
+    reloadApprPending()
     if (approvalTab.value === 'approvalHistory') {
-      onApprovalTabChange('approvalHistory')
+      reloadApprHistory()
     }
   }
 }
@@ -1126,7 +2062,7 @@ const {
   showApplyDialog,
   onBusinessUnitChange,
   submitApply
-} = useApplyPermission(t, { loadPendingRequests, loadHistoryRequests })
+} = useApplyPermission(t, { loadPendingRequests: reloadPending, loadHistoryRequests: reloadHistory })
 
 // 退出业务单元（先于移除权限创建，供其刷新成员关系）
 const {
@@ -1141,7 +2077,7 @@ const {
   searchExitBuBeneficiaries,
   openExitBuDialog,
   submitExitBu
-} = useExitBu(t, { loadPendingRequests, loadHistoryRequests, loadMyBuRoles })
+} = useExitBu(t, { loadPendingRequests: reloadPending, loadHistoryRequests: reloadHistory, loadMyBuRoles })
 
 // 移除权限对话框（按功能单元批量移除 BU 角色）
 const {
@@ -1166,8 +2102,8 @@ const {
   submitRemovalBatch
 } = useRemovePermission(t, {
   rowRemovalKey,
-  loadPendingRequests,
-  loadHistoryRequests,
+  loadPendingRequests: reloadPending,
+  loadHistoryRequests: reloadHistory,
   loadMyBuRoles,
   loadExitBuMemberships
 })
@@ -1177,10 +2113,10 @@ onMounted(async () => {
   await checkApproverStatus()
   loadMyBuRoles()
   loadExitBuMemberships()
-  loadPendingRequests()
-  loadHistoryRequests()
+  reloadPending()
+  reloadHistory()
   if (isApprover.value) {
-    await loadApproverPending()
+    await reloadApprPending()
   }
   await pendingApprovalStore.fetchPendingCount()
   primaryWorkTab.value = resolvePrimaryWorkTab({

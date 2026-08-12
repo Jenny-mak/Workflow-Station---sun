@@ -11,7 +11,7 @@ import {
   type ImportProgressPhase,
 } from '@/api/mainTableView'
 import {
-  applyGridRuntime, applyGroupBy, columnWidth, setColumnWidth,
+  applyGroupHeadersWithCounts, activeFiltersForQuery, columnWidth, setColumnWidth,
   createDefaultGridRuntime, initColumnOrder, isGroupHeaderRow, loadGridRuntimeFromSession, moveColumn,
   orderedColumns, pruneRuntimeToColumns, saveGridRuntimeToSession,
   type GridColumnFilter, type GridDisplayRow, type GridRuntimeState,
@@ -35,6 +35,7 @@ const searchKeyword = ref('')
 const gridColumns = ref<MainTableViewFieldColumn[]>([])
 const allRows = ref<MainTableViewDataRow[]>([])
 const dataTotal = ref(0)
+const groupCounts = ref<Record<string, number>>({})
 const currentPage = ref(1)
 const pageSize = ref(20)
 
@@ -176,18 +177,16 @@ const gridTableKey = computed(() =>
   `${selectedViewId.value ?? 'none'}|${gridRuntime.groupBy ?? ''}|${gridColumns.value.map(c => c.fieldName).join(',')}`,
 )
 
-const processedRows = computed(() => applyGridRuntime(allRows.value, gridRuntime))
+const processedRows = computed(() => allRows.value)
 
 const groupedRows = computed<GridDisplayRow[]>(() =>
-  applyGroupBy(processedRows.value, gridRuntime.groupBy),
+  applyGroupHeadersWithCounts(allRows.value, gridRuntime.groupBy, groupCounts.value),
 )
 
-const pagedRows = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return groupedRows.value.slice(start, start + pageSize.value)
-})
+/** Server already paginated by data rows; headers are only decoration on the current page. */
+const pagedRows = computed(() => groupedRows.value)
 
-const displayTotal = computed(() => groupedRows.value.length)
+const displayTotal = computed(() => dataTotal.value)
 
 function persistRuntime() {
   if (selectedViewId.value) {
@@ -239,38 +238,62 @@ async function loadData() {
     gridColumns.value = []
     allRows.value = []
     dataTotal.value = 0
+    groupCounts.value = {}
     return
   }
   dataLoading.value = true
   try {
-    const res = await mainTableViewApi.queryData(selectedViewId.value, {
-      page: 0,
-      size: 5000,
-      search: searchKeyword.value.trim() || undefined,
-    })
-    const page: MainTableViewDataPage = res.data
-    gridColumns.value = page.columns || []
-    allRows.value = page.rows || []
-    dataTotal.value = page.total
-    initColumnOrder(gridColumns.value, gridRuntime)
-    // Drop any groupBy / sort / filter that references a column the new view doesn't have, so runtime
-    // state from a previously-selected view can never mis-render against this view's data.
-    pruneRuntimeToColumns(gridRuntime, gridColumns.value)
-    currentPage.value = 1
-    selectedTableRows.value = []
-    tableRef.value?.clearSelection()
-    await hydrateLookupCells()
-    await hydrateFkCells()
-    await nextTick()
-    tableRef.value?.doLayout?.()
+    await fetchViewPage()
+    // Clamp after filter/search/size changes: stay on page 14 while total shrinks to 2 pages → empty grid.
+    const maxPage = Math.max(1, Math.ceil(dataTotal.value / pageSize.value) || 1)
+    if (dataTotal.value === 0) {
+      currentPage.value = 1
+    } else if (currentPage.value > maxPage) {
+      currentPage.value = maxPage
+      await fetchViewPage()
+    }
   } catch (e: unknown) {
     ElMessage.error((e instanceof Error ? e.message : undefined) || t('mainTableView.loadDataFailed'))
     gridColumns.value = []
     allRows.value = []
     dataTotal.value = 0
+    groupCounts.value = {}
   } finally {
     dataLoading.value = false
   }
+}
+
+async function fetchViewPage() {
+  if (!selectedViewId.value) return
+  const filters = activeFiltersForQuery(gridRuntime.filters)
+  const res = await mainTableViewApi.queryData(selectedViewId.value, {
+    page: Math.max(currentPage.value - 1, 0),
+    size: pageSize.value,
+    search: searchKeyword.value.trim() || undefined,
+    filters: Object.keys(filters).length ? filters : undefined,
+    sortField: gridRuntime.sort?.fieldName,
+    sortDirection: gridRuntime.sort?.direction,
+    groupBy: gridRuntime.groupBy || undefined,
+  })
+  const page: MainTableViewDataPage = res.data
+  gridColumns.value = page.columns || []
+  allRows.value = page.rows || []
+  dataTotal.value = page.total
+  const counts: Record<string, number> = {}
+  for (const g of page.groupCounts || []) {
+    counts[g.label] = g.count
+  }
+  groupCounts.value = counts
+  initColumnOrder(gridColumns.value, gridRuntime)
+  // Drop any groupBy / sort / filter that references a column the new view doesn't have, so runtime
+  // state from a previously-selected view can never mis-render against this view's data.
+  pruneRuntimeToColumns(gridRuntime, gridColumns.value)
+  selectedTableRows.value = []
+  tableRef.value?.clearSelection()
+  await hydrateLookupCells()
+  await hydrateFkCells()
+  await nextTick()
+  tableRef.value?.doLayout?.()
 }
 
 watch(selectedFuCode, async (code) => {
@@ -321,11 +344,13 @@ function handleSearch() {
 
 function handlePageChange(page: number) {
   currentPage.value = page
+  loadData()
 }
 
 function handleSizeChange(size: number) {
   pageSize.value = size
   currentPage.value = 1
+  loadData()
 }
 
 function formatCell(colOrValue: MainTableViewFieldColumn | unknown, row?: GridDisplayRow | MainTableViewDataRow) {
@@ -381,13 +406,39 @@ async function handleExport() {
     return
   }
 
-  const rows = processedRows.value as MainTableViewDataRow[]
-  if (!rows.length) {
+  // Export uses the same server filter/sort as the grid (paginated fetch; max size 200).
+  const filters = activeFiltersForQuery(gridRuntime.filters)
+  const collected: MainTableViewDataRow[] = []
+  let pageIdx = 0
+  let total = Number.POSITIVE_INFINITY
+  try {
+    while (collected.length < total && pageIdx < 50) {
+      const res = await mainTableViewApi.queryData(selectedViewId.value, {
+        page: pageIdx,
+        size: 200,
+        search: searchKeyword.value.trim() || undefined,
+        filters: Object.keys(filters).length ? filters : undefined,
+        sortField: gridRuntime.sort?.fieldName,
+        sortDirection: gridRuntime.sort?.direction,
+      })
+      const page = res.data
+      total = page.total
+      const batch = page.rows || []
+      collected.push(...batch)
+      if (!batch.length) break
+      pageIdx += 1
+    }
+  } catch (e: unknown) {
+    ElMessage.error((e instanceof Error ? e.message : undefined) || t('mainTableView.loadDataFailed'))
+    return
+  }
+
+  if (!collected.length) {
     ElMessage.warning(t('mainTableView.exportNoRows'))
     return
   }
-  downloadMainTableViewRowsAsCsv(projectHydrated(rows), cols, baseName)
-  ElMessage.success(t('mainTableView.exportAllHint', { count: rows.length }))
+  downloadMainTableViewRowsAsCsv(projectHydrated(collected), cols, baseName)
+  ElMessage.success(t('mainTableView.exportAllHint', { count: collected.length }))
 }
 
 function openRow(row: GridDisplayRow) {
@@ -510,6 +561,7 @@ function handleColumnCommand(col: MainTableViewFieldColumn, action: string) {
           : { fieldName: col.fieldName, direction: 'ASC' }
       currentPage.value = 1
       persistRuntime()
+      loadData()
       break
     case 'sortDesc':
       gridRuntime.sort =
@@ -518,15 +570,23 @@ function handleColumnCommand(col: MainTableViewFieldColumn, action: string) {
           : { fieldName: col.fieldName, direction: 'DESC' }
       currentPage.value = 1
       persistRuntime()
+      loadData()
       break
     case 'groupBy':
       gridRuntime.groupBy = gridRuntime.groupBy === col.fieldName ? null : col.fieldName
       currentPage.value = 1
       persistRuntime()
+      loadData()
       break
     case 'filterBy':
       filterDialogField.value = col
       filterDialogVisible.value = true
+      break
+    case 'clearFilter':
+      delete gridRuntime.filters[col.fieldName]
+      currentPage.value = 1
+      persistRuntime()
+      loadData()
       break
     case 'moveLeft':
       moveColumn(gridRuntime, col.fieldName, 'left')
@@ -553,6 +613,7 @@ function applyColumnFilter(filter: GridColumnFilter) {
   currentPage.value = 1
   persistRuntime()
   filterDialogVisible.value = false
+  loadData()
 }
 
 function clearColumnFilter() {
@@ -561,6 +622,7 @@ function clearColumnFilter() {
   currentPage.value = 1
   persistRuntime()
   filterDialogVisible.value = false
+  loadData()
 }
 
 function handleColumnResize(fieldName: string, width: number) {

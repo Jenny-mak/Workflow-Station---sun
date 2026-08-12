@@ -65,12 +65,32 @@ public final class MainTableViewPortalDtos {
             Map<String, Object> values
     ) {}
 
+    /**
+     * Runtime column filter from the portal grid header (AND across fields).
+     * Operators mirror designer/portal client: eq/ne/contains/notContains/startsWith/endsWith/isNull/isNotNull.
+     */
+    @Builder
+    public record MainTableViewColumnFilter(
+            String fieldName,
+            String operator,
+            String value
+    ) {}
+
+    /** Full-set group size for a group-by label (pagination is still by data rows). */
+    @Builder
+    public record MainTableViewGroupCount(
+            String label,
+            long count
+    ) {}
+
     @Builder
     public record MainTableViewDataPage(
             List<MainTableViewFieldColumn> columns,
             List<MainTableViewDataRow> rows,
             long total,
             int page,
-            int size
+            int size,
+            /** Present when {@code groupBy} was requested; full filtered-set counts keyed by label. */
+            List<MainTableViewGroupCount> groupCounts
     ) {}
 }

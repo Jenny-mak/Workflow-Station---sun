@@ -2,6 +2,7 @@ package com.portal.component;
 
 import com.portal.client.WorkflowEngineClient;
 import com.portal.component.MiOverlaySupport.MiRowProgress;
+import com.portal.dto.PageResponse;
 import com.portal.dto.ProcessInstanceInfo;
 import com.portal.entity.ProcessInstance;
 import com.portal.repository.ProcessInstanceRepository;
@@ -9,6 +10,15 @@ import com.portal.component.MainTableViewAccessResolver.AccessRule;
 import com.portal.exception.PortalException;
 import com.portal.service.ProcessAssigneeSnapshot;
 import com.portal.service.UserDisplayNameResolver;
+import com.portal.util.ProcessApplicationListSpec;
+import com.portal.util.ProcessApplicationListSpec.ColumnFilter;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +26,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -50,6 +61,9 @@ public class ProcessApplicationQueryComponent {
     private final MainTableViewInvolvementChecker mainTableViewInvolvementChecker;
     private final MainTableViewAccessResolver mainTableViewAccessResolver;
     private final JdbcTemplate jdbcTemplate;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     /** 聚合扇出线程池（引擎 HTTP，不碰 DB），移出共享 commonPool。见 {@link com.portal.config.PortalAsyncConfig}。 */
     @Autowired
@@ -147,17 +161,59 @@ public class ProcessApplicationQueryComponent {
     }
 
     /**
-     * Returns my applications list
+     * Returns my applications list (legacy: status + page only; sort remains startTime DESC).
      */
     public Page<ProcessInstanceInfo> getMyApplications(String userId, String status, Pageable pageable) {
-        log.info("Getting applications for user: {}, status: {}", userId, status);
+        return getMyApplications(userId, status, null, null, null, null, null, pageable).page();
+    }
 
-        Page<ProcessInstance> instancePage;
-        if (status != null && !status.isEmpty()) {
-            instancePage = processInstanceRepository.findByStartUserIdAndStatusOrderByStartTimeDesc(userId, status, pageable);
-        } else {
-            instancePage = processInstanceRepository.findByStartUserIdOrderByStartTimeDesc(userId, pageable);
-        }
+    /**
+     * Returns my applications list with optional server-side keyword / column filters / sort.
+     *
+     * @param keyword       optional OR ILIKE across businessKey, processDefinitionName, currentNode,
+     *                      currentAssignee, title, id
+     * @param sortField     whitelist: startTime, status, businessKey, currentNode, currentAssignee,
+     *                      processDefinitionName (blank → startTime)
+     * @param sortDirection ASC|DESC (default DESC for startTime)
+     * @param filters       map field → {operator,value}; FE aliases requestId / currentStepName applied
+     */
+    public Page<ProcessInstanceInfo> getMyApplications(
+            String userId,
+            String status,
+            String keyword,
+            String sortField,
+            String sortDirection,
+            Map<String, Map<String, Object>> filters,
+            Pageable pageable) {
+        return getMyApplications(userId, status, keyword, sortField, sortDirection, filters, null, pageable)
+                .page();
+    }
+
+    /**
+     * My applications with optional {@code groupBy} (whitelist = sortField) and full-set {@code groupCounts}.
+     */
+    public ApplicationListResult getMyApplications(
+            String userId,
+            String status,
+            String keyword,
+            String sortField,
+            String sortDirection,
+            Map<String, Map<String, Object>> filters,
+            String groupBy,
+            Pageable pageable) {
+        String safeGroupBy = ProcessApplicationListSpec.sanitizeGroupBy(groupBy);
+        log.info("Getting applications for user: {}, status: {}, keywordPresent={}, sortField={}, groupBy={}, filterCount={}",
+                userId, status,
+                keyword != null && !keyword.isBlank(),
+                sortField,
+                safeGroupBy,
+                filters != null ? filters.size() : 0);
+
+        Pageable sorted = ProcessApplicationListSpec.withSort(pageable, sortField, sortDirection, safeGroupBy);
+        List<ColumnFilter> columnFilters = ProcessApplicationListSpec.parseFilters(filters);
+        Specification<ProcessInstance> spec =
+                ProcessApplicationListSpec.build(userId, status, keyword, columnFilters);
+        Page<ProcessInstance> instancePage = processInstanceRepository.findAll(spec, sorted);
 
         List<ProcessInstance> pageContent = instancePage.getContent();
         enrichRunningAssigneesFromEngine(pageContent);
@@ -189,7 +245,57 @@ public class ProcessApplicationQueryComponent {
                 .peek(info -> info.setVariables(null))
                 .toList();
 
-        return new PageImpl<>(instances, pageable, instancePage.getTotalElements());
+        Page<ProcessInstanceInfo> page = new PageImpl<>(instances, sorted, instancePage.getTotalElements());
+        Map<String, Long> groupCounts = safeGroupBy != null
+                ? computeGroupCounts(spec, safeGroupBy)
+                : null;
+        return new ApplicationListResult(page, groupCounts);
+    }
+
+    /**
+     * Page + optional full filtered-set groupCounts (label → count).
+     */
+    public record ApplicationListResult(Page<ProcessInstanceInfo> page, Map<String, Long> groupCounts) {
+        public PageResponse<ProcessInstanceInfo> toPageResponse() {
+            PageResponse<ProcessInstanceInfo> response = PageResponse.of(page);
+            if (groupCounts != null) {
+                response.setGroupCounts(groupCounts);
+            }
+            return response;
+        }
+    }
+
+    /**
+     * COUNT grouped on whitelist field for the same filtered Specification (not just current page).
+     */
+    private Map<String, Long> computeGroupCounts(Specification<ProcessInstance> spec, String groupBy) {
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Object[]> cq = cb.createQuery(Object[].class);
+        Root<ProcessInstance> root = cq.from(ProcessInstance.class);
+        Expression<?> groupExpr = root.get(groupBy);
+        cq.multiselect(groupExpr, cb.count(root));
+        Predicate predicate = spec.toPredicate(root, cq, cb);
+        if (predicate != null) {
+            cq.where(predicate);
+        }
+        cq.groupBy(groupExpr);
+        cq.orderBy(cb.asc(groupExpr));
+        List<Object[]> rows = entityManager.createQuery(cq).getResultList();
+        Map<String, Long> out = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            String label = groupLabel(row[0]);
+            long count = row[1] instanceof Number n ? n.longValue() : 0L;
+            out.merge(label, count, Long::sum);
+        }
+        return out;
+    }
+
+    private static String groupLabel(Object value) {
+        if (value == null) {
+            return "—";
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? "—" : text;
     }
 
     /**

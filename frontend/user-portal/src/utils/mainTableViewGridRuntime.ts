@@ -184,6 +184,52 @@ export function applyGroupBy(
 }
 
 /**
+ * Insert group headers for a server-ordered page. Counts come from the full filtered set
+ * (`groupCounts`), so a mid-group page still shows the correct total.
+ */
+export function applyGroupHeadersWithCounts(
+  rows: MainTableViewDataRow[],
+  groupByField: string | null,
+  groupCounts: Record<string, number> | null | undefined,
+): GridDisplayRow[] {
+  if (!groupByField) return rows
+
+  const out: GridDisplayRow[] = []
+  let lastLabel: string | null = null
+  for (const row of rows) {
+    const label = cellText(row, groupByField) || '—'
+    if (label !== lastLabel) {
+      out.push({
+        _isGroupHeader: true,
+        _groupLabel: label,
+        _groupCount: groupCounts?.[label] ?? 0,
+      })
+      lastLabel = label
+    }
+    out.push(row)
+  }
+  return out
+}
+
+/** Active filters only — empty values omitted except isNull / isNotNull. */
+export function activeFiltersForQuery(
+  filters: Record<string, GridColumnFilter>,
+): Record<string, GridColumnFilter> {
+  const out: Record<string, GridColumnFilter> = {}
+  for (const [field, filter] of Object.entries(filters)) {
+    if (!filter) continue
+    if (filter.operator === 'isNull' || filter.operator === 'isNotNull') {
+      out[field] = filter
+      continue
+    }
+    if ((filter.value ?? '').trim() !== '') {
+      out[field] = filter
+    }
+  }
+  return out
+}
+
+/**
  * Remove any runtime state (groupBy, sort, filters) that references a field not present in the given
  * columns. Prevents a prior view's grouping/sort/filter from mis-rendering against another view's data.
  */

@@ -11,18 +11,20 @@ import com.portal.exception.PortalException;
 import com.portal.entity.ActionDefinition;
 import com.portal.entity.ProcessDraft;
 import com.portal.security.CurrentUserId;
+import com.portal.util.ProcessApplicationListSpec;
 import com.platform.common.i18n.I18nService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,6 +41,7 @@ public class ProcessController {
     private final com.portal.component.PortalPrimaryKeyAllocationComponent portalPrimaryKeyAllocationComponent;
     private final TaskQueryComponent taskQueryComponent;
     private final TaskProcessComponent taskProcessComponent;
+    private final ObjectMapper objectMapper;
 
     @GetMapping("/definitions")
     @Operation(summary = "获取可发起的流程定义列表")
@@ -260,6 +263,11 @@ public class ProcessController {
     public ApiResponse<PageResponse<ProcessInstanceInfo>> getMyApplications(
             @CurrentUserId String userId,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String sortField,
+            @RequestParam(required = false) String sortDirection,
+            @RequestParam(required = false) String filters,
+            @RequestParam(required = false) String groupBy,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         if (userId == null || userId.isBlank()) {
@@ -267,8 +275,62 @@ public class ProcessController {
         }
         int safePage = Math.max(0, page);
         int safeSize = size < 1 ? 20 : Math.min(size, 100);
-        Page<ProcessInstanceInfo> result = processComponent.getMyApplications(userId, status, PageRequest.of(safePage, safeSize));
-        return ApiResponse.success(PageResponse.of(result));
+        var result = processComponent.getMyApplications(
+                userId,
+                status,
+                keyword,
+                sortField,
+                sortDirection,
+                parseApplicationFilters(filters),
+                groupBy,
+                PageRequest.of(safePage, safeSize));
+        return ApiResponse.success(result.toPageResponse());
+    }
+
+    /**
+     * Accepts map-shaped filters JSON {@code {field:{operator,value}}} (portal grid runtime)
+     * or array {@code [{fieldName,operator,value}]}.
+     */
+    private Map<String, Map<String, Object>> parseApplicationFilters(String filtersJson) {
+        if (filtersJson == null || filtersJson.isBlank()) {
+            return Map.of();
+        }
+        try {
+            Object parsed = objectMapper.readValue(filtersJson, Object.class);
+            Map<String, Map<String, Object>> out = new LinkedHashMap<>();
+            if (parsed instanceof List<?> list) {
+                for (Object item : list) {
+                    if (!(item instanceof Map<?, ?> map)) {
+                        continue;
+                    }
+                    Object field = map.containsKey("fieldName") ? map.get("fieldName") : map.get("field");
+                    if (field == null) {
+                        continue;
+                    }
+                    Map<String, Object> body = new LinkedHashMap<>();
+                    if (map.get("operator") != null) {
+                        body.put("operator", map.get("operator"));
+                    }
+                    if (map.containsKey("value")) {
+                        body.put("value", map.get("value"));
+                    }
+                    out.put(String.valueOf(field), body);
+                }
+                return out;
+            }
+            if (parsed instanceof Map<?, ?> map) {
+                Map<String, Object> loose = new LinkedHashMap<>();
+                for (Map.Entry<?, ?> e : map.entrySet()) {
+                    if (e.getKey() != null) {
+                        loose.put(String.valueOf(e.getKey()), e.getValue());
+                    }
+                }
+                return ProcessApplicationListSpec.coerceFilterMap(loose);
+            }
+            return Map.of();
+        } catch (Exception ex) {
+            throw new PortalException("400", "Invalid filters JSON: " + ex.getMessage());
+        }
     }
 
     @GetMapping("/{processId}")
@@ -367,11 +429,28 @@ public class ProcessController {
     }
     
     @GetMapping("/drafts")
-    @Operation(summary = "获取草稿列表")
-    public ApiResponse<List<Map<String, Object>>> getDraftList(
-            @CurrentUserId String userId) {
-        List<Map<String, Object>> drafts = processComponent.getDraftList(userId);
-        return ApiResponse.success(drafts);
+    @Operation(summary = "获取草稿列表（传 page 时返回 PageResponse；省略 page 时返回全量 List）")
+    public ApiResponse<?> getDraftList(
+            @CurrentUserId String userId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String sortField,
+            @RequestParam(required = false) String sortDirection,
+            @RequestParam(required = false) String filters,
+            @RequestParam(required = false) String groupBy) {
+        if (page != null) {
+            int safePage = Math.max(0, page);
+            int safeSize = size == null || size < 1 ? 20 : Math.min(size, 200);
+            return ApiResponse.success(processComponent.getDraftPage(
+                    userId,
+                    safePage,
+                    safeSize,
+                    sortField,
+                    sortDirection,
+                    parseApplicationFilters(filters),
+                    groupBy));
+        }
+        return ApiResponse.success(processComponent.getDraftList(userId));
     }
     
     @DeleteMapping("/drafts/{draftId}")

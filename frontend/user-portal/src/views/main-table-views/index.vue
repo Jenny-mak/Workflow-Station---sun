@@ -276,7 +276,7 @@ const {
             :page-size="pageSize"
             :total="displayTotal"
             :page-sizes="[10, 20, 50, 100]"
-            layout="total, sizes, prev, pager, next"
+            layout="total, sizes, prev, pager, next, jumper"
             @current-change="handlePageChange"
             @size-change="handleSizeChange"
           />

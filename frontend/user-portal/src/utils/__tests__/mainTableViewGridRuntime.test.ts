@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   applyGridRuntime,
   applyGroupBy,
+  applyGroupHeadersWithCounts,
+  activeFiltersForQuery,
   clampColumnWidth,
   createDefaultGridRuntime,
   moveColumn,
@@ -32,6 +34,25 @@ describe('mainTableViewGridRuntime', () => {
   it('groups rows with header rows', () => {
     const grouped = applyGroupBy(rows, 'status')
     expect(grouped[0]).toMatchObject({ _isGroupHeader: true, _groupLabel: 'Open' })
+  })
+
+  it('applyGroupHeadersWithCounts uses full-set counts on a page slice', () => {
+    const page = [
+      { processInstanceId: '3', values: { name: 'C', status: 'Open' } },
+      { processInstanceId: '4', values: { name: 'D', status: 'Closed' } },
+    ]
+    const display = applyGroupHeadersWithCounts(page, 'status', { Open: 12, Closed: 3 })
+    expect(display[0]).toMatchObject({ _isGroupHeader: true, _groupLabel: 'Open', _groupCount: 12 })
+    expect(display[2]).toMatchObject({ _isGroupHeader: true, _groupLabel: 'Closed', _groupCount: 3 })
+  })
+
+  it('activeFiltersForQuery drops empty value filters', () => {
+    const active = activeFiltersForQuery({
+      a: { operator: 'contains', value: '  ' },
+      b: { operator: 'isNull', value: '' },
+      c: { operator: 'eq', value: 'x' },
+    })
+    expect(Object.keys(active).sort()).toEqual(['b', 'c'])
   })
 
   it('moveColumn swaps order', () => {

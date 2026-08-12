@@ -50,12 +50,35 @@ export interface MainTableViewDataRow {
   values: Record<string, unknown>
 }
 
+export interface MainTableViewGroupCount {
+  label: string
+  count: number
+}
+
+export interface MainTableViewColumnFilterParam {
+  operator: string
+  value?: string
+}
+
+export interface MainTableViewQueryParams {
+  page?: number
+  size?: number
+  search?: string
+  /** Map of fieldName → { operator, value } (serialized as JSON query param). */
+  filters?: Record<string, MainTableViewColumnFilterParam>
+  sortField?: string
+  sortDirection?: 'ASC' | 'DESC'
+  groupBy?: string
+}
+
 export interface MainTableViewDataPage {
   columns: MainTableViewFieldColumn[]
   rows: MainTableViewDataRow[]
   total: number
   page: number
   size: number
+  /** Full filtered-set counts when groupBy was requested. */
+  groupCounts?: MainTableViewGroupCount[]
 }
 
 export interface MainTableViewImportResult {
@@ -75,8 +98,16 @@ export const mainTableViewApi = {
       `/main-table-views/function-units/${encodeURIComponent(functionUnitCode)}/views`,
     ),
 
-  queryData: (viewId: number, params: { page?: number; size?: number; search?: string }) =>
-    request.get<{ data: MainTableViewDataPage }>(`/main-table-views/${viewId}/data`, { params }),
+  queryData: (viewId: number, params: MainTableViewQueryParams = {}) => {
+    const { filters, ...rest } = params
+    const query: Record<string, string | number | undefined> = { ...rest }
+    if (filters && Object.keys(filters).length > 0) {
+      query.filters = JSON.stringify(filters)
+    }
+    return request.get<{ data: MainTableViewDataPage }>(`/main-table-views/${viewId}/data`, {
+      params: query,
+    })
+  },
 
   exportCsv: (viewId: number, maxRows = 10000) =>
     request.get<Blob>(`/main-table-views/${viewId}/export`, {

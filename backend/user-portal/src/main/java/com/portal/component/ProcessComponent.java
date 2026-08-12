@@ -182,6 +182,39 @@ public class ProcessComponent {
     }
 
     /**
+     * Returns my applications with optional keyword / sort / column filters.
+     * @see ProcessApplicationQueryComponent#getMyApplications(String, String, String, String, String, java.util.Map, Pageable)
+     */
+    public Page<ProcessInstanceInfo> getMyApplications(
+            String userId,
+            String status,
+            String keyword,
+            String sortField,
+            String sortDirection,
+            Map<String, Map<String, Object>> filters,
+            Pageable pageable) {
+        return processApplicationQueryComponent.getMyApplications(
+                userId, status, keyword, sortField, sortDirection, filters, pageable);
+    }
+
+    /**
+     * My applications with optional groupBy / groupCounts.
+     * @see ProcessApplicationQueryComponent#getMyApplications(String, String, String, String, String, java.util.Map, String, Pageable)
+     */
+    public ProcessApplicationQueryComponent.ApplicationListResult getMyApplications(
+            String userId,
+            String status,
+            String keyword,
+            String sortField,
+            String sortDirection,
+            Map<String, Map<String, Object>> filters,
+            String groupBy,
+            Pageable pageable) {
+        return processApplicationQueryComponent.getMyApplications(
+                userId, status, keyword, sortField, sortDirection, filters, groupBy, pageable);
+    }
+
+    /**
      * Returns process detail
      * @see ProcessApplicationQueryComponent#getProcessDetail(String)
      */
@@ -448,6 +481,27 @@ public class ProcessComponent {
      */
     public List<Map<String, Object>> getDraftList(String userId) {
         return processDraftComponent.getDraftList(userId);
+    }
+
+    /**
+     * @see ProcessDraftComponent#getDraftPage(String, int, int)
+     */
+    public com.portal.dto.PageResponse<Map<String, Object>> getDraftPage(String userId, int page, int size) {
+        return processDraftComponent.getDraftPage(userId, page, size);
+    }
+
+    /**
+     * @see ProcessDraftComponent#getDraftPage(String, int, int, String, String, java.util.Map, String)
+     */
+    public com.portal.dto.PageResponse<Map<String, Object>> getDraftPage(
+            String userId,
+            int page,
+            int size,
+            String sortField,
+            String sortDirection,
+            Map<String, Map<String, Object>> filters,
+            String groupBy) {
+        return processDraftComponent.getDraftPage(userId, page, size, sortField, sortDirection, filters, groupBy);
     }
 
     /**

@@ -53,7 +53,7 @@ class ProcessOperationProperties {
         workflowEngineClient = Mockito.mock(WorkflowEngineClient.class);
         
         // 创建 ProcessDraftComponent
-        processDraftComponent = new ProcessDraftComponent(processDraftRepository, functionUnitAccessComponent, Mockito.mock(RestTemplate.class));
+        processDraftComponent = new ProcessDraftComponent(processDraftRepository, functionUnitAccessComponent, Mockito.mock(RestTemplate.class), Mockito.mock(jakarta.persistence.EntityManager.class));
         
         // 使用 Spy 来 mock getFunctionUnitContent 方法
         com.portal.service.PortalWorkspaceAuthService portalWorkspaceAuthService =

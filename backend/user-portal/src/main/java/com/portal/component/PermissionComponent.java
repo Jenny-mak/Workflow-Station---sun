@@ -3,10 +3,13 @@ package com.portal.component;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.portal.dto.PermissionRequestDto;
 import com.portal.dto.PermissionRequestListItem;
+import com.portal.dto.PageResponse;
 import com.portal.entity.PermissionRequest;
 import com.portal.enums.PermissionRequestStatus;
 import com.portal.enums.PermissionRequestType;
 import com.portal.repository.PermissionRequestRepository;
+import com.portal.util.PermissionRequestListSpec;
+import com.portal.util.PortalColumnFilterSupport;
 import com.platform.common.i18n.I18nService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -200,6 +203,32 @@ public class PermissionComponent {
         return approvalComponent.getPendingApprovalsForUser(userId, pageable);
     }
 
+    /** Pending approvals: SQL page + filters/sort/groupBy (true total, no fetch cap). */
+    public PageResponse<PermissionRequest> pagePendingApprovals(
+            String userId,
+            int page,
+            int size,
+            Map<String, Map<String, Object>> filters,
+            String sortField,
+            String sortDirection,
+            String groupBy) {
+        return approvalComponent.pagePendingApprovals(
+                userId, page, size, filters, sortField, sortDirection, groupBy);
+    }
+
+    /** Approval history: SQL page + filters/sort/groupBy (true total, no fetch cap). */
+    public PageResponse<PermissionRequest> pageApprovalHistory(
+            String userId,
+            int page,
+            int size,
+            Map<String, Map<String, Object>> filters,
+            String sortField,
+            String sortDirection,
+            String groupBy) {
+        return approvalComponent.pageApprovalHistory(
+                userId, page, size, filters, sortField, sortDirection, groupBy);
+    }
+
     /**
      * 获取当前用户作为审批人处理过的记录（批准/拒绝；不含他人代批的同 BU 记录）。
      */
@@ -324,6 +353,35 @@ public class PermissionComponent {
      * 获取用户的权限申请记录（JDBC 读取，避免 JPA 在枚举/JSONB 脏数据下加载失败导致 500）
      */
     public Page<PermissionRequestListItem> getMyRequests(String userId, PermissionRequestStatus status, Pageable pageable) {
+        return getMyRequests(userId, status, false, pageable, null, null, null, null).page();
+    }
+
+    /**
+     * 获取用户的权限申请记录。
+     *
+     * @param status         精确状态过滤；非 null 时优先于 excludePending
+     * @param excludePending 为 true 且 status 为 null 时，使用 {@code status <> PENDING}，使历史分页 total 不含待审批
+     */
+    public Page<PermissionRequestListItem> getMyRequests(
+            String userId,
+            PermissionRequestStatus status,
+            boolean excludePending,
+            Pageable pageable) {
+        return getMyRequests(userId, status, excludePending, pageable, null, null, null, null).page();
+    }
+
+    /**
+     * My permission requests with optional column filters / sort / groupBy (SQL whitelist).
+     */
+    public PermissionRequestListResult getMyRequests(
+            String userId,
+            PermissionRequestStatus status,
+            boolean excludePending,
+            Pageable pageable,
+            Map<String, Map<String, Object>> filters,
+            String sortField,
+            String sortDirection,
+            String groupBy) {
         if (userId == null || userId.isBlank()) {
             throw new InsufficientAuthenticationException("User identity required");
         }
@@ -335,7 +393,19 @@ public class PermissionComponent {
         if (status != null) {
             where.append(" AND status = ?");
             args.add(status.name());
+        } else if (excludePending) {
+            where.append(" AND status <> ?");
+            args.add(PermissionRequestStatus.PENDING.name());
         }
+
+        where.append(PermissionRequestListSpec.appendRequestTargetFilterSql(filters, args));
+        var columnFilters = PermissionRequestListSpec.parseFilters(
+                PermissionRequestListSpec.withoutRequestTarget(filters));
+        where.append(PermissionRequestListSpec.appendFilterSql(columnFilters, args));
+
+        String safeGroupBy = PermissionRequestListSpec.sanitizeGroupBy(groupBy);
+        String orderBy = PermissionRequestListSpec.resolveOrderBy(sortField, sortDirection, safeGroupBy);
+
         Long total = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM up_permission_request" + where, Long.class, args.toArray());
         long totalLong = total != null ? total : 0L;
@@ -345,14 +415,51 @@ public class PermissionComponent {
                 + "business_unit_id, business_unit_name, status, reason, approver_id, approve_time, approve_comment, "
                 + "created_at, updated_at FROM up_permission_request"
                 + where
-                + " ORDER BY created_at DESC NULLS LAST LIMIT ? OFFSET ?";
+                + " ORDER BY " + orderBy
+                + " LIMIT ? OFFSET ?";
         List<Object> dataArgs = new ArrayList<>(args);
         dataArgs.add(pageable.getPageSize());
         dataArgs.add(pageable.getOffset());
 
         List<PermissionRequestListItem> content = jdbcTemplate.query(dataSql, this::mapPermissionRequestListRow, dataArgs.toArray());
         enrichmentComponent.enrichListItemUsernames(content);
-        return new PageImpl<>(content, pageable, totalLong);
+        Page<PermissionRequestListItem> page = new PageImpl<>(content, pageable, totalLong);
+
+        Map<String, Long> groupCounts = null;
+        if (safeGroupBy != null) {
+            groupCounts = queryPermissionGroupCounts(where.toString(), args, safeGroupBy);
+        }
+        return new PermissionRequestListResult(page, groupCounts);
+    }
+
+    private Map<String, Long> queryPermissionGroupCounts(String whereSql, List<Object> args, String groupColumn) {
+        boolean ok = PermissionRequestListSpec.SQL_COLUMNS.contains(groupColumn)
+                || PermissionRequestListSpec.REQUEST_TARGET_EXPR.equals(groupColumn);
+        if (!ok) {
+            return Map.of();
+        }
+        String sql = "SELECT COALESCE((" + groupColumn + ")::text, '') AS g, COUNT(*) AS c FROM up_permission_request"
+                + whereSql + " GROUP BY 1 ORDER BY 1 ASC";
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, args.toArray());
+        Map<String, Long> out = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            Object g = row.get("g");
+            Object c = row.get("c");
+            String label = PortalColumnFilterSupport.groupLabel(g != null && !String.valueOf(g).isBlank() ? g : null);
+            long count = c instanceof Number n ? n.longValue() : 0L;
+            out.merge(label, count, Long::sum);
+        }
+        return out;
+    }
+
+    public record PermissionRequestListResult(Page<PermissionRequestListItem> page, Map<String, Long> groupCounts) {
+        public PageResponse<PermissionRequestListItem> toPageResponse() {
+            PageResponse<PermissionRequestListItem> response = PageResponse.of(page);
+            if (groupCounts != null) {
+                response.setGroupCounts(groupCounts);
+            }
+            return response;
+        }
     }
 
     private PermissionRequestListItem mapPermissionRequestListRow(ResultSet rs, int rowNum) throws SQLException {
