@@ -34,8 +34,9 @@
 |------|------|
 | [portal-bu-rbac.md](./portal-bu-rbac.md) | **身份从哪来**：BU + 角色（UBR）模型、工作台上下文、JWT 硬约束 |
 | [portal-permission-self-service.md](./portal-permission-self-service.md) | **门户能做什么**：UBR 自助申请/代办/退出、无 UBR（`C` 为空集）时的访问模式 |
+| [portal-task-delegation.md](./portal-task-delegation.md) | **任务委托（本期）**：仅站立规则 act-as；单任务 DELEGATE/TRANSFER 本期不理；与 UBR「代办」分域 |
 
-> 两篇互补且已互链：前者是硬约束，后者是产品规则。
+> 身份两篇互补且已互链：前者是硬约束，后者是产品规则。任务委托是第三条线——**不要**与 UBR「代办申请」混称。
 
 ## Developer Workstation
 

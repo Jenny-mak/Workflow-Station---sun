@@ -2,7 +2,10 @@ package com.portal.repository;
 
 import com.portal.entity.DelegationRule;
 import com.portal.enums.DelegationStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -14,9 +17,11 @@ import java.util.List;
  * 委托规则Repository
  */
 @Repository
-public interface DelegationRuleRepository extends JpaRepository<DelegationRule, Long> {
+public interface DelegationRuleRepository extends JpaRepository<DelegationRule, Long>, JpaSpecificationExecutor<DelegationRule> {
 
     List<DelegationRule> findByDelegatorId(String delegatorId);
+
+    Page<DelegationRule> findByDelegatorId(String delegatorId, Pageable pageable);
 
     List<DelegationRule> findByDelegateId(String delegateId);
 

@@ -47,7 +47,7 @@ class DelegationRuleProperties {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         when(i18nService.getMessage(any(String.class))).thenReturn("test message");
-        delegationComponent = new DelegationComponent(delegationRuleRepository, delegationAuditRepository, i18nService);
+        delegationComponent = new DelegationComponent(delegationRuleRepository, delegationAuditRepository, i18nService, mock(jakarta.persistence.EntityManager.class));
         random = new Random();
 
         // 默认返回空列表
@@ -69,6 +69,27 @@ class DelegationRuleProperties {
 
         assertThrows(PortalException.class, () -> 
             delegationComponent.createDelegationRule(userId, request));
+    }
+
+    @Test
+    void partialDelegationRequiresProcessTypes() {
+        DelegationRuleRequest request = DelegationRuleRequest.builder()
+                .delegateId("delegate_1")
+                .delegationType(DelegationType.PARTIAL)
+                .build();
+        assertThrows(PortalException.class,
+                () -> delegationComponent.createDelegationRule("delegator_1", request));
+    }
+
+    @Test
+    void temporaryDelegationRequiresTimeWindow() {
+        DelegationRuleRequest request = DelegationRuleRequest.builder()
+                .delegateId("delegate_1")
+                .delegationType(DelegationType.TEMPORARY)
+                .startTime(LocalDateTime.now())
+                .build();
+        assertThrows(PortalException.class,
+                () -> delegationComponent.createDelegationRule("delegator_1", request));
     }
 
     /**

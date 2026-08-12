@@ -38,9 +38,42 @@ export interface DelegationAudit {
   createdAt: string
 }
 
-// 获取委托规则列表
-export function getDelegationRules() {
-  return request.get<{ data: DelegationRule[] }>('/delegations')
+/**
+ * My delegation rules.
+ * When `page` is provided → PageResponse `{ content, totalElements }`.
+ * When omitted → full List (legacy).
+ */
+export function getDelegations(params?: {
+  page?: number
+  size?: number
+  sortField?: string
+  sortDirection?: 'ASC' | 'DESC'
+  filters?: string
+  groupBy?: string
+}) {
+  return request.get<{
+    data:
+      | DelegationRule[]
+      | {
+          content: DelegationRule[]
+          totalElements: number
+          page?: number
+          size?: number
+          groupCounts?: Record<string, number>
+        }
+  }>('/delegations', { params })
+}
+
+/** @deprecated Prefer getDelegations — kept for call-site clarity during migrate */
+export function getDelegationRules(params?: {
+  page?: number
+  size?: number
+  sortField?: string
+  sortDirection?: 'ASC' | 'DESC'
+  filters?: string
+  groupBy?: string
+}) {
+  return getDelegations(params)
 }
 
 // 获取有效委托规则
@@ -73,12 +106,25 @@ export function resumeDelegationRule(ruleId: number) {
   return request.post<{ data: DelegationRule }>(`/delegations/${ruleId}/resume`)
 }
 
-// 获取代理任务
-export function getProxyTasks() {
-  return request.get<{ data: DelegationRule[] }>('/delegations/proxy-tasks')
-}
-
-// 获取委托审计记录
-export function getDelegationAuditRecords(page: number = 0, size: number = 20) {
-  return request.get<{ data: { content: DelegationAudit[]; totalElements: number; totalPages: number } }>('/delegations/audit', { params: { page, size } })
+// 获取委托审计记录（真分页 + 可选 filters/sort/groupBy）
+export function getDelegationAuditRecords(
+  page: number = 0,
+  size: number = 20,
+  extra?: {
+    sortField?: string
+    sortDirection?: 'ASC' | 'DESC'
+    filters?: string
+    groupBy?: string
+  },
+) {
+  return request.get<{
+    data: {
+      content: DelegationAudit[]
+      totalElements: number
+      totalPages: number
+      groupCounts?: Record<string, number>
+    }
+  }>('/delegations/audit', {
+    params: { page, size, ...extra },
+  })
 }

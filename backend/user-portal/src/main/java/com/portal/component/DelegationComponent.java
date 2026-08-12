@@ -1,22 +1,30 @@
 package com.portal.component;
 
 import com.portal.dto.DelegationRuleRequest;
+import com.portal.dto.PageResponse;
 import com.portal.entity.DelegationAudit;
 import com.portal.entity.DelegationRule;
 import com.portal.enums.DelegationStatus;
+import com.portal.enums.DelegationType;
 import com.portal.exception.PortalException;
 import com.portal.repository.DelegationAuditRepository;
 import com.portal.repository.DelegationRuleRepository;
+import com.portal.util.DelegationAuditListSpec;
+import com.portal.util.DelegationRuleListSpec;
+import com.portal.util.PortalColumnFilterSupport;
 import com.platform.common.i18n.I18nService;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 委托管理组件
@@ -29,6 +37,7 @@ public class DelegationComponent {
     private final DelegationRuleRepository delegationRuleRepository;
     private final DelegationAuditRepository delegationAuditRepository;
     private final I18nService i18nService;
+    private final EntityManager entityManager;
 
     /**
      * 创建委托规则
@@ -44,6 +53,8 @@ public class DelegationComponent {
         if (hasCircularDelegation(delegatorId, request.getDelegateId())) {
             throw new PortalException("400", i18nService.getMessage("portal.circular_delegation"));
         }
+
+        validateTypeFields(request);
 
         DelegationRule rule = DelegationRule.builder()
                 .delegatorId(delegatorId)
@@ -78,6 +89,8 @@ public class DelegationComponent {
         if (!delegatorId.equals(rule.getDelegatorId())) {
             throw new PortalException("403", i18nService.getMessage("portal.only_delegator_modify"));
         }
+
+        validateTypeFields(request);
 
         rule.setDelegateId(request.getDelegateId());
         rule.setDelegationType(request.getDelegationType());
@@ -160,10 +173,49 @@ public class DelegationComponent {
     }
 
     /**
-     * 获取用户的委托规则列表
+     * 获取用户的委托规则列表（全量，兼容旧客户端）
      */
     public List<DelegationRule> getDelegationRules(String delegatorId) {
         return delegationRuleRepository.findByDelegatorId(delegatorId);
+    }
+
+    /**
+     * 分页获取用户的委托规则（0-based page）。
+     */
+    public Page<DelegationRule> getDelegationRules(String delegatorId, Pageable pageable) {
+        return getDelegationRules(delegatorId, pageable, null, null, null, null).page();
+    }
+
+    /**
+     * Paged delegation rules with optional column filters / sort / groupBy.
+     */
+    public DelegationListResult getDelegationRules(
+            String delegatorId,
+            Pageable pageable,
+            Map<String, Map<String, Object>> filters,
+            String sortField,
+            String sortDirection,
+            String groupBy) {
+        String safeGroupBy = DelegationRuleListSpec.sanitizeGroupBy(groupBy);
+        var columnFilters = DelegationRuleListSpec.parseFilters(filters);
+        Specification<DelegationRule> spec = DelegationRuleListSpec.build(delegatorId, columnFilters);
+        Pageable sorted = DelegationRuleListSpec.withSort(pageable, sortField, sortDirection, safeGroupBy);
+        Page<DelegationRule> page = delegationRuleRepository.findAll(spec, sorted);
+        Map<String, Long> groupCounts = safeGroupBy != null
+                ? PortalColumnFilterSupport.computeGroupCounts(
+                        entityManager, DelegationRule.class, spec, safeGroupBy)
+                : null;
+        return new DelegationListResult(page, groupCounts);
+    }
+
+    public record DelegationListResult(Page<DelegationRule> page, Map<String, Long> groupCounts) {
+        public PageResponse<DelegationRule> toPageResponse() {
+            PageResponse<DelegationRule> response = PageResponse.of(page);
+            if (groupCounts != null) {
+                response.setGroupCounts(groupCounts);
+            }
+            return response;
+        }
     }
 
     /**
@@ -174,17 +226,42 @@ public class DelegationComponent {
     }
 
     /**
-     * 获取委托给用户的规则
-     */
-    public List<DelegationRule> getDelegationsForDelegate(String delegateId) {
-        return delegationRuleRepository.findActiveDelegationsForDelegate(delegateId, LocalDateTime.now());
-    }
-
-    /**
      * 获取委托审计记录
      */
     public Page<DelegationAudit> getDelegationAuditRecords(String userId, Pageable pageable) {
-        return delegationAuditRepository.findByDelegatorIdOrDelegateIdOrderByCreatedAtDesc(userId, userId, pageable);
+        return getDelegationAuditRecords(userId, pageable, null, null, null, null).page();
+    }
+
+    /**
+     * Delegation audit with optional column filters / sort / groupBy.
+     */
+    public DelegationAuditListResult getDelegationAuditRecords(
+            String userId,
+            Pageable pageable,
+            Map<String, Map<String, Object>> filters,
+            String sortField,
+            String sortDirection,
+            String groupBy) {
+        String safeGroupBy = DelegationAuditListSpec.sanitizeGroupBy(groupBy);
+        var columnFilters = DelegationAuditListSpec.parseFilters(filters);
+        Specification<DelegationAudit> spec = DelegationAuditListSpec.build(userId, columnFilters);
+        Pageable sorted = DelegationAuditListSpec.withSort(pageable, sortField, sortDirection, safeGroupBy);
+        Page<DelegationAudit> page = delegationAuditRepository.findAll(spec, sorted);
+        Map<String, Long> groupCounts = safeGroupBy != null
+                ? PortalColumnFilterSupport.computeGroupCounts(
+                        entityManager, DelegationAudit.class, spec, safeGroupBy)
+                : null;
+        return new DelegationAuditListResult(page, groupCounts);
+    }
+
+    public record DelegationAuditListResult(Page<DelegationAudit> page, Map<String, Long> groupCounts) {
+        public PageResponse<DelegationAudit> toPageResponse() {
+            PageResponse<DelegationAudit> response = PageResponse.of(page);
+            if (groupCounts != null) {
+                response.setGroupCounts(groupCounts);
+            }
+            return response;
+        }
     }
 
     /**
@@ -222,6 +299,41 @@ public class DelegationComponent {
                 .filter(r -> r.getDelegatorId().equals(delegatorId))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * Type-specific field gates (PARTIAL process_types; TEMPORARY start/end; time range).
+     */
+    private void validateTypeFields(DelegationRuleRequest request) {
+        DelegationType type = request.getDelegationType();
+        if (type == null) {
+            throw new PortalException("400", i18nService.getMessage("portal.delegation_type_required"));
+        }
+        if (type == DelegationType.PARTIAL) {
+            List<String> processTypes = request.getProcessTypes();
+            boolean hasProcess = processTypes != null && processTypes.stream()
+                    .anyMatch(p -> p != null && !p.isBlank());
+            if (!hasProcess) {
+                throw new PortalException("400",
+                        i18nService.getMessage("portal.delegation_partial_process_types_required"));
+            }
+        }
+        if (type == DelegationType.TEMPORARY) {
+            if (request.getStartTime() == null || request.getEndTime() == null) {
+                throw new PortalException("400",
+                        i18nService.getMessage("portal.delegation_temporary_time_required"));
+            }
+        }
+        LocalDateTime start = request.getStartTime();
+        LocalDateTime end = request.getEndTime();
+        if (start != null && end != null && !end.isAfter(start)) {
+            throw new PortalException("400",
+                    i18nService.getMessage("portal.delegation_invalid_time_range"));
+        }
+        if ((start == null) != (end == null)) {
+            throw new PortalException("400",
+                    i18nService.getMessage("portal.delegation_invalid_time_range"));
+        }
     }
 
     /**
