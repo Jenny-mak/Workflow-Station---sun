@@ -1981,3 +1981,30 @@
     修复：pickSubFormOptionsFromDesign + ProcessStartSubTableBinding.formOptions；
     主路径与 subForms fallback 均写入。单测 pickSubFormOptionsFromDesign.test.ts；
     pnpm build user-portal 通过。dev compose 缺 .env 未重建镜像。
+
+- id: "1520"
+  status: fixed
+  fixed_at: "2026-08-14"
+  severity: major
+  category: bug
+  summary: "Portal 列头筛选对所有列只给文本算子，日期列条件被静默丢弃"
+  file: "backend/user-portal/src/main/java/com/portal/util/PortalListColumnMeta.java"
+  note: |
+    反例：Delegations「My Delegations / Audit Records」列头 Filter by 对 Start Time、
+    Delegation Type、Delegate To 一律只给 Contains/Equals… 8 个字符串算子 + 一个文本框；
+    对时间列选 Contains 后 ListSpec.parseFilters 直接 continue 丢掉该条件，接口照常返回
+    全量数据，用户以为筛掉了。
+    根因：FILTER_FIELDS 只是字段名白名单，不带类型；前端无从得知列是什么类型，
+    后端遇到不支持的算子只能静默 drop。
+    修复：新增 PortalListColumnMeta（TEXT/ENUM/USER/DATETIME + 每种类型的算子集），
+    两个 Delegation ListSpec 由 COLUMNS 单一声明派生 SORT/GROUP/FILTER 白名单；
+    PortalColumnFilterSupport 增加按天比较的 dateOperator（on/before/after/between）
+    与按类型校验的 parseFilters —— 已声明列上的非法算子/日期值改为抛 IllegalArgumentException
+    走 GlobalExceptionHandler 返 400，不再静默丢弃；新增 GET /delegations/columns 与
+    /delegations/audit/columns 暴露列能力；PortalListFilterDialog 按 kind 渲染
+    日期选择器 / 码值选择器 / 人员选择器，算子列表来自后端声明。
+    验证：后端 PortalColumnFilterSupportTest 9 + DelegationRuleListSpecTest 6 +
+    DelegationAuditListSpecTest 4 全绿；前端 vitest 955/955（含新增 18 条）；
+    Playwright 8 张截图 + 运行时断言：contains-on-timestamp → HTTP 400、
+    审计按天筛选 20 行 → 2 行且全部落在 2026-08-12。
+    截图：frontend/user-portal/verification-screenshots/2026-08-14_delegations-*.png

@@ -1,6 +1,8 @@
 package com.portal.util;
 
 import com.portal.entity.DelegationRule;
+import com.portal.enums.DelegationStatus;
+import com.portal.enums.DelegationType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
@@ -13,19 +15,27 @@ import java.util.Set;
 
 /**
  * JPA Specification + whitelist Sort for Portal "my delegation rules".
+ *
+ * <p>{@link #COLUMNS} is the single declaration the whitelists, the filter predicates and
+ * the column-meta endpoint all derive from.
  */
 public final class DelegationRuleListSpec {
 
-    public static final Set<String> SORT_FIELDS = Set.of(
-            "delegateId", "delegationType", "status", "startTime", "endTime", "reason", "createdAt", "updatedAt");
+    public static final List<PortalListColumnMeta> COLUMNS = List.of(
+            PortalListColumnMeta.user("delegateId"),
+            PortalListColumnMeta.enumOf("delegationType", DelegationType.class),
+            PortalListColumnMeta.datetime("startTime"),
+            PortalListColumnMeta.datetime("endTime"),
+            PortalListColumnMeta.enumOf("status", DelegationStatus.class),
+            PortalListColumnMeta.text("reason"),
+            PortalListColumnMeta.sortOnly("createdAt", PortalListColumnMeta.Kind.DATETIME),
+            PortalListColumnMeta.sortOnly("updatedAt", PortalListColumnMeta.Kind.DATETIME));
 
-    public static final Set<String> GROUP_FIELDS = Set.of(
-            "delegateId", "delegationType", "status", "startTime", "endTime", "reason");
+    public static final Set<String> SORT_FIELDS = PortalListColumnMeta.sortFields(COLUMNS);
 
-    public static final Set<String> FILTER_FIELDS = Set.of(
-            "delegateId", "delegationType", "status", "startTime", "endTime", "reason");
+    public static final Set<String> GROUP_FIELDS = PortalListColumnMeta.groupFields(COLUMNS);
 
-    private static final Set<String> DATE_FIELDS = Set.of("startTime", "endTime");
+    public static final Set<String> FILTER_FIELDS = PortalListColumnMeta.filterFields(COLUMNS);
 
     private DelegationRuleListSpec() {
     }
@@ -35,25 +45,7 @@ public final class DelegationRuleListSpec {
     }
 
     public static List<PortalColumnFilterSupport.ColumnFilter> parseFilters(Map<String, Map<String, Object>> raw) {
-        if (raw == null || raw.isEmpty()) {
-            return List.of();
-        }
-        Map<String, Map<String, Object>> cleaned = new java.util.LinkedHashMap<>();
-        for (Map.Entry<String, Map<String, Object>> e : raw.entrySet()) {
-            if (e.getKey() == null || e.getValue() == null) {
-                continue;
-            }
-            String field = e.getKey().trim();
-            if (DATE_FIELDS.contains(field)) {
-                Object op = e.getValue().get("operator");
-                String operator = op != null ? String.valueOf(op).trim() : "";
-                if (!"isNull".equals(operator) && !"isNotNull".equals(operator)) {
-                    continue;
-                }
-            }
-            cleaned.put(field, e.getValue());
-        }
-        return PortalColumnFilterSupport.parseFilters(cleaned, FILTER_FIELDS);
+        return PortalColumnFilterSupport.parseFilters(raw, COLUMNS);
     }
 
     public static Pageable withSort(Pageable pageable, String sortField, String sortDirection, String groupBy) {
@@ -69,7 +61,7 @@ public final class DelegationRuleListSpec {
             predicates.add(cb.equal(root.get("delegatorId"), delegatorId));
             if (filters != null) {
                 for (PortalColumnFilterSupport.ColumnFilter filter : filters) {
-                    Predicate p = buildFilterPredicate(root, cb, filter);
+                    Predicate p = PortalColumnFilterSupport.buildPredicate(root, cb, COLUMNS, filter);
                     if (p != null) {
                         predicates.add(p);
                     }
@@ -77,21 +69,5 @@ public final class DelegationRuleListSpec {
             }
             return cb.and(predicates.toArray(Predicate[]::new));
         };
-    }
-
-    private static Predicate buildFilterPredicate(
-            jakarta.persistence.criteria.Root<DelegationRule> root,
-            jakarta.persistence.criteria.CriteriaBuilder cb,
-            PortalColumnFilterSupport.ColumnFilter filter) {
-        if (filter == null || filter.field() == null || filter.operator() == null) {
-            return null;
-        }
-        String op = filter.operator().trim();
-        String value = filter.value() != null ? filter.value() : "";
-        if (DATE_FIELDS.contains(filter.field())) {
-            return PortalColumnFilterSupport.dateNullOperator(root, cb, filter.field(), op);
-        }
-        // Enums stored as STRING — cast path to String for text ops
-        return PortalColumnFilterSupport.textOperator(root, cb, filter.field(), op, value);
     }
 }

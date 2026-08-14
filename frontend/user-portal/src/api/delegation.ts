@@ -1,4 +1,5 @@
 import { request } from './request'
+import type { PortalListColumnMeta } from '@/utils/portalListGridRuntime'
 
 export interface DelegationRule {
   id: number
@@ -74,6 +75,16 @@ export function getDelegationRules(params?: {
   groupBy?: string
 }) {
   return getDelegations(params)
+}
+
+/** Column kinds / operators / enum options backing the rule list's header filter dialog. */
+export function getDelegationRuleColumns() {
+  return request.get<{ data: PortalListColumnMeta[] }>('/delegations/columns')
+}
+
+/** Same, for the delegation audit list. */
+export function getDelegationAuditColumns() {
+  return request.get<{ data: PortalListColumnMeta[] }>('/delegations/audit/columns')
 }
 
 // 获取有效委托规则

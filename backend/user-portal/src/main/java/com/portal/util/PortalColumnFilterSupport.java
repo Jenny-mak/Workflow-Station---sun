@@ -12,6 +12,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,6 +76,73 @@ public final class PortalColumnFilterSupport {
             out.add(new ColumnFilter(feField, operator, value));
         }
         return out;
+    }
+
+    /**
+     * Parse map-shaped filters against a list's column declarations.
+     *
+     * <p>Columns the list does not declare as filterable are dropped, because persisted UI
+     * state may still name columns the list no longer renders. A declared column asked for an
+     * operator or a value its kind cannot support is a front/back contract violation and
+     * throws, so the caller answers 400 instead of quietly serving an unfiltered page.
+     */
+    public static List<ColumnFilter> parseFilters(
+            Map<String, Map<String, Object>> raw, List<PortalListColumnMeta> columns) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        List<ColumnFilter> out = new ArrayList<>();
+        for (Map.Entry<String, Map<String, Object>> e : raw.entrySet()) {
+            if (e.getKey() == null || e.getValue() == null) {
+                continue;
+            }
+            String field = e.getKey().trim();
+            Map<String, Object> body = e.getValue();
+            Object opObj = body.get("operator");
+            String operator = opObj != null ? String.valueOf(opObj).trim() : "";
+            if (operator.isEmpty()) {
+                continue;
+            }
+            Object valObj = body.get("value");
+            String value = valObj != null ? String.valueOf(valObj) : "";
+            boolean valueless = "isNull".equals(operator) || "isNotNull".equals(operator);
+            if (!valueless && value.isBlank()) {
+                continue;
+            }
+            PortalListColumnMeta column = PortalListColumnMeta.find(columns, field);
+            if (column == null || !column.filterable()) {
+                continue;
+            }
+            if (!column.allowsOperator(operator)) {
+                throw new IllegalArgumentException(
+                        "Operator '" + operator + "' is not supported for column '" + field + "'");
+            }
+            if (column.kind() == PortalListColumnMeta.Kind.DATETIME && !valueless) {
+                parseFilterDates(operator, value);
+            }
+            out.add(new ColumnFilter(field, operator, value));
+        }
+        return out;
+    }
+
+    /**
+     * Kind-aware predicate for one parsed filter; null when the column is not declared.
+     */
+    public static Predicate buildPredicate(
+            Root<?> root, CriteriaBuilder cb, List<PortalListColumnMeta> columns, ColumnFilter filter) {
+        if (filter == null || filter.field() == null || filter.operator() == null) {
+            return null;
+        }
+        PortalListColumnMeta column = PortalListColumnMeta.find(columns, filter.field());
+        if (column == null) {
+            return null;
+        }
+        String op = filter.operator().trim();
+        String value = filter.value() != null ? filter.value() : "";
+        if (column.kind() == PortalListColumnMeta.Kind.DATETIME) {
+            return dateOperator(root, cb, filter.field(), op, value);
+        }
+        return textOperator(root, cb, filter.field(), op, value);
     }
 
     public static Pageable withSort(
@@ -167,6 +237,72 @@ public final class PortalColumnFilterSupport {
             return cb.isNotNull(path);
         }
         return null;
+    }
+
+    /** Separator for the two calendar days carried by a {@code between} filter value. */
+    public static final String DATE_RANGE_SEPARATOR = ",";
+
+    /**
+     * Date/time comparisons by calendar day, so a user picking a day matches the whole day
+     * regardless of the stored time-of-day. Values are ISO-8601 days; {@code between} carries
+     * {@code "start,end"}.
+     */
+    public static Predicate dateOperator(
+            Root<?> root, CriteriaBuilder cb, String field, String op, String value) {
+        Path<LocalDateTime> path = root.get(field);
+        if ("isNull".equals(op)) {
+            return cb.isNull(path);
+        }
+        if ("isNotNull".equals(op)) {
+            return cb.isNotNull(path);
+        }
+        List<LocalDate> days = parseFilterDates(op, value);
+        return switch (op) {
+            case "on" -> dayRange(cb, path, days.get(0), days.get(0));
+            case "before" -> cb.lessThan(path, days.get(0).atStartOfDay());
+            case "after" -> cb.greaterThanOrEqualTo(path, days.get(0).plusDays(1).atStartOfDay());
+            case "between" -> dayRange(cb, path, days.get(0), days.get(1));
+            default -> null;
+        };
+    }
+
+    /**
+     * Calendar days carried by a date filter value: one day, or two for {@code between}.
+     * Throws when the value cannot be read as such — callers surface that as 400.
+     */
+    public static List<LocalDate> parseFilterDates(String operator, String value) {
+        int expected = "between".equals(operator) ? 2 : 1;
+        String[] parts = (value == null ? "" : value).split(DATE_RANGE_SEPARATOR, -1);
+        if (parts.length != expected) {
+            throw new IllegalArgumentException(
+                    "Operator '" + operator + "' expects " + expected + " date(s) but got: " + value);
+        }
+        List<LocalDate> days = new ArrayList<>(expected);
+        for (String part : parts) {
+            days.add(parseFilterDay(part));
+        }
+        return days;
+    }
+
+    private static LocalDate parseFilterDay(String raw) {
+        String text = raw == null ? "" : raw.trim();
+        if (text.length() > 10) {
+            text = text.substring(0, 10);
+        }
+        try {
+            return LocalDate.parse(text);
+        } catch (DateTimeParseException ex) {
+            throw new IllegalArgumentException("Invalid filter date: " + raw, ex);
+        }
+    }
+
+    private static Predicate dayRange(
+            CriteriaBuilder cb, Path<LocalDateTime> path, LocalDate from, LocalDate to) {
+        LocalDate start = from.isAfter(to) ? to : from;
+        LocalDate end = from.isAfter(to) ? from : to;
+        return cb.and(
+                cb.greaterThanOrEqualTo(path, start.atStartOfDay()),
+                cb.lessThan(path, end.plusDays(1).atStartOfDay()));
     }
 
     public static Expression<String> lowerCoalesce(Root<?> root, CriteriaBuilder cb, String field) {

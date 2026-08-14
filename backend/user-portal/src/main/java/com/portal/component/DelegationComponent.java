@@ -12,6 +12,7 @@ import com.portal.repository.DelegationRuleRepository;
 import com.portal.util.DelegationAuditListSpec;
 import com.portal.util.DelegationRuleListSpec;
 import com.portal.util.PortalColumnFilterSupport;
+import com.portal.util.PortalListColumnMeta;
 import com.platform.common.i18n.I18nService;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -170,6 +171,21 @@ public class DelegationComponent {
 
         log.info("用户 {} 恢复了委托规则 {}", delegatorId, ruleId);
         return rule;
+    }
+
+    /**
+     * Column capabilities of the "my delegation rules" list — same declaration the filter
+     * whitelist is derived from, so the header menu can only offer supported operators.
+     */
+    public List<PortalListColumnMeta> getDelegationRuleColumns() {
+        return DelegationRuleListSpec.COLUMNS;
+    }
+
+    /**
+     * Column capabilities of the delegation audit list.
+     */
+    public List<PortalListColumnMeta> getDelegationAuditColumns() {
+        return DelegationAuditListSpec.COLUMNS;
     }
 
     /**

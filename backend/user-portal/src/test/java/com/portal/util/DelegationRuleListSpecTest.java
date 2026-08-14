@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("DelegationRuleListSpec")
 class DelegationRuleListSpecTest {
@@ -19,15 +20,43 @@ class DelegationRuleListSpecTest {
         Map<String, Map<String, Object>> raw = new LinkedHashMap<>();
         raw.put("delegateId", Map.of("operator", "eq", "value", "u2"));
         raw.put("status", Map.of("operator", "eq", "value", "ACTIVE"));
-        raw.put("startTime", Map.of("operator", "contains", "value", "2024"));
+        raw.put("startTime", Map.of("operator", "on", "value", "2026-03-05"));
         raw.put("hack", Map.of("operator", "eq", "value", "x"));
 
         List<PortalColumnFilterSupport.ColumnFilter> filters = DelegationRuleListSpec.parseFilters(raw);
 
         assertThat(filters).extracting(PortalColumnFilterSupport.ColumnFilter::field)
-                .containsExactly("delegateId", "status");
-        assertThat(filters).noneMatch(f -> "startTime".equals(f.field()));
+                .containsExactly("delegateId", "status", "startTime");
         assertThat(filters).noneMatch(f -> "hack".equals(f.field()));
+    }
+
+    @Test
+    void parseFilters_textOperatorOnDateColumnIsRejectedNotDropped() {
+        Map<String, Map<String, Object>> raw =
+                Map.of("startTime", Map.of("operator", "contains", "value", "2024"));
+
+        assertThatThrownBy(() -> DelegationRuleListSpec.parseFilters(raw))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("startTime");
+    }
+
+    @Test
+    void columns_declareKindsAndDeriveWhitelists() {
+        assertThat(PortalListColumnMeta.find(DelegationRuleListSpec.COLUMNS, "delegateId").kind())
+                .isEqualTo(PortalListColumnMeta.Kind.USER);
+        assertThat(PortalListColumnMeta.find(DelegationRuleListSpec.COLUMNS, "startTime").kind())
+                .isEqualTo(PortalListColumnMeta.Kind.DATETIME);
+
+        var delegationType = PortalListColumnMeta.find(DelegationRuleListSpec.COLUMNS, "delegationType");
+        assertThat(delegationType.kind()).isEqualTo(PortalListColumnMeta.Kind.ENUM);
+        assertThat(delegationType.options()).containsExactly("ALL", "PARTIAL", "TEMPORARY", "URGENT");
+        assertThat(delegationType.operators()).containsExactly("eq", "ne", "isNotNull", "isNull");
+
+        assertThat(DelegationRuleListSpec.FILTER_FIELDS)
+                .containsExactlyInAnyOrder(
+                        "delegateId", "delegationType", "startTime", "endTime", "status", "reason");
+        assertThat(DelegationRuleListSpec.SORT_FIELDS).contains("createdAt", "updatedAt");
+        assertThat(DelegationRuleListSpec.GROUP_FIELDS).doesNotContain("createdAt", "updatedAt");
     }
 
     @Test

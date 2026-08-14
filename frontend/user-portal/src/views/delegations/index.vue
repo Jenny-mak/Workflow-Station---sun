@@ -48,7 +48,7 @@
                   :filterable="field !== 'actions'"
                   :groupable="field !== 'actions'"
                   :movable="field !== 'actions'"
-                  :date-like="field === 'startTime' || field === 'endTime'"
+                  :date-like="myIsDateColumn(field)"
                   @sort-asc="onMySort(field, 'ASC')"
                   @sort-desc="onMySort(field, 'DESC')"
                   @group-by="onMyGroup(field)"
@@ -135,6 +135,10 @@
             :initial="myFilterDialogField
               ? myColState.filters[myFilterDialogField.field]
               : null"
+            :column="myFilterColumn"
+            :options="myFilterOptions"
+            :options-loading="myFilterOptionsLoading"
+            @search="myFilterSearch"
             @apply="onMyApplyFilter"
             @clear="onMyClearFilter()"
           />
@@ -170,7 +174,7 @@
                   :is-grouped="auditIsGrouped(field)"
                   :can-move-left="auditCanMoveLeft(field)"
                   :can-move-right="auditCanMoveRight(field)"
-                  :date-like="field === 'createdAt'"
+                  :date-like="auditIsDateColumn(field)"
                   @sort-asc="onAuditSort(field, 'ASC')"
                   @sort-desc="onAuditSort(field, 'DESC')"
                   @group-by="onAuditGroup(field)"
@@ -216,6 +220,10 @@
             :initial="auditFilterDialogField
               ? auditColState.filters[auditFilterDialogField.field]
               : null"
+            :column="auditFilterColumn"
+            :options="auditFilterOptions"
+            :options-loading="auditFilterOptionsLoading"
+            @search="auditFilterSearch"
             @apply="onAuditApplyFilter"
             @clear="onAuditClearFilter()"
           />
@@ -363,6 +371,8 @@ import {
   resumeDelegationRule,
   deleteDelegationRule,
   getDelegationAuditRecords,
+  getDelegationRuleColumns,
+  getDelegationAuditColumns,
   type DelegationRule
 } from '@/api/delegation'
 import { userApi, type UserOption } from '@/api/user'
@@ -379,8 +389,10 @@ import {
   normalizeGroupCounts,
   portalListGroupSpanMethod,
   type PortalListColumnFilter,
+  type PortalListColumnMeta,
   type PortalListSortDirection,
 } from '@/utils/portalListGridRuntime'
+import { usePortalListFilterMeta } from '@/composables/usePortalListFilterMeta'
 
 const { t } = useI18n()
 
@@ -456,6 +468,49 @@ auditEnsureOrder(AUDIT_DATA_FIELDS)
 
 const orderedMyFields = computed(() => [...myOrderedColumnFields(MY_DATA_FIELDS), 'actions'])
 const orderedAuditFields = computed(() => auditOrderedColumnFields(AUDIT_DATA_FIELDS))
+
+function unwrapColumns(res: unknown): PortalListColumnMeta[] {
+  const data = (res as { data?: unknown })?.data ?? res
+  if (!Array.isArray(data)) throw new Error('Unexpected column metadata payload')
+  return data as PortalListColumnMeta[]
+}
+
+/** Delegation enum codes reuse the labels the table cells already render. */
+function delegationEnumLabel(_field: string, code: string): string {
+  const key = `delegation.${code.toLowerCase()}`
+  const label = t(key)
+  return label === key ? code : label
+}
+
+const {
+  ensureColumns: ensureMyColumns,
+  isDateColumn: myIsDateColumn,
+  openColumn: myFilterColumn,
+  filterOptions: myFilterOptions,
+  optionsLoading: myFilterOptionsLoading,
+  onSearch: myFilterSearch,
+  dispose: disposeMyFilterMeta,
+} = usePortalListFilterMeta({
+  loadColumns: async () => unwrapColumns(await getDelegationRuleColumns()),
+  state: myColState,
+  openField: myFilterDialogField,
+  enumLabel: delegationEnumLabel,
+})
+
+const {
+  ensureColumns: ensureAuditColumns,
+  isDateColumn: auditIsDateColumn,
+  openColumn: auditFilterColumn,
+  filterOptions: auditFilterOptions,
+  optionsLoading: auditFilterOptionsLoading,
+  onSearch: auditFilterSearch,
+  dispose: disposeAuditFilterMeta,
+} = usePortalListFilterMeta({
+  loadColumns: async () => unwrapColumns(await getDelegationAuditColumns()),
+  state: auditColState,
+  openField: auditFilterDialogField,
+  enumLabel: delegationEnumLabel,
+})
 
 function myWidthFallback(field: string): number {
   const map: Record<string, number> = {
@@ -775,18 +830,23 @@ function onAuditPageChange() {
   void loadAudit()
 }
 
-const onTabChange = (name: string | number) => {
-  if (String(name) === 'audit') {
-    void loadAudit()
-  }
+const onTabChange = async (name: string | number) => {
+  if (String(name) !== 'audit') return
+  await ensureAuditColumns()
+  void loadAudit()
 }
 
-onMounted(() => {
+// Column declarations first: they may drop a persisted filter the backend no longer
+// accepts, and querying with one would fail the request instead of the page.
+onMounted(async () => {
+  await ensureMyColumns()
   void loadDelegations()
 })
 
 onBeforeUnmount(() => {
   searchDelegates.cancel()
+  disposeMyFilterMeta()
+  disposeAuditFilterMeta()
 })
 </script>
 

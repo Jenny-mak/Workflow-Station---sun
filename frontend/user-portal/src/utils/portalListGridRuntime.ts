@@ -6,7 +6,7 @@ import {
 
 export { clampColumnWidth, COLUMN_WIDTH_MAX, COLUMN_WIDTH_MIN }
 
-/** Same operators as Main Table Views / DW DesignerList. */
+/** Same operators as Main Table Views / DW DesignerList, plus the calendar-day ones. */
 export type PortalListFilterOperator =
   | 'contains'
   | 'eq'
@@ -16,10 +16,84 @@ export type PortalListFilterOperator =
   | 'notContains'
   | 'isNull'
   | 'isNotNull'
+  | 'on'
+  | 'before'
+  | 'after'
+  | 'between'
 
 export interface PortalListColumnFilter {
   operator: PortalListFilterOperator
   value: string
+}
+
+/** Mirrors the backend `PortalListColumnMeta.Kind`. */
+export type PortalListColumnKind = 'TEXT' | 'ENUM' | 'USER' | 'DATETIME'
+
+/**
+ * What a list column is and what the backend will accept for it.
+ * Served by the owning list's `/columns` endpoint so the header menu and the whitelist
+ * that actually filters the query can never drift apart.
+ */
+export interface PortalListColumnMeta {
+  field: string
+  kind: PortalListColumnKind
+  filterable: boolean
+  sortable: boolean
+  groupable: boolean
+  operators: PortalListFilterOperator[]
+  options: string[]
+}
+
+/** A choice offered for an ENUM / USER column; the label is already localized. */
+export interface PortalListFilterOption {
+  value: string
+  label: string
+}
+
+/** Matches `PortalColumnFilterSupport.DATE_RANGE_SEPARATOR`. */
+export const PORTAL_LIST_DATE_RANGE_SEPARATOR = ','
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Calendar days carried by a date filter value (`between` carries two).
+ * Returns an empty array when the value is not readable as such, which the dialog treats
+ * as "nothing picked yet" and the client-side matcher treats as no match.
+ */
+export function parsePortalListFilterDays(
+  operator: PortalListFilterOperator,
+  value: string,
+): string[] {
+  const expected = operator === 'between' ? 2 : 1
+  const parts = String(value ?? '').split(PORTAL_LIST_DATE_RANGE_SEPARATOR)
+  if (parts.length !== expected) return []
+  const days = parts.map(p => p.trim().slice(0, 10))
+  return days.every(d => ISO_DAY.test(d)) ? days : []
+}
+
+export function formatPortalListFilterDays(days: string[]): string {
+  return days.join(PORTAL_LIST_DATE_RANGE_SEPARATOR)
+}
+
+/**
+ * Drop persisted filters the backend would now reject — the column is gone, is no longer
+ * filterable, or the operator was never valid for its kind. Session state outlives deploys,
+ * so without this a stale filter would turn every page load into a 400.
+ */
+export function pruneUnsupportedFilters(
+  state: PortalListColumnState,
+  columns: PortalListColumnMeta[],
+): boolean {
+  if (!columns.length) return false
+  const byField = new Map(columns.map(c => [c.field, c]))
+  let changed = false
+  for (const field of Object.keys(state.filters)) {
+    const column = byField.get(field)
+    if (column?.filterable && column.operators.includes(state.filters[field].operator)) continue
+    delete state.filters[field]
+    changed = true
+  }
+  return changed
 }
 
 export type PortalListSortDirection = 'ASC' | 'DESC'
@@ -158,6 +232,19 @@ export function matchPortalListFilter(
       return text.trim() === ''
     case 'isNotNull':
       return text.trim() !== ''
+    case 'on':
+    case 'before':
+    case 'after':
+    case 'between': {
+      const days = parsePortalListFilterDays(filter.operator, expected)
+      const cellDay = text.trim().slice(0, 10)
+      if (!days.length || !ISO_DAY.test(cellDay)) return false
+      if (filter.operator === 'on') return cellDay === days[0]
+      if (filter.operator === 'before') return cellDay < days[0]
+      if (filter.operator === 'after') return cellDay > days[0]
+      const [from, to] = days[0] <= days[1] ? days : [days[1], days[0]]
+      return cellDay >= from && cellDay <= to
+    }
     default:
       return true
   }

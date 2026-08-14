@@ -5,11 +5,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("PortalColumnFilterSupport")
 class PortalColumnFilterSupportTest {
@@ -52,6 +54,51 @@ class PortalColumnFilterSupportTest {
         var orders = sort.toList();
         assertThat(orders.get(0).getProperty()).isEqualTo("status");
         assertThat(orders.get(1).getProperty()).isEqualTo("reason");
+    }
+
+    @Test
+    void parseFilterDates_readsCalendarDays() {
+        assertThat(PortalColumnFilterSupport.parseFilterDates("on", "2026-03-05"))
+                .containsExactly(LocalDate.of(2026, 3, 5));
+        assertThat(PortalColumnFilterSupport.parseFilterDates("before", "2026-03-05T13:45:00"))
+                .containsExactly(LocalDate.of(2026, 3, 5));
+        assertThat(PortalColumnFilterSupport.parseFilterDates("between", "2026-03-01,2026-03-31"))
+                .containsExactly(LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31));
+    }
+
+    @Test
+    void parseFilterDates_rejectsUnreadableValues() {
+        assertThatThrownBy(() -> PortalColumnFilterSupport.parseFilterDates("on", "last week"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> PortalColumnFilterSupport.parseFilterDates("between", "2026-03-01"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void parseFilters_byColumnKind_rejectsUnsupportedOperator() {
+        List<PortalListColumnMeta> columns = List.of(
+                PortalListColumnMeta.text("reason"),
+                PortalListColumnMeta.datetime("startTime"));
+
+        assertThatThrownBy(() -> PortalColumnFilterSupport.parseFilters(
+                Map.of("startTime", Map.of("operator", "contains", "value", "2026")), columns))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("startTime");
+    }
+
+    @Test
+    void parseFilters_byColumnKind_dropsUndeclaredColumnButKeepsValidOnes() {
+        List<PortalListColumnMeta> columns = List.of(
+                PortalListColumnMeta.text("reason"),
+                PortalListColumnMeta.datetime("startTime"));
+        Map<String, Map<String, Object>> raw = new LinkedHashMap<>();
+        raw.put("reason", Map.of("operator", "contains", "value", "trip"));
+        raw.put("startTime", Map.of("operator", "between", "value", "2026-03-01,2026-03-31"));
+        raw.put("ipAddress", Map.of("operator", "eq", "value", "127.0.0.1"));
+
+        assertThat(PortalColumnFilterSupport.parseFilters(raw, columns))
+                .extracting(PortalColumnFilterSupport.ColumnFilter::field)
+                .containsExactly("reason", "startTime");
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.portal.entity.DelegationAudit;
 import com.portal.entity.DelegationRule;
 import com.portal.exception.PortalException;
 import com.portal.util.PortalColumnFilterSupport;
+import com.portal.util.PortalListColumnMeta;
 import com.platform.common.i18n.I18nService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -57,6 +58,18 @@ public class DelegationController {
             return ApiResponse.success(result.toPageResponse());
         }
         return ApiResponse.success(delegationComponent.getDelegationRules(userId));
+    }
+
+    @Operation(summary = "获取委托规则列表的列能力（类型 / 可用算子 / 枚举取值）")
+    @GetMapping("/columns")
+    public ApiResponse<List<PortalListColumnMeta>> getDelegationRuleColumns() {
+        return ApiResponse.success(delegationComponent.getDelegationRuleColumns());
+    }
+
+    @Operation(summary = "获取委托审计列表的列能力（类型 / 可用算子）")
+    @GetMapping("/audit/columns")
+    public ApiResponse<List<PortalListColumnMeta>> getDelegationAuditColumns() {
+        return ApiResponse.success(delegationComponent.getDelegationAuditColumns());
     }
 
     @Operation(summary = "获取有效委托规则")
