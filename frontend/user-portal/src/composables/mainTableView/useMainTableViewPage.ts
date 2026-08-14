@@ -11,7 +11,7 @@ import {
   type ImportProgressPhase,
 } from '@/api/mainTableView'
 import {
-  applyGridRuntime, applyGroupBy, COLUMN_WIDTH_MIN, COLUMN_WIDTH_MAX, columnWidth, setColumnWidth,
+  applyGridRuntime, applyGroupBy, columnWidth, setColumnWidth,
   createDefaultGridRuntime, initColumnOrder, isGroupHeaderRow, loadGridRuntimeFromSession, moveColumn,
   orderedColumns, pruneRuntimeToColumns, saveGridRuntimeToSession,
   type GridColumnFilter, type GridDisplayRow, type GridRuntimeState,
@@ -52,11 +52,6 @@ const gridRuntime = reactive<GridRuntimeState>(createDefaultGridRuntime())
 
 const filterDialogVisible = ref(false)
 const filterDialogField = ref<MainTableViewFieldColumn | null>(null)
-const filterDraft = ref<GridColumnFilter>({ operator: 'contains', value: '' })
-
-const widthDialogVisible = ref(false)
-const widthDialogField = ref<MainTableViewFieldColumn | null>(null)
-const widthDraft = ref(120)
 
 const tableRef = ref<TableInstance>()
 const selectedTableRows = ref<MainTableViewDataRow[]>([])
@@ -499,15 +494,28 @@ function columnIndex(fieldName: string): number {
   return gridRuntime.columnOrder.indexOf(fieldName)
 }
 
+/** Date-like columns label their sort menu "older/newer" instead of "asc/desc". */
+function isDateLikeColumn(col: MainTableViewFieldColumn): boolean {
+  const name = col.fieldName.toLowerCase()
+  return name.includes('time') || name.includes('date') || !!col.systemField
+}
+
 function handleColumnCommand(col: MainTableViewFieldColumn, action: string) {
   switch (action) {
     case 'sortAsc':
-      gridRuntime.sort = { fieldName: col.fieldName, direction: 'ASC' }
+      // Same direction again clears sort — PortalListColumnHeader labels this "Clear sort".
+      gridRuntime.sort =
+        gridRuntime.sort?.fieldName === col.fieldName && gridRuntime.sort.direction === 'ASC'
+          ? null
+          : { fieldName: col.fieldName, direction: 'ASC' }
       currentPage.value = 1
       persistRuntime()
       break
     case 'sortDesc':
-      gridRuntime.sort = { fieldName: col.fieldName, direction: 'DESC' }
+      gridRuntime.sort =
+        gridRuntime.sort?.fieldName === col.fieldName && gridRuntime.sort.direction === 'DESC'
+          ? null
+          : { fieldName: col.fieldName, direction: 'DESC' }
       currentPage.value = 1
       persistRuntime()
       break
@@ -518,16 +526,7 @@ function handleColumnCommand(col: MainTableViewFieldColumn, action: string) {
       break
     case 'filterBy':
       filterDialogField.value = col
-      filterDraft.value = {
-        operator: gridRuntime.filters[col.fieldName]?.operator || 'contains',
-        value: gridRuntime.filters[col.fieldName]?.value || '',
-      }
       filterDialogVisible.value = true
-      break
-    case 'columnWidth':
-      widthDialogField.value = col
-      widthDraft.value = columnWidth(col, gridRuntime)
-      widthDialogVisible.value = true
       break
     case 'moveLeft':
       moveColumn(gridRuntime, col.fieldName, 'left')
@@ -542,14 +541,14 @@ function handleColumnCommand(col: MainTableViewFieldColumn, action: string) {
   }
 }
 
-function applyColumnFilter() {
+function applyColumnFilter(filter: GridColumnFilter) {
   if (!filterDialogField.value) return
   const field = filterDialogField.value.fieldName
-  const needsValue = filterDraft.value.operator !== 'isNull' && filterDraft.value.operator !== 'isNotNull'
-  if (needsValue && !filterDraft.value.value.trim()) {
+  const needsValue = filter.operator !== 'isNull' && filter.operator !== 'isNotNull'
+  if (needsValue && !filter.value.trim()) {
     delete gridRuntime.filters[field]
   } else {
-    gridRuntime.filters[field] = { ...filterDraft.value }
+    gridRuntime.filters[field] = { operator: filter.operator, value: filter.value }
   }
   currentPage.value = 1
   persistRuntime()
@@ -562,13 +561,6 @@ function clearColumnFilter() {
   currentPage.value = 1
   persistRuntime()
   filterDialogVisible.value = false
-}
-
-function applyColumnWidth() {
-  if (!widthDialogField.value) return
-  setColumnWidth(gridRuntime, widthDialogField.value.fieldName, widthDraft.value)
-  persistRuntime()
-  widthDialogVisible.value = false
 }
 
 function handleColumnResize(fieldName: string, width: number) {
@@ -734,7 +726,7 @@ onMounted(async () => {
   return {
     t, Search, Download, Refresh, Upload, dataLoading, functionUnits, views, selectedViewId, searchKeyword,
     gridColumns, allRows, dataTotal, currentPage, pageSize, gridRuntime, filterDialogVisible, filterDialogField,
-    filterDraft, widthDialogVisible, widthDialogField, widthDraft, tableRef, selectedTableRows, importing,
+    tableRef, selectedTableRows, importing,
     importInputRef, importProgressVisible, importProgressPercent, importProgressPhase, importProgressFileName,
     importResultVisible, importResult, importProgressLabel, importResultStatus, importResultHeadline,
     selectedFuCode, selectedViewMeta, showExportButton, showImportButton, selectedFu, displayColumns, groupedViews,
@@ -743,8 +735,8 @@ onMounted(async () => {
     processedRows, groupedRows, pagedRows, displayTotal,
     handleSearch, handlePageChange, handleSizeChange, formatCell, isRowSelectable, getRowKey, onSelectionChange, openRow, columnIndex,
     isFkLinkCell, openFkTarget, isLookupLinkCell, openLookupTarget, isFileLinkCell, fileLinksOf, downloadFile,
-    handleColumnCommand, applyColumnFilter, clearColumnFilter, applyColumnWidth, handleColumnResize, handleColumnResizeEnd,
+    handleColumnCommand, applyColumnFilter, clearColumnFilter, handleColumnResize, handleColumnResizeEnd,
     handleExport, triggerImport, handleImportFile, mtvHeaderCellClassName, rowClassName, spanMethod,
-    loadData, columnWidth, isGroupHeaderRow, COLUMN_WIDTH_MIN, COLUMN_WIDTH_MAX,
+    loadData, columnWidth, isDateLikeColumn, isGroupHeaderRow,
   }
 }

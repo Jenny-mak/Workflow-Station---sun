@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { Expand, Fold } from '@element-plus/icons-vue'
-import MainTableViewColumnMenu from '@/components/mainTableView/MainTableViewColumnMenu.vue'
-import MainTableViewColumnResizeHandle from '@/components/mainTableView/MainTableViewColumnResizeHandle.vue'
+import PortalListColumnHeader from '@/components/portal-list/PortalListColumnHeader.vue'
+import PortalListFilterDialog from '@/components/portal-list/PortalListFilterDialog.vue'
 import { useMainTableViewPage } from '@/composables/mainTableView/useMainTableViewPage'
 
 const {
   t, Search, Download, Refresh, dataLoading, functionUnits, selectedViewId, searchKeyword,
   gridColumns, allRows, dataTotal, currentPage, pageSize, gridRuntime, filterDialogVisible, filterDialogField,
-  filterDraft, widthDialogVisible, widthDialogField, widthDraft, tableRef, selectedTableRows,
+  tableRef, selectedTableRows,
   importProgressVisible, importProgressPercent, importProgressPhase, importProgressFileName,
   importResultVisible, importResult, importProgressLabel, importResultStatus, importResultHeadline,
   selectedFuCode, selectedViewMeta, showExportButton, selectedFu, displayColumns, groupedViews,
@@ -16,9 +16,9 @@ const {
   processedRows, groupedRows, pagedRows, displayTotal,
   handleSearch, handlePageChange, handleSizeChange, formatCell, isRowSelectable, getRowKey, onSelectionChange, openRow, columnIndex,
   isFkLinkCell, openFkTarget, isLookupLinkCell, openLookupTarget, isFileLinkCell, fileLinksOf, downloadFile,
-  handleColumnCommand, applyColumnFilter, clearColumnFilter, applyColumnWidth, handleColumnResize, handleColumnResizeEnd,
+  handleColumnCommand, applyColumnFilter, clearColumnFilter, handleColumnResize, handleColumnResizeEnd,
   handleExport, mtvHeaderCellClassName, rowClassName, spanMethod,
-  loadData, columnWidth, isGroupHeaderRow, COLUMN_WIDTH_MIN, COLUMN_WIDTH_MAX,
+  loadData, columnWidth, isDateLikeColumn, isGroupHeaderRow,
 } = useMainTableViewPage()
 </script>
 
@@ -205,21 +205,25 @@ const {
             show-overflow-tooltip
           >
             <template #header>
-              <div class="col-header-cell">
-                <MainTableViewColumnMenu
-                  :column="col"
-                  :can-move-left="columnIndex(col.fieldName) > 0"
-                  :can-move-right="columnIndex(col.fieldName) < gridRuntime.columnOrder.length - 1"
-                  :is-grouped="gridRuntime.groupBy === col.fieldName"
-                  :has-filter="!!gridRuntime.filters[col.fieldName]"
-                  @command="(action) => handleColumnCommand(col, action)"
-                />
-                <MainTableViewColumnResizeHandle
-                  :initial-width="columnWidth(col, gridRuntime)"
-                  @resize="(width) => handleColumnResize(col.fieldName, width)"
-                  @resize-end="handleColumnResizeEnd"
-                />
-              </div>
+              <PortalListColumnHeader
+                :label="col.displayLabel"
+                :width="columnWidth(col, gridRuntime)"
+                :date-like="isDateLikeColumn(col)"
+                :can-move-left="columnIndex(col.fieldName) > 0"
+                :can-move-right="columnIndex(col.fieldName) < gridRuntime.columnOrder.length - 1"
+                :is-grouped="gridRuntime.groupBy === col.fieldName"
+                :has-filter="!!gridRuntime.filters[col.fieldName]"
+                :sort-direction="gridRuntime.sort?.fieldName === col.fieldName ? gridRuntime.sort.direction : null"
+                @sort-asc="handleColumnCommand(col, 'sortAsc')"
+                @sort-desc="handleColumnCommand(col, 'sortDesc')"
+                @group-by="handleColumnCommand(col, 'groupBy')"
+                @filter="handleColumnCommand(col, 'filterBy')"
+                @clear-filter="handleColumnCommand(col, 'clearFilter')"
+                @move-left="handleColumnCommand(col, 'moveLeft')"
+                @move-right="handleColumnCommand(col, 'moveRight')"
+                @resize="(width) => handleColumnResize(col.fieldName, width)"
+                @resize-end="handleColumnResizeEnd"
+              />
             </template>
             <template #default="{ row }">
               <template v-if="isGroupHeaderRow(row)">
@@ -286,100 +290,17 @@ const {
       </div>
     </div>
 
-    <el-dialog
+    <PortalListFilterDialog
       v-model="filterDialogVisible"
-      :title="filterDialogField ? `${t('mainTableView.colFilterBy')}: ${filterDialogField.displayLabel}` : ''"
-      width="420px"
-      destroy-on-close
-    >
-      <el-form label-position="top">
-        <el-form-item :label="t('mainTableView.filterOperator')">
-          <el-select
-            v-model="filterDraft.operator"
-            style="width: 100%;"
-          >
-            <el-option
-              :label="t('mainTableView.filterOpContains')"
-              value="contains"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpEquals')"
-              value="eq"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpNotEquals')"
-              value="ne"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpStartsWith')"
-              value="startsWith"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpEndsWith')"
-              value="endsWith"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpNotContains')"
-              value="notContains"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpHasData')"
-              value="isNotNull"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpNoData')"
-              value="isNull"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item
-          v-if="filterDraft.operator !== 'isNull' && filterDraft.operator !== 'isNotNull'"
-          :label="t('mainTableView.filterValue')"
-        >
-          <el-input v-model="filterDraft.value" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="clearColumnFilter">
-          {{ t('common.clear') }}
-        </el-button>
-        <el-button
-          type="primary"
-          @click="applyColumnFilter"
-        >
-          {{ t('common.confirm') }}
-        </el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog
-      v-model="widthDialogVisible"
-      :title="widthDialogField ? `${t('mainTableView.colColumnWidth')}: ${widthDialogField.displayLabel}` : ''"
-      width="360px"
-      destroy-on-close
-    >
-      <el-form label-position="top">
-        <el-form-item :label="t('mainTableView.columnWidthPx')">
-          <el-slider
-            v-model="widthDraft"
-            :min="COLUMN_WIDTH_MIN"
-            :max="COLUMN_WIDTH_MAX"
-            show-input
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="widthDialogVisible = false">
-          {{ t('common.cancel') }}
-        </el-button>
-        <el-button
-          type="primary"
-          @click="applyColumnWidth"
-        >
-          {{ t('common.confirm') }}
-        </el-button>
-      </template>
-    </el-dialog>
+      :title="filterDialogField
+        ? `${t('mainTableView.colFilterBy')}: ${filterDialogField.displayLabel}`
+        : t('mainTableView.colFilterBy')"
+      :initial="filterDialogField
+        ? (gridRuntime.filters[filterDialogField.fieldName] ?? null)
+        : null"
+      @apply="applyColumnFilter"
+      @clear="clearColumnFilter"
+    />
 
     <el-dialog
       v-model="importProgressVisible"
@@ -593,16 +514,6 @@ const {
 :deep(.mtv-data-grid--fit .el-table__body) {
   width: 100% !important;
   min-width: 100% !important;
-}
-.col-header-cell {
-  position: static;
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-width: 0;
-  min-height: 23px;
-  box-sizing: border-box;
-  padding-right: 12px;
 }
 :deep(.mtv-data-grid .el-table__header-wrapper th.mtv-resizable-col-header) {
   position: relative;

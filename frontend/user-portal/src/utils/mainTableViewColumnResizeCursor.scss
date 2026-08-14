@@ -5,8 +5,7 @@ $mtv-col-resize-cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   ew-resize;
 
 /* Header wrapper — same metrics as DW `.dwl-col-header` (compact, not inflated). */
-.portal-list-col-header,
-.mtv-data-grid .col-header-cell {
+.portal-list-col-header {
   position: static;
   display: flex;
   align-items: center;
