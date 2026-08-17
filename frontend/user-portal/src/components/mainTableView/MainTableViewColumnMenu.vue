@@ -6,12 +6,14 @@ import {
   CaretBottom,
   Grid,
   Filter,
+  Close,
   DCaret,
   Back,
   Right,
   ArrowDown,
 } from '@element-plus/icons-vue'
 import type { MainTableViewFieldColumn } from '@/api/mainTableView'
+import type { GridSortDirection } from '@/utils/mainTableViewGridRuntime'
 
 const props = defineProps<{
   column: MainTableViewFieldColumn
@@ -19,6 +21,8 @@ const props = defineProps<{
   canMoveRight: boolean
   isGrouped: boolean
   hasFilter: boolean
+  /** ASC / DESC when this column is the active sort; otherwise null. */
+  sortDirection: GridSortDirection | null
 }>()
 
 const emit = defineEmits<{
@@ -31,6 +35,10 @@ const isDateLike = computed(() => {
   const name = props.column.fieldName.toLowerCase()
   return name.includes('time') || name.includes('date') || props.column.systemField
 })
+
+const hasActiveState = computed(
+  () => props.hasFilter || props.isGrouped || props.sortDirection != null,
+)
 
 function onCommand(action: string) {
   emit('command', action)
@@ -45,20 +53,63 @@ function onCommand(action: string) {
   >
     <span
       class="col-header-trigger"
+      :class="{ 'is-active-state': hasActiveState }"
       @click.stop
     >
       <span class="col-header-label">{{ column.displayLabel }}</span>
+      <span
+        v-if="hasActiveState"
+        class="col-header-state"
+        aria-hidden="true"
+      >
+        <el-icon
+          v-if="sortDirection === 'ASC'"
+          class="state-icon"
+          :title="isDateLike ? t('mainTableView.colSortOlder') : t('mainTableView.colSortAsc')"
+        >
+          <CaretTop />
+        </el-icon>
+        <el-icon
+          v-else-if="sortDirection === 'DESC'"
+          class="state-icon"
+          :title="isDateLike ? t('mainTableView.colSortNewer') : t('mainTableView.colSortDesc')"
+        >
+          <CaretBottom />
+        </el-icon>
+        <el-icon
+          v-if="isGrouped"
+          class="state-icon"
+          :title="t('mainTableView.colGroupBy')"
+        >
+          <Grid />
+        </el-icon>
+        <el-icon
+          v-if="hasFilter"
+          class="state-icon is-filter"
+          :title="t('mainTableView.colFilterBy')"
+        >
+          <Filter />
+        </el-icon>
+      </span>
       <el-icon class="col-header-caret"><ArrowDown /></el-icon>
     </span>
     <template #dropdown>
       <el-dropdown-menu class="col-header-menu">
         <el-dropdown-item command="sortAsc">
           <el-icon><CaretTop /></el-icon>
-          <span>{{ isDateLike ? t('mainTableView.colSortOlder') : t('mainTableView.colSortAsc') }}</span>
+          <span>{{
+            sortDirection === 'ASC'
+              ? t('mainTableView.colClearSort')
+              : (isDateLike ? t('mainTableView.colSortOlder') : t('mainTableView.colSortAsc'))
+          }}</span>
         </el-dropdown-item>
         <el-dropdown-item command="sortDesc">
           <el-icon><CaretBottom /></el-icon>
-          <span>{{ isDateLike ? t('mainTableView.colSortNewer') : t('mainTableView.colSortDesc') }}</span>
+          <span>{{
+            sortDirection === 'DESC'
+              ? t('mainTableView.colClearSort')
+              : (isDateLike ? t('mainTableView.colSortNewer') : t('mainTableView.colSortDesc'))
+          }}</span>
         </el-dropdown-item>
         <el-dropdown-item
           divided
@@ -73,11 +124,18 @@ function onCommand(action: string) {
           <el-tag
             v-if="hasFilter"
             size="small"
-            type="info"
+            type="danger"
             class="menu-active-tag"
           >
             ●
           </el-tag>
+        </el-dropdown-item>
+        <el-dropdown-item
+          v-if="hasFilter"
+          command="clearFilter"
+        >
+          <el-icon><Close /></el-icon>
+          <span>{{ t('mainTableView.colClearFilter') }}</span>
         </el-dropdown-item>
         <el-dropdown-item command="columnWidth">
           <el-icon><DCaret /></el-icon>
@@ -124,6 +182,11 @@ function onCommand(action: string) {
   &:hover {
     color: var(--el-color-primary);
   }
+
+  &.is-active-state .col-header-label {
+    color: var(--hsbc-red, var(--el-color-primary));
+    font-weight: 600;
+  }
 }
 
 .col-header-label {
@@ -132,6 +195,22 @@ function onCommand(action: string) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.col-header-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.state-icon {
+  font-size: 13px;
+  color: var(--hsbc-red, var(--el-color-primary));
+
+  &.is-filter {
+    font-size: 14px;
+  }
 }
 
 .col-header-caret {

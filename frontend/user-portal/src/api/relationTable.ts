@@ -75,6 +75,7 @@ export interface PageResponse<T> {
   totalPages: number
   hasNext: boolean
   hasPrevious: boolean
+  groupCounts?: Record<string, number>
 }
 
 // ==================== API ====================
@@ -84,9 +85,20 @@ export const relationTableApi = {
   getVisibleTables: () =>
     request.get<{ data: RelationTableDTO[] }>('/relation-tables'),
 
-  /** 分页查询表数据（只读） */
-  queryTableData: (tableId: number, params: { page?: number; size?: number; search?: string }) =>
-    request.get<{ data: PageResponse<Record<string, any>> }>(`/relation-tables/${tableId}`, { params }),
+  /** 分页查询表数据（只读；可选 groupBy → response.groupCounts） */
+  queryTableData: (tableId: number, params: {
+    page?: number
+    size?: number
+    search?: string
+    sortField?: string
+    sortDirection?: 'ASC' | 'DESC'
+    filters?: string
+    groupBy?: string
+  }) =>
+    request.get<{ data: PageResponse<Record<string, any>> }>(
+      `/relation-tables/${tableId}`,
+      { params },
+    ),
 
   /** 导出 CSV */
   exportCsv: (tableId: number, maxRows = 10000) =>

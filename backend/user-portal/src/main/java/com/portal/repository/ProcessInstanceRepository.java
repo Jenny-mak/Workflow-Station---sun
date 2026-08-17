@@ -4,6 +4,7 @@ import com.portal.entity.ProcessInstance;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -15,7 +16,8 @@ import java.util.List;
  * Process instance repository.
  */
 @Repository
-public interface ProcessInstanceRepository extends JpaRepository<ProcessInstance, String> {
+public interface ProcessInstanceRepository extends JpaRepository<ProcessInstance, String>,
+        JpaSpecificationExecutor<ProcessInstance> {
 
     Page<ProcessInstance> findByStartUserIdOrderByStartTimeDesc(String startUserId, Pageable pageable);
 

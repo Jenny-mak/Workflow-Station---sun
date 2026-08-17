@@ -122,10 +122,28 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
     @Transactional(readOnly = true)
     public PageResponse<Map<String, Object>> queryTableData(Long tableId, String userId,
                                                              int page, int size, String search) {
+        return queryTableData(tableId, userId, page, size, search, null, null, null, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<Map<String, Object>> queryTableData(Long tableId, String userId,
+                                                             int page, int size, String search,
+                                                             String sortField, String sortDirection,
+                                                             String filters) {
+        return queryTableData(tableId, userId, page, size, search, sortField, sortDirection, filters, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<Map<String, Object>> queryTableData(Long tableId, String userId,
+                                                             int page, int size, String search,
+                                                             String sortField, String sortDirection,
+                                                             String filters, String groupBy) {
         try {
             // The built-in System User table is readable by any authenticated user (no rt_table_access grant).
             if (SYSTEM_USER_TABLE_ID.equals(tableId)) {
-                return querySystemUserTableData(page, size, search);
+                return querySystemUserTableData(page, size, search, sortField, sortDirection, filters, groupBy);
             }
 
             // Verify access
@@ -138,25 +156,31 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
                 return PageResponse.of(Collections.emptyList(), page, size, 0);
             }
 
-            List<Object> searchParams = new ArrayList<>();
-            String searchClause = buildJsonDataSearchClause(getFieldNames(tableId), search, searchParams);
+            List<String> fieldNames = getFieldNames(tableId);
+            List<Object> whereParams = new ArrayList<>();
+            StringBuilder where = new StringBuilder();
+            where.append(buildJsonDataSearchClause(fieldNames, search, whereParams));
+            where.append(buildJsonDataFilterClause(fieldNames, filters, whereParams));
 
             List<Object> countParams = new ArrayList<>();
             countParams.add(tableId);
-            countParams.addAll(searchParams);
+            countParams.addAll(whereParams);
             Long total = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM " + DATA_ROWS_TABLE + " WHERE table_id = ?" + searchClause,
+                    "SELECT COUNT(*) FROM " + DATA_ROWS_TABLE + " WHERE table_id = ?" + where,
                     Long.class, countParams.toArray());
             if (total == null) total = 0L;
 
+            String safeGroupBy = sanitizeGroupByField(fieldNames, groupBy);
+            String orderBy = buildJsonDataOrderBy(fieldNames, sortField, sortDirection, safeGroupBy);
+
             List<Object> dataParams = new ArrayList<>();
             dataParams.add(tableId);
-            dataParams.addAll(searchParams);
+            dataParams.addAll(whereParams);
             dataParams.add(size);
             dataParams.add(page * size);
             List<Map<String, Object>> rows = jdbcTemplate.query(
-                    "SELECT data, status FROM " + DATA_ROWS_TABLE + " WHERE table_id = ?" + searchClause
-                            + " ORDER BY id LIMIT ? OFFSET ?",
+                    "SELECT data, status FROM " + DATA_ROWS_TABLE + " WHERE table_id = ?" + where
+                            + " " + orderBy + " LIMIT ? OFFSET ?",
                     (rs, rowNum) -> {
                         Map<String, Object> row = parseJsonRow(rs.getString("data"));
                         // Surface the row-level status column so the UI can toggle Active/Inactive.
@@ -165,7 +189,11 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
                     },
                     dataParams.toArray());
 
-            return PageResponse.of(rows, page, size, total);
+            PageResponse<Map<String, Object>> response = PageResponse.of(rows, page, size, total);
+            if (safeGroupBy != null) {
+                response.setGroupCounts(queryJsonDataGroupCounts(tableId, where.toString(), whereParams, safeGroupBy));
+            }
+            return response;
         } catch (Exception e) {
             log.warn("Failed to query table data for tableId {}: {}", tableId, e.getMessage());
             return PageResponse.of(Collections.emptyList(), page, size, 0);
@@ -248,26 +276,44 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
         }
     }
 
-    private PageResponse<Map<String, Object>> querySystemUserTableData(int page, int size, String search) {
+    private PageResponse<Map<String, Object>> querySystemUserTableData(
+            int page, int size, String search,
+            String sortField, String sortDirection, String filters, String groupBy) {
         String tableName = sanitizeIdentifier(SYSTEM_USER_TABLE_NAME);
         List<String> fieldNames = SYSTEM_USER_FIELD_NAMES.stream().map(this::sanitizeIdentifier).toList();
         String columns = String.join(", ", fieldNames);
 
-        List<Object> searchParams = new ArrayList<>();
-        String searchClause = buildSystemUserSearchClause(search, searchParams);
+        List<Object> whereParams = new ArrayList<>();
+        List<String> predicates = new ArrayList<>();
+
+        String searchClause = buildSystemUserSearchClause(search, whereParams);
+        // buildSystemUserSearchClause returns " WHERE (...)" or "" — normalize to predicate list.
+        if (!searchClause.isEmpty()) {
+            // strip leading " WHERE "
+            predicates.add(searchClause.substring(" WHERE ".length()));
+        }
+        appendSystemUserFilterPredicates(predicates, whereParams, filters);
+
+        String whereSql = predicates.isEmpty() ? "" : " WHERE " + String.join(" AND ", predicates);
+        String safeGroupBy = sanitizeGroupByField(SYSTEM_USER_FIELD_NAMES, groupBy);
+        String orderBy = buildSystemUserOrderBy(sortField, sortDirection, safeGroupBy);
 
         Long total = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM " + tableName + searchClause,
-                Long.class, searchParams.toArray());
+                "SELECT COUNT(*) FROM " + tableName + whereSql,
+                Long.class, whereParams.toArray());
         if (total == null) total = 0L;
 
-        List<Object> dataParams = new ArrayList<>(searchParams);
+        List<Object> dataParams = new ArrayList<>(whereParams);
         dataParams.add(size);
         dataParams.add(page * size);
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT " + columns + " FROM " + tableName + searchClause + " LIMIT ? OFFSET ?",
+                "SELECT " + columns + " FROM " + tableName + whereSql + " " + orderBy + " LIMIT ? OFFSET ?",
                 dataParams.toArray());
-        return PageResponse.of(rows, page, size, total);
+        PageResponse<Map<String, Object>> response = PageResponse.of(rows, page, size, total);
+        if (safeGroupBy != null) {
+            response.setGroupCounts(querySystemUserGroupCounts(tableName, whereSql, whereParams, safeGroupBy));
+        }
+        return response;
     }
 
     @Override
@@ -1046,6 +1092,251 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
         outParams.add(likePattern); // index-accelerated broad guard (trgm GIN)
         sanitizedFields.forEach(ignored -> outParams.add(likePattern));
         return " AND data::text ILIKE ? AND (" + keywordClause + ")";
+    }
+
+    /**
+     * AND-combined column filters on {@code data->>'field'} (MTV operator set).
+     * {@code filters} is JSON map {@code {field:{operator,value}}} or array of
+     * {@code {fieldName,operator,value}}.
+     */
+    private String buildJsonDataFilterClause(List<String> fieldNames, String filtersJson, List<Object> outParams) {
+        List<ColumnFilter> filters = parseColumnFilters(filtersJson, fieldNames);
+        if (filters.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (ColumnFilter filter : filters) {
+            String expr = "data->>'" + sanitizeIdentifier(filter.field()) + "'";
+            String fragment = appendTextFilterSql(expr, filter.operator(), filter.value(), outParams);
+            if (fragment != null && !fragment.isEmpty()) {
+                sb.append(" AND ").append(fragment);
+            }
+        }
+        return sb.toString();
+    }
+
+    private String buildJsonDataOrderBy(List<String> fieldNames, String sortField, String sortDirection) {
+        return buildJsonDataOrderBy(fieldNames, sortField, sortDirection, null);
+    }
+
+    private String buildJsonDataOrderBy(
+            List<String> fieldNames, String sortField, String sortDirection, String safeGroupBy) {
+        Set<String> allowed = fieldNames == null ? Set.of() : new HashSet<>(fieldNames);
+        String field = sortField != null ? sortField.trim() : "";
+        StringBuilder order = new StringBuilder("ORDER BY ");
+        boolean hasOrder = false;
+        if (safeGroupBy != null && allowed.contains(safeGroupBy)) {
+            order.append("data->>'").append(sanitizeIdentifier(safeGroupBy)).append("' ASC NULLS LAST");
+            hasOrder = true;
+        }
+        if (!field.isEmpty() && allowed.contains(field)) {
+            if (hasOrder) {
+                order.append(", ");
+            }
+            String safe = sanitizeIdentifier(field);
+            String dir = "DESC".equalsIgnoreCase(sortDirection) ? "DESC" : "ASC";
+            order.append("data->>'").append(safe).append("' ").append(dir).append(" NULLS LAST");
+            hasOrder = true;
+        } else if (!field.isEmpty()) {
+            log.debug("Ignoring unknown relation-table sortField={}", field);
+        }
+        if (!hasOrder) {
+            return "ORDER BY id";
+        }
+        order.append(", id ASC");
+        return order.toString();
+    }
+
+    private void appendSystemUserFilterPredicates(
+            List<String> predicates, List<Object> outParams, String filtersJson) {
+        List<ColumnFilter> filters = parseColumnFilters(filtersJson, SYSTEM_USER_FIELD_NAMES);
+        for (ColumnFilter filter : filters) {
+            String expr = sanitizeIdentifier(filter.field());
+            String fragment = appendTextFilterSql(expr, filter.operator(), filter.value(), outParams);
+            if (fragment != null && !fragment.isEmpty()) {
+                predicates.add(fragment);
+            }
+        }
+    }
+
+    private String buildSystemUserOrderBy(String sortField, String sortDirection) {
+        return buildSystemUserOrderBy(sortField, sortDirection, null);
+    }
+
+    private String buildSystemUserOrderBy(String sortField, String sortDirection, String safeGroupBy) {
+        String field = sortField != null ? sortField.trim() : "";
+        StringBuilder order = new StringBuilder("ORDER BY ");
+        boolean hasOrder = false;
+        if (safeGroupBy != null && SYSTEM_USER_FIELD_NAMES.contains(safeGroupBy)) {
+            order.append(sanitizeIdentifier(safeGroupBy)).append(" ASC NULLS LAST");
+            hasOrder = true;
+        }
+        if (!field.isEmpty() && SYSTEM_USER_FIELD_NAMES.contains(field)) {
+            if (hasOrder) {
+                order.append(", ");
+            }
+            String safe = sanitizeIdentifier(field);
+            String dir = "DESC".equalsIgnoreCase(sortDirection) ? "DESC" : "ASC";
+            order.append(safe).append(" ").append(dir).append(" NULLS LAST");
+            hasOrder = true;
+        } else if (!field.isEmpty()) {
+            log.debug("Ignoring unknown system-user sortField={}", field);
+        }
+        if (!hasOrder) {
+            return "ORDER BY username";
+        }
+        return order.toString();
+    }
+
+    private String sanitizeGroupByField(List<String> fieldNames, String groupBy) {
+        if (groupBy == null || groupBy.isBlank() || fieldNames == null || fieldNames.isEmpty()) {
+            return null;
+        }
+        String field = groupBy.trim();
+        if (!fieldNames.contains(field)) {
+            log.debug("Ignoring unknown relation-table groupBy={}", field);
+            return null;
+        }
+        return field;
+    }
+
+    private Map<String, Long> queryJsonDataGroupCounts(
+            Long tableId, String whereSql, List<Object> whereParams, String safeGroupBy) {
+        String labelExpr = "COALESCE(NULLIF(TRIM(data->>'" + sanitizeIdentifier(safeGroupBy) + "'), ''), '—')";
+        String sql = "SELECT " + labelExpr + " AS grp_label, COUNT(*) AS cnt FROM " + DATA_ROWS_TABLE
+                + " WHERE table_id = ?" + whereSql + " GROUP BY 1 ORDER BY 1";
+        List<Object> params = new ArrayList<>();
+        params.add(tableId);
+        params.addAll(whereParams);
+        Map<String, Long> out = new LinkedHashMap<>();
+        org.springframework.jdbc.core.RowCallbackHandler handler = rs ->
+                out.put(rs.getString("grp_label"), rs.getLong("cnt"));
+        jdbcTemplate.query(sql, handler, params.toArray());
+        return out;
+    }
+
+    private Map<String, Long> querySystemUserGroupCounts(
+            String tableName, String whereSql, List<Object> whereParams, String safeGroupBy) {
+        String col = sanitizeIdentifier(safeGroupBy);
+        String labelExpr = "COALESCE(NULLIF(TRIM(CAST(" + col + " AS TEXT)), ''), '—')";
+        String sql = "SELECT " + labelExpr + " AS grp_label, COUNT(*) AS cnt FROM " + tableName
+                + whereSql + " GROUP BY 1 ORDER BY 1";
+        Map<String, Long> out = new LinkedHashMap<>();
+        org.springframework.jdbc.core.RowCallbackHandler handler = rs ->
+                out.put(rs.getString("grp_label"), rs.getLong("cnt"));
+        jdbcTemplate.query(sql, handler, whereParams.toArray());
+        return out;
+    }
+
+    private record ColumnFilter(String field, String operator, String value) {}
+
+    private List<ColumnFilter> parseColumnFilters(String filtersJson, List<String> allowedFields) {
+        if (filtersJson == null || filtersJson.isBlank() || allowedFields == null || allowedFields.isEmpty()) {
+            return List.of();
+        }
+        Set<String> allowed = new HashSet<>(allowedFields);
+        try {
+            Object parsed = objectMapper.readValue(filtersJson, Object.class);
+            List<ColumnFilter> out = new ArrayList<>();
+            if (parsed instanceof List<?> list) {
+                for (Object item : list) {
+                    if (!(item instanceof Map<?, ?> map)) {
+                        continue;
+                    }
+                    Object fieldObj = map.containsKey("fieldName") ? map.get("fieldName") : map.get("field");
+                    if (fieldObj == null) {
+                        continue;
+                    }
+                    String field = String.valueOf(fieldObj);
+                    Object op = map.get("operator");
+                    Object value = map.containsKey("value") ? map.get("value") : null;
+                    addColumnFilter(out, allowed, field, op, value);
+                }
+                return out;
+            }
+            if (parsed instanceof Map<?, ?> map) {
+                for (Map.Entry<?, ?> e : map.entrySet()) {
+                    if (!(e.getValue() instanceof Map<?, ?> body)) {
+                        continue;
+                    }
+                    Object op = body.get("operator");
+                    Object value = body.containsKey("value") ? body.get("value") : null;
+                    addColumnFilter(out, allowed, String.valueOf(e.getKey()), op, value);
+                }
+                return out;
+            }
+            return List.of();
+        } catch (Exception ex) {
+            log.warn("Ignoring invalid relation-table filters JSON: {}", ex.getMessage());
+            return List.of();
+        }
+    }
+
+    private void addColumnFilter(
+            List<ColumnFilter> out, Set<String> allowed, String field, Object op, Object value) {
+        if (field == null || !allowed.contains(field) || op == null) {
+            return;
+        }
+        String operator = String.valueOf(op).trim();
+        if (operator.isEmpty()) {
+            return;
+        }
+        String val = value != null ? String.valueOf(value) : "";
+        if (!"isNull".equals(operator) && !"isNotNull".equals(operator) && val.isBlank()) {
+            return;
+        }
+        try {
+            sanitizeIdentifier(field);
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+        out.add(new ColumnFilter(field, operator, val));
+    }
+
+    /**
+     * Parameterized text filter fragment (no leading AND). Mirrors MTV operators.
+     */
+    private String appendTextFilterSql(String expr, String operator, String value, List<Object> outParams) {
+        if (expr == null || operator == null) {
+            return null;
+        }
+        String op = operator.trim();
+        return switch (op) {
+            case "isNull" -> "(" + expr + " IS NULL OR TRIM(BOTH FROM COALESCE(" + expr + ", '')) = '')";
+            case "isNotNull" -> "(" + expr + " IS NOT NULL AND TRIM(BOTH FROM COALESCE(" + expr + ", '')) <> '')";
+            case "eq" -> {
+                outParams.add(value != null ? value : "");
+                yield "LOWER(COALESCE(" + expr + ", '')) = LOWER(?)";
+            }
+            case "ne" -> {
+                outParams.add(value != null ? value : "");
+                yield "LOWER(COALESCE(" + expr + ", '')) <> LOWER(?)";
+            }
+            case "contains" -> {
+                outParams.add("%" + escapeLikePattern(value) + "%");
+                yield "LOWER(COALESCE(" + expr + ", '')) LIKE LOWER(?) ESCAPE '\\'";
+            }
+            case "notContains" -> {
+                outParams.add("%" + escapeLikePattern(value) + "%");
+                yield "LOWER(COALESCE(" + expr + ", '')) NOT LIKE LOWER(?) ESCAPE '\\'";
+            }
+            case "startsWith" -> {
+                outParams.add(escapeLikePattern(value) + "%");
+                yield "LOWER(COALESCE(" + expr + ", '')) LIKE LOWER(?) ESCAPE '\\'";
+            }
+            case "endsWith" -> {
+                outParams.add("%" + escapeLikePattern(value));
+                yield "LOWER(COALESCE(" + expr + ", '')) LIKE LOWER(?) ESCAPE '\\'";
+            }
+            default -> null;
+        };
+    }
+
+    private static String escapeLikePattern(String input) {
+        if (input == null) {
+            return "";
+        }
+        return input.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     private String buildSystemUserSearchClause(String search, List<Object> outParams) {

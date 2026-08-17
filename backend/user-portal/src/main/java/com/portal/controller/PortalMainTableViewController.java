@@ -1,9 +1,11 @@
 package com.portal.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.portal.exception.PortalException;
 import com.platform.common.dto.ApiResponse;
 import com.portal.dto.MainTableViewImportResult;
 import com.portal.dto.MainTableViewPortalDtos.FunctionUnitViewMenuItem;
+import com.portal.dto.MainTableViewPortalDtos.MainTableViewColumnFilter;
 import com.portal.dto.MainTableViewPortalDtos.MainTableViewDataPage;
 import com.portal.dto.MainTableViewPortalDtos.MainTableViewSummary;
 import com.portal.security.CurrentUserId;
@@ -17,7 +19,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/main-table-views")
@@ -26,6 +30,7 @@ import java.util.List;
 public class PortalMainTableViewController {
 
     private final PortalMainTableViewService portalMainTableViewService;
+    private final ObjectMapper objectMapper;
 
     @GetMapping("/function-units")
     @Operation(summary = "List function units with published Main Table views")
@@ -56,13 +61,71 @@ public class PortalMainTableViewController {
             @PathVariable Long viewId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String filters,
+            @RequestParam(required = false) String sortField,
+            @RequestParam(required = false) String sortDirection,
+            @RequestParam(required = false) String groupBy) {
         if (userId == null || userId.isBlank()) {
             return ResponseEntity.ok(ApiResponse.success(MainTableViewDataPage.builder()
-                    .columns(List.of()).rows(List.of()).total(0).page(page).size(size).build()));
+                    .columns(List.of()).rows(List.of()).total(0).page(page).size(size)
+                    .groupCounts(List.of()).build()));
         }
         return ResponseEntity.ok(ApiResponse.success(
-                portalMainTableViewService.queryViewData(userId, viewId, page, size, search)));
+                portalMainTableViewService.queryViewData(
+                        userId,
+                        viewId,
+                        page,
+                        size,
+                        search,
+                        parseColumnFilters(filters),
+                        sortField,
+                        sortDirection,
+                        groupBy)));
+    }
+
+    /**
+     * Accepts either a JSON array of {@code {fieldName,operator,value}} or a map
+     * {@code {fieldName:{operator,value}}} (portal grid runtime shape).
+     */
+    private List<MainTableViewColumnFilter> parseColumnFilters(String filtersJson) {
+        if (filtersJson == null || filtersJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            Object parsed = objectMapper.readValue(filtersJson, Object.class);
+            List<MainTableViewColumnFilter> out = new ArrayList<>();
+            if (parsed instanceof List<?> list) {
+                for (Object item : list) {
+                    if (item instanceof Map<?, ?> map) {
+                        out.add(toColumnFilter(String.valueOf(map.get("fieldName")), map));
+                    }
+                }
+                return out;
+            }
+            if (parsed instanceof Map<?, ?> map) {
+                for (Map.Entry<?, ?> e : map.entrySet()) {
+                    if (!(e.getValue() instanceof Map<?, ?> filterMap)) {
+                        continue;
+                    }
+                    out.add(toColumnFilter(String.valueOf(e.getKey()), filterMap));
+                }
+                return out;
+            }
+            return List.of();
+        } catch (Exception ex) {
+            throw new PortalException("400", "Invalid filters JSON: " + ex.getMessage());
+        }
+    }
+
+    private MainTableViewColumnFilter toColumnFilter(String fieldName, Map<?, ?> filterMap) {
+        Object op = filterMap.get("operator");
+        Object value = filterMap.containsKey("value") ? filterMap.get("value") : null;
+        return MainTableViewColumnFilter.builder()
+                .fieldName(fieldName)
+                .operator(op != null ? String.valueOf(op) : null)
+                .value(value != null ? String.valueOf(value) : null)
+                .build();
     }
 
     @GetMapping("/{viewId}/export")

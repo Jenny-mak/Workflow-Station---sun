@@ -1,23 +1,33 @@
 package com.portal.component;
 
+import com.portal.dto.PageResponse;
 import com.portal.entity.PermissionRequest;
 import com.portal.enums.PermissionRequestStatus;
 import com.portal.enums.PermissionRequestType;
 import com.portal.repository.PermissionRequestRepository;
+import com.portal.util.PermissionRequestListSpec;
+import com.portal.util.PortalColumnFilterSupport;
 import com.platform.common.i18n.I18nService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 权限申请审批：待审批/历史查询、批准/拒绝执行、审批人判定。
@@ -34,11 +44,18 @@ public class PermissionApprovalComponent {
             PermissionRequestType.BUSINESS_UNIT_ROLE_REMOVAL,
             PermissionRequestType.BUSINESS_UNIT_EXIT);
 
+    private static final String APPROVAL_SELECT =
+            "SELECT id, applicant_id, submitted_by_user_id, request_type, role_id, role_name, "
+                    + "organization_unit_id, organization_unit_name, virtual_group_id, virtual_group_name, "
+                    + "business_unit_id, business_unit_name, status, reason, approver_id, approve_time, "
+                    + "approve_comment, created_at, updated_at FROM up_permission_request";
+
     private final PermissionRequestRepository permissionRequestRepository;
     private final RoleAccessComponent roleAccessComponent;
     private final VirtualGroupAccessComponent virtualGroupAccessComponent;
     private final I18nService i18nService;
     private final PermissionRequestEnrichmentComponent enrichmentComponent;
+    private final JdbcTemplate jdbcTemplate;
 
     /**
      * 获取所有待审批的申请（审批人视图）
@@ -283,6 +300,188 @@ public class PermissionApprovalComponent {
         log.info("Request {} rejected by {}: {}", requestId, approverId, comment);
 
         return permissionRequestRepository.save(request);
+    }
+
+    /**
+     * Pending approvals with SQL filter/sort/groupBy and true page/total (no in-memory 2000 cap).
+     */
+    public PageResponse<PermissionRequest> pagePendingApprovals(
+            String userId,
+            int page,
+            int size,
+            Map<String, Map<String, Object>> filters,
+            String sortField,
+            String sortDirection,
+            String groupBy) {
+        List<String> buIds = Optional.ofNullable(virtualGroupAccessComponent.getApproverBusinessUnitIds(userId))
+                .orElseGet(Collections::emptyList);
+        List<String> vgIds = Optional.ofNullable(virtualGroupAccessComponent.getApproverVirtualGroupIds(userId))
+                .orElseGet(Collections::emptyList);
+        if (buIds.isEmpty() && vgIds.isEmpty()) {
+            return PageResponse.of(List.of(), Math.max(0, page), Math.max(1, size), 0);
+        }
+        StringBuilder where = new StringBuilder(" WHERE status = ?");
+        List<Object> args = new ArrayList<>();
+        args.add(PermissionRequestStatus.PENDING.name());
+        appendPendingApproverScope(where, args, buIds, vgIds);
+        return pageApprovalsSql(where, args, page, size, filters, sortField, sortDirection, groupBy);
+    }
+
+    /**
+     * Approval history with SQL filter/sort/groupBy and true page/total.
+     */
+    public PageResponse<PermissionRequest> pageApprovalHistory(
+            String userId,
+            int page,
+            int size,
+            Map<String, Map<String, Object>> filters,
+            String sortField,
+            String sortDirection,
+            String groupBy) {
+        StringBuilder where = new StringBuilder(" WHERE approver_id = ? AND status IN (?,?,?)");
+        List<Object> args = new ArrayList<>();
+        args.add(userId);
+        args.add(PermissionRequestStatus.APPROVED.name());
+        args.add(PermissionRequestStatus.REJECTED.name());
+        args.add(PermissionRequestStatus.CANCELLED.name());
+        return pageApprovalsSql(where, args, page, size, filters, sortField, sortDirection, groupBy);
+    }
+
+    private PageResponse<PermissionRequest> pageApprovalsSql(
+            StringBuilder where,
+            List<Object> args,
+            int page,
+            int size,
+            Map<String, Map<String, Object>> filters,
+            String sortField,
+            String sortDirection,
+            String groupBy) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(200, Math.max(1, size));
+        where.append(PermissionRequestListSpec.appendRequestTargetFilterSql(filters, args));
+        var columnFilters = PermissionRequestListSpec.parseFilters(
+                PermissionRequestListSpec.withoutRequestTarget(filters));
+        where.append(PermissionRequestListSpec.appendFilterSql(columnFilters, args));
+
+        String safeGroupBy = PermissionRequestListSpec.sanitizeGroupBy(groupBy);
+        String orderBy = PermissionRequestListSpec.resolveOrderBy(sortField, sortDirection, safeGroupBy);
+
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM up_permission_request" + where, Long.class, args.toArray());
+        long totalLong = total != null ? total : 0L;
+
+        List<Object> dataArgs = new ArrayList<>(args);
+        dataArgs.add(safeSize);
+        dataArgs.add((long) safePage * safeSize);
+        List<PermissionRequest> content = jdbcTemplate.query(
+                APPROVAL_SELECT + where + " ORDER BY " + orderBy + " LIMIT ? OFFSET ?",
+                this::mapApprovalRow,
+                dataArgs.toArray());
+        enrichmentComponent.enrichDisplayFields(content);
+
+        PageResponse<PermissionRequest> response = PageResponse.of(content, safePage, safeSize, totalLong);
+        if (safeGroupBy != null) {
+            response.setGroupCounts(queryApprovalGroupCounts(where.toString(), args, safeGroupBy));
+        }
+        return response;
+    }
+
+    private static void appendPendingApproverScope(
+            StringBuilder where, List<Object> args, List<String> buIds, List<String> vgIds) {
+        boolean hasBu = buIds != null && !buIds.isEmpty();
+        boolean hasVg = vgIds != null && !vgIds.isEmpty();
+        if (hasBu && hasVg) {
+            where.append(" AND ((")
+                    .append("request_type IN (?,?,?) AND business_unit_id IN (")
+                    .append(placeholders(buIds.size()))
+                    .append(")) OR (request_type = ? AND virtual_group_id IN (")
+                    .append(placeholders(vgIds.size()))
+                    .append(")))");
+            args.add(PermissionRequestType.BUSINESS_UNIT_JOIN.name());
+            args.add(PermissionRequestType.BUSINESS_UNIT_ROLE_REMOVAL.name());
+            args.add(PermissionRequestType.BUSINESS_UNIT_EXIT.name());
+            args.addAll(buIds);
+            args.add(PermissionRequestType.VIRTUAL_GROUP_JOIN.name());
+            args.addAll(vgIds);
+        } else if (hasBu) {
+            where.append(" AND request_type IN (?,?,?) AND business_unit_id IN (")
+                    .append(placeholders(buIds.size()))
+                    .append(')');
+            args.add(PermissionRequestType.BUSINESS_UNIT_JOIN.name());
+            args.add(PermissionRequestType.BUSINESS_UNIT_ROLE_REMOVAL.name());
+            args.add(PermissionRequestType.BUSINESS_UNIT_EXIT.name());
+            args.addAll(buIds);
+        } else {
+            where.append(" AND request_type = ? AND virtual_group_id IN (")
+                    .append(placeholders(vgIds.size()))
+                    .append(')');
+            args.add(PermissionRequestType.VIRTUAL_GROUP_JOIN.name());
+            args.addAll(vgIds);
+        }
+    }
+
+    private static String placeholders(int n) {
+        return Collections.nCopies(n, "?").stream().collect(Collectors.joining(","));
+    }
+
+    private Map<String, Long> queryApprovalGroupCounts(String whereSql, List<Object> args, String groupExpr) {
+        boolean ok = PermissionRequestListSpec.SQL_COLUMNS.contains(groupExpr)
+                || PermissionRequestListSpec.REQUEST_TARGET_EXPR.equals(groupExpr);
+        if (!ok) {
+            return Map.of();
+        }
+        String sql = "SELECT COALESCE((" + groupExpr + ")::text, '') AS g, COUNT(*) AS c FROM up_permission_request"
+                + whereSql + " GROUP BY 1 ORDER BY 1 ASC";
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, args.toArray());
+        Map<String, Long> out = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            Object g = row.get("g");
+            Object c = row.get("c");
+            String label = PortalColumnFilterSupport.groupLabel(
+                    g != null && !String.valueOf(g).isBlank() ? g : null);
+            long count = c instanceof Number n ? n.longValue() : 0L;
+            out.merge(label, count, Long::sum);
+        }
+        return out;
+    }
+
+    private PermissionRequest mapApprovalRow(ResultSet rs, int rowNum) throws SQLException {
+        PermissionRequest row = new PermissionRequest();
+        row.setId(rs.getObject("id", Long.class));
+        row.setApplicantId(rs.getString("applicant_id"));
+        row.setSubmittedByUserId(rs.getString("submitted_by_user_id"));
+        String type = rs.getString("request_type");
+        if (type != null) {
+            row.setRequestType(PermissionRequestType.valueOf(type));
+        }
+        row.setRoleId(rs.getString("role_id"));
+        row.setRoleName(rs.getString("role_name"));
+        row.setOrganizationUnitId(rs.getString("organization_unit_id"));
+        row.setOrganizationUnitName(rs.getString("organization_unit_name"));
+        row.setVirtualGroupId(rs.getString("virtual_group_id"));
+        row.setVirtualGroupName(rs.getString("virtual_group_name"));
+        row.setBusinessUnitId(rs.getString("business_unit_id"));
+        row.setBusinessUnitName(rs.getString("business_unit_name"));
+        String status = rs.getString("status");
+        if (status != null) {
+            row.setStatus(PermissionRequestStatus.valueOf(status));
+        }
+        row.setReason(rs.getString("reason"));
+        row.setApproverId(rs.getString("approver_id"));
+        Timestamp approveTime = rs.getTimestamp("approve_time");
+        if (approveTime != null) {
+            row.setApproveTime(approveTime.toLocalDateTime());
+        }
+        row.setApproveComment(rs.getString("approve_comment"));
+        Timestamp createdAt = rs.getTimestamp("created_at");
+        if (createdAt != null) {
+            row.setCreatedAt(createdAt.toLocalDateTime());
+        }
+        Timestamp updatedAt = rs.getTimestamp("updated_at");
+        if (updatedAt != null) {
+            row.setUpdatedAt(updatedAt.toLocalDateTime());
+        }
+        return row;
     }
 
     /**

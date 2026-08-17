@@ -1,7 +1,9 @@
-import { ref, computed } from 'vue'
+import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { useI18n } from 'vue-i18n'
 import { permissionApi, type PermissionRequestRecord } from '@/api/permission'
+import { PORTAL_LIST_DEFAULT_PAGE_SIZE } from '@/constants/portalListPagination'
+import type { PermissionListLoadOpts } from '@/composables/permissions/useMyRequests'
 
 type TFn = ReturnType<typeof useI18n>['t']
 
@@ -12,6 +14,41 @@ export interface UseApprovalsDeps {
   loadHistoryRequests: () => void
   /** 刷新全局待审批计数（pendingApproval store） */
   fetchPendingCount: () => Promise<unknown> | unknown
+}
+
+function unwrapPage(res: unknown): {
+  content: PermissionRequestRecord[]
+  totalElements: number
+  groupCounts?: Record<string, number>
+} {
+  const r = res as {
+    data?: {
+      content?: PermissionRequestRecord[]
+      totalElements?: number
+      groupCounts?: Record<string, number>
+    }
+    content?: PermissionRequestRecord[]
+    totalElements?: number
+    groupCounts?: Record<string, number>
+  }
+  if (r?.data?.content) {
+    return {
+      content: r.data.content,
+      totalElements: Number(r.data.totalElements || 0),
+      groupCounts: r.data.groupCounts,
+    }
+  }
+  if (r?.content) {
+    return {
+      content: r.content,
+      totalElements: Number(r.totalElements || 0),
+      groupCounts: r.groupCounts,
+    }
+  }
+  if (Array.isArray(res)) {
+    return { content: res as PermissionRequestRecord[], totalElements: (res as PermissionRequestRecord[]).length }
+  }
+  return { content: [], totalElements: 0 }
 }
 
 /** 审批侧：审批人身份、待审批/审批历史列表、批准/拒绝对话框与操作。 */
@@ -28,8 +65,22 @@ export function useApprovals(t: TFn, deps: UseApprovalsDeps) {
   const approveComment = ref('')
   const rejectComment = ref('')
   const submittingApproval = ref(false)
+  const approvalPendingTotal = ref(0)
+  const approvalHistoryTotal = ref(0)
+  const approvalPendingGroupCounts = ref<Record<string, number> | null>(null)
+  const approvalHistoryGroupCounts = ref<Record<string, number> | null>(null)
 
-  const approvalPendingCount = computed(() => approverPendingList.value.length)
+  const approverPendingPagination = reactive({
+    page: 1,
+    size: PORTAL_LIST_DEFAULT_PAGE_SIZE,
+  })
+  const approverHistoryPagination = reactive({
+    page: 1,
+    size: PORTAL_LIST_DEFAULT_PAGE_SIZE,
+  })
+
+  let lastApproverPendingOpts: PermissionListLoadOpts | undefined
+  let lastApproverHistoryOpts: PermissionListLoadOpts | undefined
 
   const checkApproverStatus = async () => {
     try {
@@ -41,45 +92,61 @@ export function useApprovals(t: TFn, deps: UseApprovalsDeps) {
     }
   }
 
-  const loadApproverPending = async () => {
+  const loadApproverPending = async (opts?: PermissionListLoadOpts) => {
     if (!isApprover.value) return
+    lastApproverPendingOpts = opts
     loadingApproverPending.value = true
     try {
-      const res = (await permissionApi.getPendingApprovals({ page: 0, size: 100 })) as any
-      if (res?.data?.content) {
-        approverPendingList.value = res.data.content
-      } else if (res?.content) {
-        approverPendingList.value = res.content
-      } else if (Array.isArray(res)) {
-        approverPendingList.value = res
-      } else {
-        approverPendingList.value = []
-      }
+      const res = await permissionApi.getPendingApprovals({
+        page: approverPendingPagination.page - 1,
+        size: approverPendingPagination.size,
+        sortField: opts?.sortField,
+        sortDirection: opts?.sortDirection,
+        filters: opts?.filters,
+        groupBy: opts?.groupBy,
+      })
+      const page = unwrapPage(res)
+      approverPendingList.value = page.content
+      approvalPendingTotal.value = page.totalElements
+      approvalPendingGroupCounts.value = page.groupCounts && Object.keys(page.groupCounts).length
+        ? page.groupCounts
+        : null
     } catch (e) {
       console.error('Failed to load pending approvals:', e)
       approverPendingList.value = []
+      approvalPendingTotal.value = 0
+      approvalPendingGroupCounts.value = null
+      ElMessage.error(t('permission.loadFailed'))
     } finally {
       loadingApproverPending.value = false
     }
   }
 
-  const loadApproverHistory = async () => {
+  const loadApproverHistory = async (opts?: PermissionListLoadOpts) => {
     if (!isApprover.value) return
+    lastApproverHistoryOpts = opts
     loadingApproverHistory.value = true
     try {
-      const res = (await permissionApi.getApprovalHistory({ page: 0, size: 100 })) as any
-      if (res?.data?.content) {
-        approverHistoryList.value = res.data.content
-      } else if (res?.content) {
-        approverHistoryList.value = res.content
-      } else if (Array.isArray(res)) {
-        approverHistoryList.value = res
-      } else {
-        approverHistoryList.value = []
-      }
+      const res = await permissionApi.getApprovalHistory({
+        page: approverHistoryPagination.page - 1,
+        size: approverHistoryPagination.size,
+        sortField: opts?.sortField,
+        sortDirection: opts?.sortDirection,
+        filters: opts?.filters,
+        groupBy: opts?.groupBy,
+      })
+      const page = unwrapPage(res)
+      approverHistoryList.value = page.content
+      approvalHistoryTotal.value = page.totalElements
+      approvalHistoryGroupCounts.value = page.groupCounts && Object.keys(page.groupCounts).length
+        ? page.groupCounts
+        : null
     } catch (e) {
       console.error('Failed to load approval history:', e)
       approverHistoryList.value = []
+      approvalHistoryTotal.value = 0
+      approvalHistoryGroupCounts.value = null
+      ElMessage.error(t('permission.loadFailed'))
     } finally {
       loadingApproverHistory.value = false
     }
@@ -87,7 +154,7 @@ export function useApprovals(t: TFn, deps: UseApprovalsDeps) {
 
   const onApprovalTabChange = (tab: string | number) => {
     if (String(tab) === 'approvalHistory') {
-      loadApproverHistory()
+      loadApproverHistory(lastApproverHistoryOpts)
     }
   }
 
@@ -110,13 +177,14 @@ export function useApprovals(t: TFn, deps: UseApprovalsDeps) {
       await permissionApi.approveRequest(currentApproverRequest.value.id, approveComment.value || undefined)
       ElMessage.success(t('approval.approveSuccess'))
       approveDialogVisible.value = false
-      await loadApproverPending()
+      await loadApproverPending(lastApproverPendingOpts)
       await deps.fetchPendingCount()
       approverHistoryList.value = []
       deps.loadPendingRequests()
       deps.loadHistoryRequests()
-    } catch (e: any) {
-      const msg = e.response?.data?.message || e.message || t('approval.approveFailed')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      const msg = err.response?.data?.message || err.message || t('approval.approveFailed')
       ElMessage.error(msg)
     } finally {
       submittingApproval.value = false
@@ -134,13 +202,14 @@ export function useApprovals(t: TFn, deps: UseApprovalsDeps) {
       await permissionApi.rejectRequest(currentApproverRequest.value.id, rejectComment.value)
       ElMessage.success(t('approval.rejectSuccess'))
       rejectDialogVisible.value = false
-      await loadApproverPending()
+      await loadApproverPending(lastApproverPendingOpts)
       await deps.fetchPendingCount()
       approverHistoryList.value = []
       deps.loadPendingRequests()
       deps.loadHistoryRequests()
-    } catch (e: any) {
-      const msg = e.response?.data?.message || e.message || t('approval.rejectFailed')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      const msg = err.response?.data?.message || err.message || t('approval.rejectFailed')
       ElMessage.error(msg)
     } finally {
       submittingApproval.value = false
@@ -160,7 +229,13 @@ export function useApprovals(t: TFn, deps: UseApprovalsDeps) {
     approveComment,
     rejectComment,
     submittingApproval,
-    approvalPendingCount,
+    approvalPendingCount: approvalPendingTotal,
+    approvalPendingTotal,
+    approvalHistoryTotal,
+    approvalPendingGroupCounts,
+    approvalHistoryGroupCounts,
+    approverPendingPagination,
+    approverHistoryPagination,
     checkApproverStatus,
     loadApproverPending,
     loadApproverHistory,

@@ -48,9 +48,14 @@ public class PortalRelationTableController {
             @CurrentUserId String userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String sortField,
+            @RequestParam(required = false) String sortDirection,
+            @RequestParam(required = false) String filters,
+            @RequestParam(required = false) String groupBy) {
         try {
-            PageResponse<Map<String, Object>> result = service.queryTableData(tableId, userId, page, size, search);
+            PageResponse<Map<String, Object>> result = service.queryTableData(
+                    tableId, userId, page, size, search, sortField, sortDirection, filters, groupBy);
             return ResponseEntity.ok(ApiResponse.success(result));
         } catch (Exception e) {
             return ResponseEntity.ok(ApiResponse.success(PageResponse.of(List.of(), page, size, 0)));

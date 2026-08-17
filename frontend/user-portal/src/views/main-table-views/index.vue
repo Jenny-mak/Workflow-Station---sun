@@ -2,12 +2,13 @@
 import { Expand, Fold } from '@element-plus/icons-vue'
 import MainTableViewColumnMenu from '@/components/mainTableView/MainTableViewColumnMenu.vue'
 import MainTableViewColumnResizeHandle from '@/components/mainTableView/MainTableViewColumnResizeHandle.vue'
+import PortalListFilterDialog from '@/components/portal-list/PortalListFilterDialog.vue'
 import { useMainTableViewPage } from '@/composables/mainTableView/useMainTableViewPage'
 
 const {
   t, Search, Download, Refresh, dataLoading, functionUnits, selectedViewId, searchKeyword,
   gridColumns, allRows, dataTotal, currentPage, pageSize, gridRuntime, filterDialogVisible, filterDialogField,
-  filterDraft, widthDialogVisible, widthDialogField, widthDraft, tableRef, selectedTableRows,
+  widthDialogVisible, widthDialogField, widthDraft, tableRef, selectedTableRows,
   importProgressVisible, importProgressPercent, importProgressPhase, importProgressFileName,
   importResultVisible, importResult, importProgressLabel, importResultStatus, importResultHeadline,
   selectedFuCode, selectedViewMeta, showExportButton, selectedFu, displayColumns, groupedViews,
@@ -212,6 +213,7 @@ const {
                   :can-move-right="columnIndex(col.fieldName) < gridRuntime.columnOrder.length - 1"
                   :is-grouped="gridRuntime.groupBy === col.fieldName"
                   :has-filter="!!gridRuntime.filters[col.fieldName]"
+                  :sort-direction="gridRuntime.sort?.fieldName === col.fieldName ? gridRuntime.sort.direction : null"
                   @command="(action) => handleColumnCommand(col, action)"
                 />
                 <MainTableViewColumnResizeHandle
@@ -272,7 +274,7 @@ const {
             :page-size="pageSize"
             :total="displayTotal"
             :page-sizes="[10, 20, 50, 100]"
-            layout="total, sizes, prev, pager, next"
+            layout="total, sizes, prev, pager, next, jumper"
             @current-change="handlePageChange"
             @size-change="handleSizeChange"
           />
@@ -286,71 +288,17 @@ const {
       </div>
     </div>
 
-    <el-dialog
+    <PortalListFilterDialog
       v-model="filterDialogVisible"
-      :title="filterDialogField ? `${t('mainTableView.colFilterBy')}: ${filterDialogField.displayLabel}` : ''"
-      width="420px"
-      destroy-on-close
-    >
-      <el-form label-position="top">
-        <el-form-item :label="t('mainTableView.filterOperator')">
-          <el-select
-            v-model="filterDraft.operator"
-            style="width: 100%;"
-          >
-            <el-option
-              :label="t('mainTableView.filterOpContains')"
-              value="contains"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpEquals')"
-              value="eq"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpNotEquals')"
-              value="ne"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpStartsWith')"
-              value="startsWith"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpEndsWith')"
-              value="endsWith"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpNotContains')"
-              value="notContains"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpHasData')"
-              value="isNotNull"
-            />
-            <el-option
-              :label="t('mainTableView.filterOpNoData')"
-              value="isNull"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item
-          v-if="filterDraft.operator !== 'isNull' && filterDraft.operator !== 'isNotNull'"
-          :label="t('mainTableView.filterValue')"
-        >
-          <el-input v-model="filterDraft.value" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="clearColumnFilter">
-          {{ t('common.clear') }}
-        </el-button>
-        <el-button
-          type="primary"
-          @click="applyColumnFilter"
-        >
-          {{ t('common.confirm') }}
-        </el-button>
-      </template>
-    </el-dialog>
+      :title="filterDialogField
+        ? `${t('mainTableView.colFilterBy')}: ${filterDialogField.displayLabel}`
+        : t('mainTableView.colFilterBy')"
+      :initial="filterDialogField
+        ? (gridRuntime.filters[filterDialogField.fieldName] ?? null)
+        : null"
+      @apply="applyColumnFilter"
+      @clear="clearColumnFilter"
+    />
 
     <el-dialog
       v-model="widthDialogVisible"

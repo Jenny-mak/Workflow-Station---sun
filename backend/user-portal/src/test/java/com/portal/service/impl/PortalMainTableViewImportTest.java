@@ -3,7 +3,7 @@ package com.portal.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.portal.component.FunctionUnitAccessComponent;
 import com.portal.component.MainTableViewAccessResolver;
-import com.portal.component.MainTableViewInvolvementChecker;
+import com.portal.component.MainTableViewJdbcQuery;
 import com.portal.component.ProcessComponent;
 import com.portal.dto.MainTableViewImportResult;
 import com.portal.dto.ProcessInstanceInfo;
@@ -52,7 +52,7 @@ class PortalMainTableViewImportTest {
     private UserBusinessUnitRepository userBusinessUnitRepository;
 
     @Mock
-    private MainTableViewInvolvementChecker mainTableViewInvolvementChecker;
+    private MainTableViewJdbcQuery mainTableViewJdbcQuery;
 
     @Mock
     private ProcessInstanceRepository processInstanceRepository;
@@ -71,7 +71,7 @@ class PortalMainTableViewImportTest {
                 new ObjectMapper(),
                 functionUnitAccessComponent,
                 accessResolver,
-                mainTableViewInvolvementChecker,
+                mainTableViewJdbcQuery,
                 processInstanceRepository,
                 processComponent);
         when(functionUnitAccessComponent.canAccessFunctionUnit(USER_ID, FU_CODE)).thenReturn(true);
