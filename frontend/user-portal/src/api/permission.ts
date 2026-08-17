@@ -1,4 +1,5 @@
 import request from './request'
+import type { PortalListColumnMeta } from '@/utils/portalListGridRuntime'
 
 // ==================== 新的类型定义 ====================
 
@@ -292,6 +293,10 @@ export const permissionApi = {
       totalElements: number
       groupCounts?: Record<string, number>
     }>('/permissions/requests', { params })
+  },
+
+  getRequestColumns() {
+    return request.get<{ data: PortalListColumnMeta[] }>('/permissions/requests/columns')
   },
 
   /** 取消申请 */

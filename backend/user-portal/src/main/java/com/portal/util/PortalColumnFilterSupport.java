@@ -305,6 +305,49 @@ public final class PortalColumnFilterSupport {
                 cb.lessThan(path, end.plusDays(1).atStartOfDay()));
     }
 
+    /**
+     * JDBC equivalent of {@link #dateOperator}: appends {@code AND col …} and bind values.
+     * {@code column} must already be a whitelist identifier, never a user-supplied name.
+     */
+    public static String appendDateFilterSql(String column, String op, String value, List<Object> args) {
+        if (column == null || op == null) {
+            return "";
+        }
+        if ("isNull".equals(op)) {
+            return " AND " + column + " IS NULL";
+        }
+        if ("isNotNull".equals(op)) {
+            return " AND " + column + " IS NOT NULL";
+        }
+        List<LocalDate> days = parseFilterDates(op, value);
+        return switch (op) {
+            case "on" -> {
+                args.add(days.get(0).atStartOfDay());
+                args.add(days.get(0).plusDays(1).atStartOfDay());
+                yield " AND " + column + " >= ? AND " + column + " < ?";
+            }
+            case "before" -> {
+                args.add(days.get(0).atStartOfDay());
+                yield " AND " + column + " < ?";
+            }
+            case "after" -> {
+                args.add(days.get(0).plusDays(1).atStartOfDay());
+                yield " AND " + column + " >= ?";
+            }
+            case "between" -> {
+                LocalDate from = days.get(0);
+                LocalDate to = days.get(1);
+                LocalDate start = from.isAfter(to) ? to : from;
+                LocalDate end = from.isAfter(to) ? from : to;
+                args.add(start.atStartOfDay());
+                args.add(end.plusDays(1).atStartOfDay());
+                yield " AND " + column + " >= ? AND " + column + " < ?";
+            }
+            default -> throw new IllegalArgumentException(
+                    "Operator '" + op + "' is not supported for column '" + column + "'");
+        };
+    }
+
     public static Expression<String> lowerCoalesce(Root<?> root, CriteriaBuilder cb, String field) {
         return cb.lower(cb.coalesce(root.get(field).as(String.class), cb.literal("")));
     }

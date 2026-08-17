@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("ProcessApplicationListSpec")
 class ProcessApplicationListSpecTest {
@@ -60,7 +61,6 @@ class ProcessApplicationListSpecTest {
         Map<String, Map<String, Object>> raw = new LinkedHashMap<>();
         raw.put("currentStepName", Map.of("operator", "contains", "value", "Approve"));
         raw.put("requestId", Map.of("operator", "contains", "value", "BK-1"));
-        raw.put("startTime", Map.of("operator", "contains", "value", "2024"));
         raw.put("title", Map.of("operator", "eq", "value", ""));
         raw.put("status", Map.of("operator", "isNull", "value", ""));
         raw.put("unknown", Map.of("operator", "eq", "value", "x"));
@@ -69,9 +69,37 @@ class ProcessApplicationListSpecTest {
 
         assertThat(filters).extracting(ProcessApplicationListSpec.ColumnFilter::field)
                 .containsExactly("currentNode", "requestId", "status");
-        assertThat(filters).noneMatch(f -> "startTime".equals(f.field()) && "contains".equals(f.operator()));
         assertThat(filters).noneMatch(f -> "title".equals(f.field()));
         assertThat(filters).noneMatch(f -> "unknown".equals(f.field()));
+    }
+
+    @Test
+    void parseFilters_rejectsUnsupportedDateOperator() {
+        Map<String, Map<String, Object>> raw = Map.of(
+                "startTime", Map.of("operator", "contains", "value", "2024"));
+        assertThatThrownBy(() -> ProcessApplicationListSpec.parseFilters(raw))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("startTime");
+    }
+
+    @Test
+    void parseFilters_acceptsStartTimeOn() {
+        Map<String, Map<String, Object>> raw = Map.of(
+                "startTime", Map.of("operator", "on", "value", "2026-08-14"));
+        List<ProcessApplicationListSpec.ColumnFilter> filters = ProcessApplicationListSpec.parseFilters(raw);
+        assertThat(filters).hasSize(1);
+        assertThat(filters.get(0).field()).isEqualTo("startTime");
+        assertThat(filters.get(0).operator()).isEqualTo("on");
+    }
+
+    @Test
+    void columns_declareUiFields() {
+        assertThat(PortalListColumnMeta.find(ProcessApplicationListSpec.COLUMNS, "startTime").kind())
+                .isEqualTo(PortalListColumnMeta.Kind.DATETIME);
+        assertThat(PortalListColumnMeta.find(ProcessApplicationListSpec.COLUMNS, "status").kind())
+                .isEqualTo(PortalListColumnMeta.Kind.ENUM);
+        assertThat(PortalListColumnMeta.find(ProcessApplicationListSpec.COLUMNS, "requestId").sortable())
+                .isFalse();
     }
 
     @Test

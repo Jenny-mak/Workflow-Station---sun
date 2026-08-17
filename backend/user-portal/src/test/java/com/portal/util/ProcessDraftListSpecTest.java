@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("ProcessDraftListSpec")
 class ProcessDraftListSpecTest {
@@ -29,6 +30,33 @@ class ProcessDraftListSpecTest {
         assertThat(ProcessDraftListSpec.processDefinitionNameFilter(raw))
                 .extracting(PortalColumnFilterSupport.ColumnFilter::value)
                 .isEqualTo("Leave");
+    }
+
+    @Test
+    void parseFilters_acceptsUpdatedAtOn() {
+        Map<String, Map<String, Object>> raw = Map.of(
+                "updatedAt", Map.of("operator", "on", "value", "2026-08-14"));
+        List<PortalColumnFilterSupport.ColumnFilter> filters = ProcessDraftListSpec.parseFilters(raw);
+        assertThat(filters).extracting(PortalColumnFilterSupport.ColumnFilter::field)
+                .containsExactly("updatedAt");
+        assertThat(filters.get(0).operator()).isEqualTo("on");
+    }
+
+    @Test
+    void parseFilters_rejectsUnsupportedDateOperator() {
+        Map<String, Map<String, Object>> raw = Map.of(
+                "updatedAt", Map.of("operator", "contains", "value", "2024"));
+        assertThatThrownBy(() -> ProcessDraftListSpec.parseFilters(raw))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("updatedAt");
+    }
+
+    @Test
+    void columns_declareNameAndUpdatedAt() {
+        assertThat(PortalListColumnMeta.find(ProcessDraftListSpec.COLUMNS, "processDefinitionName").kind())
+                .isEqualTo(PortalListColumnMeta.Kind.TEXT);
+        assertThat(PortalListColumnMeta.find(ProcessDraftListSpec.COLUMNS, "updatedAt").kind())
+                .isEqualTo(PortalListColumnMeta.Kind.DATETIME);
     }
 
     @Test

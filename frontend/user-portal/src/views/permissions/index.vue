@@ -202,7 +202,7 @@
                       :filterable="field !== 'actions'"
                       :groupable="field !== 'actions'"
                       :movable="field !== 'actions'"
-                      :date-like="field === 'createdAt' || field === 'approvedAt'"
+                      :date-like="pendingIsDateColumn(field)"
                       @sort-asc="onPendingSort(field, 'ASC')"
                       @sort-desc="onPendingSort(field, 'DESC')"
                       @group-by="onPendingGroup(field)"
@@ -299,6 +299,10 @@
                 :initial="pendingFilterDialogField
                   ? pendingColState.filters[pendingFilterDialogField.field]
                   : null"
+                :column="pendingFilterColumn"
+                :options="pendingFilterOptions"
+                :options-loading="pendingFilterOptionsLoading"
+                @search="pendingFilterSearch"
                 @apply="onPendingApplyFilter"
                 @clear="onPendingClearFilter()"
               />
@@ -545,7 +549,7 @@
                       :is-grouped="apprPendingIsGrouped('createdAt')"
                       :can-move-left="apprPendingCanMoveLeft('createdAt')"
                       :can-move-right="apprPendingCanMoveRight('createdAt')"
-                      :date-like="true"
+                      :date-like="apprPendingIsDateColumn('createdAt')"
                       @sort-asc="onApprPendingSort('createdAt', 'ASC')"
                       @sort-desc="onApprPendingSort('createdAt', 'DESC')"
                       @group-by="onApprPendingGroup('createdAt')"
@@ -574,7 +578,7 @@
                       :is-grouped="apprPendingIsGrouped('updatedAt')"
                       :can-move-left="apprPendingCanMoveLeft('updatedAt')"
                       :can-move-right="apprPendingCanMoveRight('updatedAt')"
-                      :date-like="true"
+                      :date-like="apprPendingIsDateColumn('updatedAt')"
                       @sort-asc="onApprPendingSort('updatedAt', 'ASC')"
                       @sort-desc="onApprPendingSort('updatedAt', 'DESC')"
                       @group-by="onApprPendingGroup('updatedAt')"
@@ -607,6 +611,10 @@
                 :initial="historyFilterDialogField
                   ? historyColState.filters[historyFilterDialogField.field]
                   : null"
+                :column="historyFilterColumn"
+                :options="historyFilterOptions"
+                :options-loading="historyFilterOptionsLoading"
+                @search="historyFilterSearch"
                 @apply="onHistoryApplyFilter"
                 @clear="onHistoryClearFilter()"
               />
@@ -802,7 +810,7 @@
                       :is-grouped="apprHistoryIsGrouped('createdAt')"
                       :can-move-left="apprHistoryCanMoveLeft('createdAt')"
                       :can-move-right="apprHistoryCanMoveRight('createdAt')"
-                      :date-like="true"
+                      :date-like="apprHistoryIsDateColumn('createdAt')"
                       @sort-asc="onApprHistorySort('createdAt', 'ASC')"
                       @sort-desc="onApprHistorySort('createdAt', 'DESC')"
                       @group-by="onApprHistoryGroup('createdAt')"
@@ -868,6 +876,10 @@
                 :initial="apprPendingFilterDialogField
                   ? apprPendingColState.filters[apprPendingFilterDialogField.field]
                   : null"
+                :column="apprPendingFilterColumn"
+                :options="apprPendingFilterOptions"
+                :options-loading="apprPendingFilterOptionsLoading"
+                @search="apprPendingFilterSearch"
                 @apply="onApprPendingApplyFilter"
                 @clear="onApprPendingClearFilter()"
               />
@@ -1084,7 +1096,7 @@
                       :is-grouped="apprHistoryIsGrouped('approvedAt')"
                       :can-move-left="apprHistoryCanMoveLeft('approvedAt')"
                       :can-move-right="apprHistoryCanMoveRight('approvedAt')"
-                      :date-like="true"
+                      :date-like="apprHistoryIsDateColumn('approvedAt')"
                       @sort-asc="onApprHistorySort('approvedAt', 'ASC')"
                       @sort-desc="onApprHistorySort('approvedAt', 'DESC')"
                       @group-by="onApprHistoryGroup('approvedAt')"
@@ -1117,6 +1129,10 @@
                 :initial="apprHistoryFilterDialogField
                   ? apprHistoryColState.filters[apprHistoryFilterDialogField.field]
                   : null"
+                :column="apprHistoryFilterColumn"
+                :options="apprHistoryFilterOptions"
+                :options-loading="apprHistoryFilterOptionsLoading"
+                @search="apprHistoryFilterSearch"
                 @apply="onApprHistoryApplyFilter"
                 @clear="onApprHistoryClearFilter()"
               />
@@ -1583,10 +1599,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePendingApprovalStore } from '@/stores/pendingApproval'
 import { usePermissionFormatters } from '@/composables/permissions/usePermissionFormatters'
+import { usePermissionListFilterMetas } from '@/composables/permissions/usePermissionListFilterMetas'
 import { useMyBuRoles } from '@/composables/permissions/useMyBuRoles'
 import { useMyRequests } from '@/composables/permissions/useMyRequests'
 import { useApprovals } from '@/composables/permissions/useApprovals'
@@ -1776,6 +1793,48 @@ const {
   getTargetName,
   formatDateTime
 } = usePermissionFormatters(t)
+
+function permissionEnumLabel(field: string, code: string): string {
+  if (field === 'requestType') return getRequestTypeLabel(code)
+  if (field === 'status') return getStatusLabel(code)
+  return code
+}
+
+const permissionListFilters = usePermissionListFilterMetas({
+  pending: { state: pendingColState, openField: pendingFilterDialogField },
+  history: { state: historyColState, openField: historyFilterDialogField },
+  apprPending: { state: apprPendingColState, openField: apprPendingFilterDialogField },
+  apprHistory: { state: apprHistoryColState, openField: apprHistoryFilterDialogField },
+}, permissionEnumLabel)
+
+const {
+  isDateColumn: pendingIsDateColumn,
+  openColumn: pendingFilterColumn,
+  filterOptions: pendingFilterOptions,
+  optionsLoading: pendingFilterOptionsLoading,
+  onSearch: pendingFilterSearch,
+} = permissionListFilters.pending
+const {
+  isDateColumn: historyIsDateColumn,
+  openColumn: historyFilterColumn,
+  filterOptions: historyFilterOptions,
+  optionsLoading: historyFilterOptionsLoading,
+  onSearch: historyFilterSearch,
+} = permissionListFilters.history
+const {
+  isDateColumn: apprPendingIsDateColumn,
+  openColumn: apprPendingFilterColumn,
+  filterOptions: apprPendingFilterOptions,
+  optionsLoading: apprPendingFilterOptionsLoading,
+  onSearch: apprPendingFilterSearch,
+} = permissionListFilters.apprPending
+const {
+  isDateColumn: apprHistoryIsDateColumn,
+  openColumn: apprHistoryFilterColumn,
+  filterOptions: apprHistoryFilterOptions,
+  optionsLoading: apprHistoryFilterOptionsLoading,
+  onSearch: apprHistoryFilterSearch,
+} = permissionListFilters.apprHistory
 
 // 我的业务单元角色
 const { loadingMyBuRoles, myBuRoles, loadMyBuRoles } = useMyBuRoles()
@@ -2110,6 +2169,7 @@ const {
 
 // 初始化
 onMounted(async () => {
+  await permissionListFilters.ensureAll()
   await checkApproverStatus()
   loadMyBuRoles()
   loadExitBuMemberships()
@@ -2123,6 +2183,10 @@ onMounted(async () => {
     isApprover: isApprover.value,
     approvalPendingCount: approvalPendingCount.value
   })
+})
+
+onBeforeUnmount(() => {
+  permissionListFilters.dispose()
 })
 </script>
 

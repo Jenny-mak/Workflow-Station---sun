@@ -398,6 +398,12 @@ public class PermissionController {
         return ApiResponse.success(request);
     }
 
+    @GetMapping("/requests/columns")
+    @Operation(summary = "Get permission-request list column capabilities (kind / operators / enum codes)")
+    public ApiResponse<List<com.portal.util.PortalListColumnMeta>> getPermissionRequestColumns() {
+        return ApiResponse.success(permissionComponent.getPermissionRequestColumns());
+    }
+
     @GetMapping("/requests")
     @Operation(summary = "Get my request records",
             description = "Optional status filter. For completed history (non-PENDING), pass excludePending=true "

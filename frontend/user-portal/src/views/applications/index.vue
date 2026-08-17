@@ -86,7 +86,7 @@
                 :filterable="field !== 'actions'"
                 :groupable="field !== 'actions'"
                 :movable="field !== 'actions'"
-                :date-like="field === 'updatedAt'"
+                :date-like="draftIsDateColumn(field)"
                 @sort-asc="onDraftSort(field, 'ASC')"
                 @sort-desc="onDraftSort(field, 'DESC')"
                 @group-by="onDraftGroup(field)"
@@ -147,18 +147,6 @@
           :visible="true"
           @change="onDraftPageChange"
         />
-
-        <PortalListFilterDialog
-          v-model="draftCols.filterDialogVisible"
-          :title="draftCols.filterDialogField
-            ? `${t('mainTableView.colFilterBy')}: ${draftCols.filterDialogField.label}`
-            : t('mainTableView.colFilterBy')"
-          :initial="draftCols.filterDialogField
-            ? draftCols.state.filters[draftCols.filterDialogField.field]
-            : null"
-          @apply="onDraftApplyFilter"
-          @clear="onDraftClearFilter()"
-        />
       </template>
 
       <!-- Applications: server filter/sort; group headers on current page -->
@@ -206,7 +194,7 @@
                 :filterable="field !== 'actions'"
                 :groupable="field !== 'actions'"
                 :movable="field !== 'actions'"
-                :date-like="field === 'startTime'"
+                :date-like="appIsDateColumn(field)"
                 @sort-asc="onSort(field, 'ASC')"
                 @sort-desc="onSort(field, 'DESC')"
                 @group-by="onGroup(field)"
@@ -306,25 +294,44 @@
           :visible="true"
           @change="loadApplications"
         />
-
-        <PortalListFilterDialog
-          v-model="filterDialogVisible"
-          :title="filterDialogField
-            ? `${t('mainTableView.colFilterBy')}: ${filterDialogField.label}`
-            : t('mainTableView.colFilterBy')"
-          :initial="filterDialogField
-            ? colState.filters[filterDialogField.field]
-            : null"
-          @apply="onApplyColumnFilter"
-          @clear="onClearColumnFilter()"
-        />
       </template>
+
+      <PortalListFilterDialog
+        v-model="draftFilterDialogVisible"
+        :title="draftFilterDialogField
+          ? `${t('mainTableView.colFilterBy')}: ${draftFilterDialogField.label}`
+          : t('mainTableView.colFilterBy')"
+        :initial="draftFilterDialogField
+          ? draftCols.state.filters[draftFilterDialogField.field]
+          : null"
+        :column="draftFilterColumn"
+        :options="draftFilterOptions"
+        :options-loading="draftFilterOptionsLoading"
+        @search="draftFilterSearch"
+        @apply="onDraftApplyFilter"
+        @clear="onDraftClearFilter()"
+      />
+      <PortalListFilterDialog
+        v-model="filterDialogVisible"
+        :title="filterDialogField
+          ? `${t('mainTableView.colFilterBy')}: ${filterDialogField.label}`
+          : t('mainTableView.colFilterBy')"
+        :initial="filterDialogField
+          ? colState.filters[filterDialogField.field]
+          : null"
+        :column="appFilterColumn"
+        :options="appFilterOptions"
+        :options-loading="appFilterOptionsLoading"
+        @search="appFilterSearch"
+        @apply="onApplyColumnFilter"
+        @clear="onClearColumnFilter()"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -335,6 +342,7 @@ import PortalListPagination from '@/components/portal-list/PortalListPagination.
 import PortalListColumnHeader from '@/components/portal-list/PortalListColumnHeader.vue'
 import PortalListFilterDialog from '@/components/portal-list/PortalListFilterDialog.vue'
 import { usePortalListColumnState } from '@/composables/usePortalListColumnState'
+import { usePortalListFilterMeta, unwrapPortalListColumns } from '@/composables/usePortalListFilterMeta'
 import { PORTAL_LIST_DEFAULT_PAGE_SIZE } from '@/constants/portalListPagination'
 import {
   applyGroupHeaders,
@@ -385,6 +393,10 @@ const {
 } = cols
 
 const draftCols = usePortalListColumnState('applications-drafts')
+const {
+  filterDialogVisible: draftFilterDialogVisible,
+  filterDialogField: draftFilterDialogField,
+} = draftCols
 
 ensureOrder([...APP_DATA_FIELDS])
 draftCols.ensureOrder([...DRAFT_DATA_FIELDS])
@@ -540,6 +552,40 @@ const getStatusLabel = (status: string) => {
   return map[status] || status
 }
 
+function applicationEnumLabel(field: string, code: string): string {
+  return field === 'status' ? getStatusLabel(code) : code
+}
+
+const {
+  ensureColumns: ensureAppColumns,
+  isDateColumn: appIsDateColumn,
+  openColumn: appFilterColumn,
+  filterOptions: appFilterOptions,
+  optionsLoading: appFilterOptionsLoading,
+  onSearch: appFilterSearch,
+  dispose: disposeAppFilterMeta,
+} = usePortalListFilterMeta({
+  loadColumns: async () => unwrapPortalListColumns(await processApi.getMyApplicationColumns()),
+  state: colState,
+  openField: filterDialogField,
+  enumLabel: applicationEnumLabel,
+})
+
+const {
+  ensureColumns: ensureDraftColumns,
+  isDateColumn: draftIsDateColumn,
+  openColumn: draftFilterColumn,
+  filterOptions: draftFilterOptions,
+  optionsLoading: draftFilterOptionsLoading,
+  onSearch: draftFilterSearch,
+  dispose: disposeDraftFilterMeta,
+} = usePortalListFilterMeta({
+  loadColumns: async () => unwrapPortalListColumns(await processApi.getDraftColumns()),
+  state: draftCols.state,
+  openField: draftCols.filterDialogField,
+  enumLabel: applicationEnumLabel,
+})
+
 const loadApplications = async () => {
   loading.value = true
   try {
@@ -683,12 +729,16 @@ const loadDraftCount = async () => {
 }
 
 const handleTabChange = () => {
+  filterDialogVisible.value = false
+  filterDialogField.value = null
+  draftFilterDialogVisible.value = false
+  draftFilterDialogField.value = null
   pagination.page = 1
   draftPagination.page = 1
   if (activeTab.value === 'DRAFT') {
-    loadDrafts()
+    void ensureDraftColumns().then(() => loadDrafts())
   } else {
-    loadApplications()
+    void ensureAppColumns().then(() => loadApplications())
   }
 }
 
@@ -752,8 +802,14 @@ const handleWithdraw = async (row: Record<string, unknown>) => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await Promise.all([ensureAppColumns(), ensureDraftColumns()])
   void Promise.all([loadApplications(), loadDraftCount()])
+})
+
+onBeforeUnmount(() => {
+  disposeAppFilterMeta()
+  disposeDraftFilterMeta()
 })
 </script>
 

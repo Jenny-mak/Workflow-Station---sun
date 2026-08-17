@@ -373,6 +373,10 @@ public class PermissionComponent {
     /**
      * My permission requests with optional column filters / sort / groupBy (SQL whitelist).
      */
+    public java.util.List<com.portal.util.PortalListColumnMeta> getPermissionRequestColumns() {
+        return PermissionRequestListSpec.COLUMNS;
+    }
+
     public PermissionRequestListResult getMyRequests(
             String userId,
             PermissionRequestStatus status,

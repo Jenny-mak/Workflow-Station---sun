@@ -214,6 +214,14 @@ public class ProcessComponent {
                 userId, status, keyword, sortField, sortDirection, filters, groupBy, pageable);
     }
 
+    public java.util.List<com.portal.util.PortalListColumnMeta> getApplicationColumns() {
+        return com.portal.util.ProcessApplicationListSpec.COLUMNS;
+    }
+
+    public java.util.List<com.portal.util.PortalListColumnMeta> getDraftColumns() {
+        return com.portal.util.ProcessDraftListSpec.COLUMNS;
+    }
+
     /**
      * Returns process detail
      * @see ProcessApplicationQueryComponent#getProcessDetail(String)

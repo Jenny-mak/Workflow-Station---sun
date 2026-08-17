@@ -7,59 +7,51 @@ import org.springframework.data.jpa.domain.Specification;
 
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * JPA Specification + whitelist Sort for Portal process drafts.
+ *
+ * <p>{@link #COLUMNS} is the single declaration the header dialog, the filter predicates and
+ * the column-meta endpoint all derive from. {@code processDefinitionName} is resolved after
+ * load (not a stored column); it is still declared so the dialog can offer text operators,
+ * then stripped from the JPA filter list.
  */
 public final class ProcessDraftListSpec {
 
-    public static final Set<String> SORT_FIELDS = Set.of(
-            "processDefinitionKey", "updatedAt", "createdAt");
+    public static final List<PortalListColumnMeta> COLUMNS = List.of(
+            PortalListColumnMeta.text("processDefinitionName"),
+            PortalListColumnMeta.datetime("updatedAt"),
+            PortalListColumnMeta.sortOnly("createdAt", PortalListColumnMeta.Kind.DATETIME),
+            PortalListColumnMeta.of("processDefinitionKey", PortalListColumnMeta.Kind.TEXT, false, true, true));
 
-    public static final Set<String> GROUP_FIELDS = SORT_FIELDS;
+    public static final Set<String> SORT_FIELDS = PortalListColumnMeta.sortFields(COLUMNS);
 
-    /** SQL/entity filter fields (processDefinitionName is FE-only alias → processDefinitionKey). */
-    public static final Set<String> FILTER_FIELDS = Set.of(
-            "processDefinitionKey", "updatedAt", "createdAt");
+    public static final Set<String> GROUP_FIELDS = PortalListColumnMeta.groupFields(COLUMNS);
 
-    private static final Set<String> DATE_FIELDS = Set.of("updatedAt", "createdAt");
+    public static final Set<String> FILTER_FIELDS = PortalListColumnMeta.filterFields(COLUMNS);
 
     private ProcessDraftListSpec() {
     }
 
     public static String sanitizeGroupBy(String groupBy) {
+        if ("processDefinitionName".equals(groupBy != null ? groupBy.trim() : "")) {
+            groupBy = "processDefinitionKey";
+        }
         return PortalColumnFilterSupport.sanitizeGroupBy(groupBy, GROUP_FIELDS);
     }
 
     public static List<PortalColumnFilterSupport.ColumnFilter> parseFilters(Map<String, Map<String, Object>> raw) {
-        if (raw == null || raw.isEmpty()) {
-            return List.of();
-        }
-        Map<String, Map<String, Object>> mapped = new LinkedHashMap<>();
-        for (Map.Entry<String, Map<String, Object>> e : raw.entrySet()) {
-            if (e.getKey() == null) {
-                continue;
-            }
-            String fe = e.getKey().trim();
-            // processDefinitionName is resolved after load — handled in ProcessDraftComponent, not Spec.
-            if ("processDefinitionName".equals(fe)) {
-                continue;
-            } else if (DATE_FIELDS.contains(fe)) {
-                Object op = e.getValue() != null ? e.getValue().get("operator") : null;
-                String operator = op != null ? String.valueOf(op).trim() : "";
-                if (!"isNull".equals(operator) && !"isNotNull".equals(operator)) {
-                    continue;
-                }
-                mapped.put(fe, e.getValue());
-            } else {
-                mapped.put(fe, e.getValue());
+        List<PortalColumnFilterSupport.ColumnFilter> parsed = PortalColumnFilterSupport.parseFilters(raw, COLUMNS);
+        List<PortalColumnFilterSupport.ColumnFilter> entity = new ArrayList<>();
+        for (PortalColumnFilterSupport.ColumnFilter filter : parsed) {
+            if (!"processDefinitionName".equals(filter.field())) {
+                entity.add(filter);
             }
         }
-        return PortalColumnFilterSupport.parseFilters(mapped, FILTER_FIELDS);
+        return entity;
     }
 
     /** True when FE asked to filter by resolved display name (not stored on entity). */
@@ -99,8 +91,12 @@ public final class ProcessDraftListSpec {
         if ("processDefinitionName".equals(field != null ? field.trim() : "")) {
             field = "processDefinitionKey";
         }
+        String group = groupBy;
+        if ("processDefinitionName".equals(group != null ? group.trim() : "")) {
+            group = "processDefinitionKey";
+        }
         return PortalColumnFilterSupport.withSort(
-                pageable, field, sortDirection, groupBy, SORT_FIELDS, "updatedAt", Sort.Direction.DESC);
+                pageable, field, sortDirection, group, SORT_FIELDS, "updatedAt", Sort.Direction.DESC);
     }
 
     public static Specification<ProcessDraft> build(String userId, List<PortalColumnFilterSupport.ColumnFilter> filters) {
@@ -109,7 +105,7 @@ public final class ProcessDraftListSpec {
             predicates.add(cb.equal(root.get("userId"), userId));
             if (filters != null) {
                 for (PortalColumnFilterSupport.ColumnFilter filter : filters) {
-                    Predicate p = buildFilterPredicate(root, cb, filter);
+                    Predicate p = PortalColumnFilterSupport.buildPredicate(root, cb, COLUMNS, filter);
                     if (p != null) {
                         predicates.add(p);
                     }
@@ -117,20 +113,5 @@ public final class ProcessDraftListSpec {
             }
             return cb.and(predicates.toArray(Predicate[]::new));
         };
-    }
-
-    private static Predicate buildFilterPredicate(
-            jakarta.persistence.criteria.Root<ProcessDraft> root,
-            jakarta.persistence.criteria.CriteriaBuilder cb,
-            PortalColumnFilterSupport.ColumnFilter filter) {
-        if (filter == null || filter.field() == null || filter.operator() == null) {
-            return null;
-        }
-        String op = filter.operator().trim();
-        String value = filter.value() != null ? filter.value() : "";
-        if (DATE_FIELDS.contains(filter.field())) {
-            return PortalColumnFilterSupport.dateNullOperator(root, cb, filter.field(), op);
-        }
-        return PortalColumnFilterSupport.textOperator(root, cb, filter.field(), op, value);
     }
 }

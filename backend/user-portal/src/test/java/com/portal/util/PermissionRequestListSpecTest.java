@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("PermissionRequestListSpec")
 class PermissionRequestListSpecTest {
@@ -17,14 +18,13 @@ class PermissionRequestListSpecTest {
     void parseFilters_mapsCamelAndSnake() {
         Map<String, Map<String, Object>> raw = new LinkedHashMap<>();
         raw.put("requestType", Map.of("operator", "eq", "value", "BUSINESS_UNIT_JOIN"));
-        raw.put("business_unit_name", Map.of("operator", "contains", "value", "Sales"));
         raw.put("createdAt", Map.of("operator", "isNotNull", "value", ""));
         raw.put("unknown", Map.of("operator", "eq", "value", "x"));
 
         List<PortalColumnFilterSupport.ColumnFilter> filters = PermissionRequestListSpec.parseFilters(raw);
 
         assertThat(filters).extracting(PortalColumnFilterSupport.ColumnFilter::field)
-                .containsExactly("request_type", "business_unit_name", "created_at");
+                .containsExactly("request_type", "created_at");
     }
 
     @Test
@@ -40,6 +40,35 @@ class PermissionRequestListSpecTest {
         assertThat(sql).contains("LIKE ? ESCAPE");
         assertThat(sql).contains("created_at IS NOT NULL");
         assertThat(args).containsExactly("pending", "%need%");
+    }
+
+    @Test
+    void appendFilterSql_dateOnBindsDayRange() {
+        List<Object> args = new ArrayList<>();
+        String sql = PermissionRequestListSpec.appendFilterSql(List.of(
+                new PortalColumnFilterSupport.ColumnFilter("created_at", "on", "2026-08-14")
+        ), args);
+        assertThat(sql).contains("created_at >= ?").contains("created_at < ?");
+        assertThat(args).hasSize(2);
+    }
+
+    @Test
+    void parseFilters_rejectsContainsOnTimestamp() {
+        Map<String, Map<String, Object>> raw = Map.of(
+                "createdAt", Map.of("operator", "contains", "value", "2026"));
+        assertThatThrownBy(() -> PermissionRequestListSpec.parseFilters(raw))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("createdAt");
+    }
+
+    @Test
+    void columns_declareKinds() {
+        assertThat(PortalListColumnMeta.find(PermissionRequestListSpec.COLUMNS, "requestType").kind())
+                .isEqualTo(PortalListColumnMeta.Kind.ENUM);
+        assertThat(PortalListColumnMeta.find(PermissionRequestListSpec.COLUMNS, "submittedBy").kind())
+                .isEqualTo(PortalListColumnMeta.Kind.USER);
+        assertThat(PortalListColumnMeta.find(PermissionRequestListSpec.COLUMNS, "createdAt").kind())
+                .isEqualTo(PortalListColumnMeta.Kind.DATETIME);
     }
 
     @Test

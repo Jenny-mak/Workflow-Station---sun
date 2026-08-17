@@ -109,4 +109,14 @@ class PortalColumnFilterSupportTest {
         assertThat(pageable.getPageNumber()).isEqualTo(1);
         assertThat(pageable.getPageSize()).isEqualTo(25);
     }
+
+    @Test
+    void appendDateFilterSql_onBindsHalfOpenDayRange() {
+        java.util.List<Object> args = new java.util.ArrayList<>();
+        String sql = PortalColumnFilterSupport.appendDateFilterSql("created_at", "on", "2026-08-14", args);
+        assertThat(sql).isEqualTo(" AND created_at >= ? AND created_at < ?");
+        assertThat(args).containsExactly(
+                LocalDate.parse("2026-08-14").atStartOfDay(),
+                LocalDate.parse("2026-08-15").atStartOfDay());
+    }
 }

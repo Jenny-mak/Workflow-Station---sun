@@ -275,16 +275,26 @@ public class ProcessController {
         }
         int safePage = Math.max(0, page);
         int safeSize = size < 1 ? 20 : Math.min(size, 100);
-        var result = processComponent.getMyApplications(
-                userId,
-                status,
-                keyword,
-                sortField,
-                sortDirection,
-                parseApplicationFilters(filters),
-                groupBy,
-                PageRequest.of(safePage, safeSize));
-        return ApiResponse.success(result.toPageResponse());
+        try {
+            var result = processComponent.getMyApplications(
+                    userId,
+                    status,
+                    keyword,
+                    sortField,
+                    sortDirection,
+                    parseApplicationFilters(filters),
+                    groupBy,
+                    PageRequest.of(safePage, safeSize));
+            return ApiResponse.success(result.toPageResponse());
+        } catch (IllegalArgumentException ex) {
+            throw new PortalException("400", ex.getMessage());
+        }
+    }
+
+    @GetMapping("/my-applications/columns")
+    @Operation(summary = "获取我的申请列表的列能力（类型 / 可用算子 / 枚举取值）")
+    public ApiResponse<List<com.portal.util.PortalListColumnMeta>> getMyApplicationColumns() {
+        return ApiResponse.success(processComponent.getApplicationColumns());
     }
 
     /**
@@ -441,16 +451,26 @@ public class ProcessController {
         if (page != null) {
             int safePage = Math.max(0, page);
             int safeSize = size == null || size < 1 ? 20 : Math.min(size, 200);
-            return ApiResponse.success(processComponent.getDraftPage(
-                    userId,
-                    safePage,
-                    safeSize,
-                    sortField,
-                    sortDirection,
-                    parseApplicationFilters(filters),
-                    groupBy));
+            try {
+                return ApiResponse.success(processComponent.getDraftPage(
+                        userId,
+                        safePage,
+                        safeSize,
+                        sortField,
+                        sortDirection,
+                        parseApplicationFilters(filters),
+                        groupBy));
+            } catch (IllegalArgumentException ex) {
+                throw new PortalException("400", ex.getMessage());
+            }
         }
         return ApiResponse.success(processComponent.getDraftList(userId));
+    }
+
+    @GetMapping("/drafts/columns")
+    @Operation(summary = "获取草稿列表的列能力（类型 / 可用算子）")
+    public ApiResponse<List<com.portal.util.PortalListColumnMeta>> getDraftColumns() {
+        return ApiResponse.success(processComponent.getDraftColumns());
     }
     
     @DeleteMapping("/drafts/{draftId}")

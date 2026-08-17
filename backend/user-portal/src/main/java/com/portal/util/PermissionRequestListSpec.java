@@ -1,8 +1,11 @@
 package com.portal.util;
 
+import com.portal.enums.PermissionRequestStatus;
+import com.portal.enums.PermissionRequestType;
 import org.springframework.data.domain.Sort;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -12,8 +15,23 @@ import java.util.Set;
  * JDBC whitelist filters / sort / groupBy for Portal permission "my requests".
  *
  * <p>Columns are physical snake_case names used in {@code up_permission_request}.
+ * {@link #COLUMNS} uses the FE field names the header dialog sends.
  */
 public final class PermissionRequestListSpec {
+
+    public static final List<PortalListColumnMeta> COLUMNS = List.of(
+            PortalListColumnMeta.enumOf("requestType", PermissionRequestType.class),
+            PortalListColumnMeta.text("requestTarget"),
+            PortalListColumnMeta.user("beneficiary"),
+            PortalListColumnMeta.user("applicant"),
+            PortalListColumnMeta.user("applicantId"),
+            PortalListColumnMeta.user("submittedBy"),
+            PortalListColumnMeta.text("reason"),
+            PortalListColumnMeta.datetime("createdAt"),
+            PortalListColumnMeta.datetime("updatedAt"),
+            PortalListColumnMeta.enumOf("status", PermissionRequestStatus.class),
+            PortalListColumnMeta.text("approverComment"),
+            PortalListColumnMeta.datetime("approvedAt"));
 
     /** FE / API field → SQL column. {@code requestTarget} is handled specially (BU/VG/OU OR). */
     public static final Map<String, String> FIELD_TO_COLUMN = Map.ofEntries(
@@ -78,29 +96,51 @@ public final class PermissionRequestListSpec {
         if (raw == null || raw.isEmpty()) {
             return List.of();
         }
-        List<PortalColumnFilterSupport.ColumnFilter> out = new ArrayList<>();
+        Map<String, Map<String, Object>> canonical = new LinkedHashMap<>();
         for (Map.Entry<String, Map<String, Object>> e : raw.entrySet()) {
             if (e.getKey() == null || e.getValue() == null) {
                 continue;
             }
-            String col = resolveColumn(e.getKey().trim());
-            if (col == null) {
+            String canonicalField = toCanonicalField(e.getKey().trim());
+            if (canonicalField == null || "requestTarget".equals(canonicalField)) {
                 continue;
             }
-            Map<String, Object> body = e.getValue();
-            Object opObj = body.get("operator");
-            String operator = opObj != null ? String.valueOf(opObj).trim() : "";
-            if (operator.isEmpty()) {
-                continue;
+            canonical.put(canonicalField, e.getValue());
+        }
+        List<PortalColumnFilterSupport.ColumnFilter> parsed =
+                PortalColumnFilterSupport.parseFilters(canonical, COLUMNS);
+        List<PortalColumnFilterSupport.ColumnFilter> out = new ArrayList<>();
+        for (PortalColumnFilterSupport.ColumnFilter filter : parsed) {
+            String sql = resolveColumn(filter.field());
+            if (sql != null) {
+                out.add(new PortalColumnFilterSupport.ColumnFilter(sql, filter.operator(), filter.value()));
             }
-            Object valObj = body.get("value");
-            String value = valObj != null ? String.valueOf(valObj) : "";
-            if (!"isNull".equals(operator) && !"isNotNull".equals(operator) && value.isBlank()) {
-                continue;
-            }
-            out.add(new PortalColumnFilterSupport.ColumnFilter(col, operator, value));
         }
         return out;
+    }
+
+    /**
+     * Map a request key (FE name, snake_case, or alias) onto the {@link #COLUMNS} field,
+     * or null when the list does not declare it.
+     */
+    static String toCanonicalField(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        if (PortalListColumnMeta.find(COLUMNS, raw) != null) {
+            return raw;
+        }
+        String sql = resolveColumn(raw);
+        if (sql == null) {
+            return null;
+        }
+        for (PortalListColumnMeta column : COLUMNS) {
+            String mapped = resolveColumn(column.field());
+            if (sql.equals(mapped)) {
+                return column.field();
+            }
+        }
+        return null;
     }
 
     /**
@@ -119,11 +159,7 @@ public final class PermissionRequestListSpec {
             String op = filter.operator().trim();
             String value = filter.value() != null ? filter.value() : "";
             if (DATE_COLUMNS.contains(col)) {
-                if ("isNull".equals(op)) {
-                    sb.append(" AND ").append(col).append(" IS NULL");
-                } else if ("isNotNull".equals(op)) {
-                    sb.append(" AND ").append(col).append(" IS NOT NULL");
-                }
+                sb.append(PortalColumnFilterSupport.appendDateFilterSql(col, op, value, args));
                 continue;
             }
             switch (op) {
@@ -214,6 +250,11 @@ public final class PermissionRequestListSpec {
         if (op.isEmpty()) {
             return "";
         }
+        PortalListColumnMeta target = PortalListColumnMeta.find(COLUMNS, "requestTarget");
+        if (target != null && !target.allowsOperator(op)) {
+            throw new IllegalArgumentException(
+                    "Operator '" + op + "' is not supported for column 'requestTarget'");
+        }
         if (!"isNull".equals(op) && !"isNotNull".equals(op) && value.isBlank()) {
             return "";
         }
@@ -223,36 +264,40 @@ public final class PermissionRequestListSpec {
                     + " AND COALESCE(organization_unit_name, '') = '')";
             case "isNotNull" -> " AND (COALESCE(business_unit_name, '') <> '' OR COALESCE(virtual_group_name, '') <> ''"
                     + " OR COALESCE(organization_unit_name, '') <> '')";
-            case "eq" -> {
+            case "eq", "ne" -> {
                 StringBuilder sb = new StringBuilder(" AND (");
                 for (int i = 0; i < cols.length; i++) {
                     if (i > 0) {
-                        sb.append(" OR ");
+                        sb.append("eq".equals(op) ? " OR " : " AND ");
                     }
-                    sb.append("LOWER(COALESCE(").append(cols[i]).append(", '')) = ?");
+                    sb.append("LOWER(COALESCE(").append(cols[i]).append(", '')) ")
+                            .append("eq".equals(op) ? "= ?" : "<> ?");
                     args.add(value.toLowerCase(Locale.ROOT));
                 }
                 sb.append(')');
                 yield sb.toString();
             }
-            case "contains", "startsWith", "endsWith" -> {
+            case "contains", "notContains", "startsWith", "endsWith" -> {
                 String like = switch (op) {
                     case "startsWith" -> PortalColumnFilterSupport.escapeLike(value.toLowerCase(Locale.ROOT)) + "%";
                     case "endsWith" -> "%" + PortalColumnFilterSupport.escapeLike(value.toLowerCase(Locale.ROOT));
                     default -> "%" + PortalColumnFilterSupport.escapeLike(value.toLowerCase(Locale.ROOT)) + "%";
                 };
+                boolean negate = "notContains".equals(op);
                 StringBuilder sb = new StringBuilder(" AND (");
                 for (int i = 0; i < cols.length; i++) {
                     if (i > 0) {
-                        sb.append(" OR ");
+                        sb.append(negate ? " AND " : " OR ");
                     }
-                    sb.append("LOWER(COALESCE(").append(cols[i]).append(", '')) LIKE ? ESCAPE '\\'");
+                    sb.append("LOWER(COALESCE(").append(cols[i]).append(", '')) ")
+                            .append(negate ? "NOT LIKE ? ESCAPE '\\'" : "LIKE ? ESCAPE '\\'");
                     args.add(like);
                 }
                 sb.append(')');
                 yield sb.toString();
             }
-            default -> "";
+            default -> throw new IllegalArgumentException(
+                    "Operator '" + op + "' is not supported for column 'requestTarget'");
         };
     }
 
