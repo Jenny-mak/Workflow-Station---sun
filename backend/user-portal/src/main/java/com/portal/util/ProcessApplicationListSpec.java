@@ -21,10 +21,19 @@ import java.util.Set;
 /**
  * Builds JPA {@link Specification} + whitelist {@link Sort} for Portal "My Applications".
  *
- * <p>Filter JSON shape (same as MTV / portal list grid):
- * {@code {"field":{"operator":"contains","value":"x"},...}}
+ * <p>{@link #COLUMNS} is the header-dialog declaration (FE field names). Sort/group still use
+ * entity paths ({@code currentNode} not {@code currentStepName}) because the page already maps
+ * those before the request leaves the browser.
  */
 public final class ProcessApplicationListSpec {
+
+    public static final List<PortalListColumnMeta> COLUMNS = List.of(
+            PortalListColumnMeta.of("requestId", PortalListColumnMeta.Kind.TEXT, true, false, true),
+            PortalListColumnMeta.text("businessKey"),
+            PortalListColumnMeta.text("currentStepName"),
+            PortalListColumnMeta.text("currentAssignee"),
+            PortalListColumnMeta.datetime("startTime"),
+            PortalListColumnMeta.enumCodes("status", "RUNNING", "COMPLETED", "WITHDRAWN", "REJECTED"));
 
     public static final Set<String> SORT_FIELDS = Set.of(
             "startTime", "status", "businessKey", "currentNode", "currentAssignee", "processDefinitionName");
@@ -32,8 +41,7 @@ public final class ProcessApplicationListSpec {
     /** Same whitelist as {@link #SORT_FIELDS} — used for groupBy primary ordering + groupCounts. */
     public static final Set<String> GROUP_FIELDS = SORT_FIELDS;
 
-    public static final Set<String> FILTER_FIELDS = Set.of(
-            "businessKey", "processDefinitionName", "currentNode", "currentAssignee", "status", "title", "id");
+    public static final Set<String> FILTER_FIELDS = PortalListColumnMeta.filterFields(COLUMNS);
 
     private static final Set<String> KEYWORD_FIELDS = Set.of(
             "businessKey", "processDefinitionName", "currentNode", "currentAssignee", "title", "id");
@@ -60,61 +68,17 @@ public final class ProcessApplicationListSpec {
 
     /**
      * Parse map-shaped filters JSON object into whitelist filters (aliases applied).
-     * Unknown fields / empty value (except isNull/isNotNull) are skipped.
+     * Unknown fields are dropped. A declared column asked for an unsupported operator throws.
      */
     public static List<ColumnFilter> parseFilters(Map<String, Map<String, Object>> raw) {
-        if (raw == null || raw.isEmpty()) {
-            return List.of();
-        }
+        List<PortalColumnFilterSupport.ColumnFilter> parsed =
+                PortalColumnFilterSupport.parseFilters(raw, COLUMNS);
         List<ColumnFilter> out = new ArrayList<>();
-        for (Map.Entry<String, Map<String, Object>> e : raw.entrySet()) {
-            if (e.getKey() == null || e.getValue() == null) {
-                continue;
-            }
-            String feField = e.getKey().trim();
-            Map<String, Object> body = e.getValue();
-            Object opObj = body.get("operator");
-            String operator = opObj != null ? String.valueOf(opObj).trim() : "";
-            if (operator.isEmpty()) {
-                continue;
-            }
-            Object valObj = body.get("value");
-            String value = valObj != null ? String.valueOf(valObj) : "";
-            if (!"isNull".equals(operator) && !"isNotNull".equals(operator) && value.isBlank()) {
-                continue;
-            }
-            ColumnFilter mapped = mapFeField(feField, operator, value);
-            if (mapped != null) {
-                out.add(mapped);
-            }
+        for (PortalColumnFilterSupport.ColumnFilter filter : parsed) {
+            String field = "currentStepName".equals(filter.field()) ? "currentNode" : filter.field();
+            out.add(new ColumnFilter(field, filter.operator(), filter.value()));
         }
         return out;
-    }
-
-    /**
-     * Map FE column ids → entity fields. {@code requestId} → best-effort id/businessKey contains;
-     * {@code currentStepName} → {@code currentNode}; {@code startTime} only isNull/isNotNull.
-     */
-    static ColumnFilter mapFeField(String feField, String operator, String value) {
-        if ("requestId".equals(feField)) {
-            // Best-effort: treat as contains across id + businessKey regardless of requested op
-            // except isNull / isNotNull which still apply to both.
-            return new ColumnFilter("requestId", operator, value);
-        }
-        if ("currentStepName".equals(feField)) {
-            return new ColumnFilter("currentNode", operator, value);
-        }
-        if ("startTime".equals(feField)) {
-            if ("isNull".equals(operator) || "isNotNull".equals(operator)) {
-                return new ColumnFilter("startTime", operator, value);
-            }
-            // Value compare on timestamps is hard / ambiguous from text grid filters — skip.
-            return null;
-        }
-        if (!FILTER_FIELDS.contains(feField)) {
-            return null;
-        }
-        return new ColumnFilter(feField, operator, value);
     }
 
     public static Pageable withSort(Pageable pageable, String sortField, String sortDirection) {
@@ -218,14 +182,7 @@ public final class ProcessApplicationListSpec {
         }
 
         if ("startTime".equals(filter.field())) {
-            Path<Object> path = root.get("startTime");
-            if ("isNull".equals(op)) {
-                return cb.isNull(path);
-            }
-            if ("isNotNull".equals(op)) {
-                return cb.isNotNull(path);
-            }
-            return null;
+            return PortalColumnFilterSupport.dateOperator(root, cb, "startTime", op, value);
         }
 
         return textOperator(root, cb, filter.field(), op, value);

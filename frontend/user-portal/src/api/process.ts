@@ -1,5 +1,6 @@
 import request from './request'
 import type { MiAssignmentsMap } from '@/utils/miAssignmentConfig'
+import type { PortalListColumnMeta } from '@/utils/portalListGridRuntime'
 
 export interface ProcessDefinition {
   id: string
@@ -109,6 +110,10 @@ export const processApi = {
     return request.get('/processes/my-applications', { params })
   },
 
+  getMyApplicationColumns() {
+    return request.get<{ data: PortalListColumnMeta[] }>('/processes/my-applications/columns')
+  },
+
   // 获取流程详情
   getProcessDetail(processId: string) {
     return request.get<ProcessInstance>(`/processes/${processId}`)
@@ -185,6 +190,10 @@ export const processApi = {
           groupCounts?: Record<string, number>
         }
     >('/processes/drafts', { params })
+  },
+
+  getDraftColumns() {
+    return request.get<{ data: PortalListColumnMeta[] }>('/processes/drafts/columns')
   },
   
   // 根据ID删除草稿

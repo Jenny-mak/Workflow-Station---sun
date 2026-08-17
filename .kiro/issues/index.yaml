@@ -1971,3 +1971,24 @@
     Playwright 8 张截图 + 运行时断言：contains-on-timestamp → HTTP 400、
     审计按天筛选 20 行 → 2 行且全部落在 2026-08-12。
     截图：frontend/user-portal/verification-screenshots/2026-08-14_delegations-*.png
+
+- id: "1521"
+  status: fixed
+  fixed_at: "2026-08-14"
+  severity: major
+  category: bug
+  summary: "Portal Applications / Drafts / Permissions 列头筛选仍只给文本算子，日期条件被静默丢弃"
+  file: "backend/user-portal/src/main/java/com/portal/util/ProcessApplicationListSpec.java"
+  note: |
+    反例：My Applications 的 Start Time、Drafts 的 Save Time、Permissions 的 Created At
+    列头 Filter by 仍是 Contains + 文本框；对日期列传 contains 后 ListSpec continue 丢掉条件，
+    接口返回全量。Permissions 的 Request Type / Submitted By 同样没有码值/人员选择器。
+    根因：PR-B（#1520）只接了 Delegations；这三个 SQL 列表仍是字段名白名单。
+    修复：三个 ListSpec 增加 COLUMNS 声明（TEXT/ENUM/USER/DATETIME）；
+    GET /processes/my-applications/columns、/processes/drafts/columns、
+    /permissions/requests/columns；JDBC 日期按天比较走 appendDateFilterSql；
+    非法算子抛 IllegalArgumentException（ProcessController 转 PortalException 400，
+    因其本地 IAE handler 会变成 500）。前端三个视图接 usePortalListFilterMeta。
+    验证：ProcessApplicationListSpecTest / ProcessDraftListSpecTest /
+    PermissionRequestListSpecTest / PortalColumnFilterSupportTest；vitest；Playwright。
+    截图：frontend/user-portal/verification-screenshots/2026-08-14_sql-lists-*.png

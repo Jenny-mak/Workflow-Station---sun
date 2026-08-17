@@ -9,7 +9,7 @@
 |------|------|------|
 | 🔓 Open | **12** | `index.yaml` |
 | ⏸️ Wontfix | **1** | `index.yaml` |
-| ✅ Fixed | **见 index.yaml** | `index.yaml` 内 `status: fixed` 条目（含 #1403–#1404、#1409+、#1461–#1495、#1497–#1500、#1504、#1512–#1516、#1520 等） |
+| ✅ Fixed | **见 index.yaml** | `index.yaml` 内 `status: fixed` 条目（含 #1403–#1404、#1409+、#1461–#1495、#1497–#1500、#1504、#1512–#1516、#1520–#1521 等） |
 
 
 按严重度的分布见 `index.yaml` 各条目的 `severity` 字段（`status: open` / `fixed` / `wontfix`）。
