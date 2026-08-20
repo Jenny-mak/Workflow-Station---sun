@@ -574,6 +574,16 @@ NUMBER / DATETIME / TEXT…；LOOKUP 按存的主键当 TEXT）。**一律 `grou
 **反例：** status/language 出现 contains；只改 `groupable=true` 未实现 GROUP BY；把 User 行写入
 `rt_table_data_rows`。
 
+**实现收尾（与 Views 同范式）：** 列元数据随 `POST …/data` 的 page 返回（不另开 `/columns`）；
+请求体非空 `groupBy` → 400；查询耗时 >1s 打 WARN（`listKey` / `tableId` / `page` / `size` /
+`total` / `elapsedMs`，不含筛选值与行内容）。
+
+**验证截图（PNG gitignore，PR 描述写绝对路径）：**
+
+- `frontend/user-portal/verification-screenshots/2026-08-20_list-relation-tables-shared.png`
+- `frontend/user-portal/verification-screenshots/2026-08-20_list-relation-user-after-enum.png`
+- `frontend/user-portal/verification-screenshots/2026-08-20_list-relation-user-status-enum-filter.png`
+
 ## 7. 影响面
 
 
