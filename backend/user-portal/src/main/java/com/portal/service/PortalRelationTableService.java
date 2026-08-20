@@ -1,7 +1,8 @@
 package com.portal.service;
 
 import com.platform.common.dto.RelationTableDTO;
-import com.portal.dto.PageResponse;
+import com.portal.dto.RelationTableDataPage;
+import com.portal.dto.RelationTableQueryRequest;
 
 import java.util.List;
 import java.util.Map;
@@ -19,10 +20,9 @@ public interface PortalRelationTableService {
     List<RelationTableDTO> getVisibleTables(String userId);
 
     /**
-     * 只读分页查询表数据
+     * 只读分页查询表数据：真分页 + 列声明；筛选 / 排序推入 SQL。不支持分组。
      */
-    PageResponse<Map<String, Object>> queryTableData(Long tableId, String userId,
-                                                      int page, int size, String search);
+    RelationTableDataPage queryTableData(Long tableId, String userId, RelationTableQueryRequest request);
 
     /**
      * 导出 CSV

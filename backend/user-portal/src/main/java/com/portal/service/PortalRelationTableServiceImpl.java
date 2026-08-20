@@ -13,7 +13,11 @@ import com.platform.common.relationtable.RelationTableTemplateService;
 import com.platform.common.relationtable.RowValidationResult;
 import com.platform.security.util.SecurityContextUtils;
 import com.portal.component.RoleAccessComponent;
-import com.portal.dto.PageResponse;
+import com.portal.dto.PortalListColumnMeta;
+import com.portal.dto.RelationTableDataPage;
+import com.portal.dto.RelationTableQueryRequest;
+import com.portal.util.ListFilterSql;
+import com.portal.util.RelationTableColumnSpec;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -39,6 +43,20 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
             "id", "username", "display_name", "full_name", "email", "employee_id", "status", "language");
     private static final List<String> DEFAULT_SYSTEM_USER_SEARCH_FIELDS = List.of(
             "username", "display_name", "full_name", "email", "employee_id");
+    /** Matches {@code chk_sys_user_status} and common Admin aliases stored as-is. */
+    private static final List<PortalListColumnMeta.Option> SYSTEM_USER_STATUS_OPTIONS = List.of(
+            new PortalListColumnMeta.Option("ACTIVE", "Active"),
+            new PortalListColumnMeta.Option("INACTIVE", "Inactive"),
+            new PortalListColumnMeta.Option("DISABLED", "Disabled"),
+            new PortalListColumnMeta.Option("LOCKED", "Locked"),
+            new PortalListColumnMeta.Option("PENDING", "Pending"));
+    /** Covers underscore and hyphen locale codes seen in {@code sys_users.language}. */
+    private static final List<PortalListColumnMeta.Option> SYSTEM_USER_LANGUAGE_OPTIONS = List.of(
+            new PortalListColumnMeta.Option("en", "English"),
+            new PortalListColumnMeta.Option("zh_CN", "简体中文 (zh_CN)"),
+            new PortalListColumnMeta.Option("zh-CN", "简体中文 (zh-CN)"),
+            new PortalListColumnMeta.Option("zh_TW", "繁體中文 (zh_TW)"),
+            new PortalListColumnMeta.Option("zh-TW", "繁體中文 (zh-TW)"));
 
     private final JdbcTemplate jdbcTemplate;
     private final RoleAccessComponent roleAccessComponent;
@@ -121,56 +139,59 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<Map<String, Object>> queryTableData(Long tableId, String userId,
-                                                             int page, int size, String search) {
-        try {
-            // The built-in System User table is readable by any authenticated user (no rt_table_access grant).
-            if (SYSTEM_USER_TABLE_ID.equals(tableId)) {
-                return querySystemUserTableData(page, size, search);
-            }
-
-            // Verify access
-            Set<String> userRoleIds = getUserRoleIds(userId);
-            if (!hasAccess(tableId, userRoleIds)) {
-                return PageResponse.of(Collections.emptyList(), page, size, 0);
-            }
-
-            if (!isDeployedRelationTable(tableId)) {
-                return PageResponse.of(Collections.emptyList(), page, size, 0);
-            }
-
-            List<Object> searchParams = new ArrayList<>();
-            String searchClause = buildJsonDataSearchClause(getFieldNames(tableId), search, searchParams);
-
-            List<Object> countParams = new ArrayList<>();
-            countParams.add(tableId);
-            countParams.addAll(searchParams);
-            Long total = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM " + DATA_ROWS_TABLE + " WHERE table_id = ?" + searchClause,
-                    Long.class, countParams.toArray());
-            if (total == null) total = 0L;
-
-            List<Object> dataParams = new ArrayList<>();
-            dataParams.add(tableId);
-            dataParams.addAll(searchParams);
-            dataParams.add(size);
-            dataParams.add(page * size);
-            List<Map<String, Object>> rows = jdbcTemplate.query(
-                    "SELECT data, status FROM " + DATA_ROWS_TABLE + " WHERE table_id = ?" + searchClause
-                            + " ORDER BY id LIMIT ? OFFSET ?",
-                    (rs, rowNum) -> {
-                        Map<String, Object> row = parseJsonRow(rs.getString("data"));
-                        // Surface the row-level status column so the UI can toggle Active/Inactive.
-                        row.put("status", rs.getString("status"));
-                        return row;
-                    },
-                    dataParams.toArray());
-
-            return PageResponse.of(rows, page, size, total);
-        } catch (Exception e) {
-            log.warn("Failed to query table data for tableId {}: {}", tableId, e.getMessage());
-            return PageResponse.of(Collections.emptyList(), page, size, 0);
+    public RelationTableDataPage queryTableData(Long tableId, String userId,
+                                                RelationTableQueryRequest request) {
+        // The built-in System User table is readable by any authenticated user (no rt_table_access grant).
+        if (SYSTEM_USER_TABLE_ID.equals(tableId)) {
+            return querySystemUserTableData(request);
         }
+
+        Set<String> userRoleIds = getUserRoleIds(userId);
+        if (!hasAccess(tableId, userRoleIds)) {
+            throw new AccessDeniedException("Access denied for this table");
+        }
+        if (!isDeployedRelationTable(tableId)) {
+            throw new IllegalArgumentException("Table not found or not deployed: " + tableId);
+        }
+
+        List<RelationFieldDTO> fields = loadFields(tableId);
+        List<PortalListColumnMeta> columns = RelationTableColumnSpec.columnsFor(fields);
+        Map<String, PortalListColumnMeta> byField = columns.stream()
+                .collect(Collectors.toMap(PortalListColumnMeta::field, c -> c, (a, b) -> a, LinkedHashMap::new));
+        ListFilterSql filterSql = ListFilterSql.orderedById(byField, ListFilterSql.JSON_ROW);
+
+        List<Object> params = new ArrayList<>();
+        params.add(tableId);
+        StringBuilder where = new StringBuilder(" WHERE table_id = ?");
+        // Keep the trgm GIN guard so keyword search stays index-friendly (V214).
+        where.append(buildJsonDataSearchClause(
+                columns.stream().map(PortalListColumnMeta::field).toList(),
+                request.search(),
+                params));
+        where.append(filterSql.whereClause(request.filters(), params));
+
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM " + DATA_ROWS_TABLE + where,
+                Long.class, params.toArray());
+        if (total == null) {
+            total = 0L;
+        }
+
+        List<Object> pageParams = new ArrayList<>(params);
+        pageParams.add(request.size());
+        pageParams.add(request.page() * request.size());
+        String orderBy = filterSql.orderBy(request.sortField(), request.sortDirection());
+        List<Map<String, Object>> rows = jdbcTemplate.query(
+                "SELECT data, status FROM " + DATA_ROWS_TABLE + where + orderBy + " LIMIT ? OFFSET ?",
+                (rs, rowNum) -> {
+                    Map<String, Object> row = parseJsonRow(rs.getString("data"));
+                    // Surface the row-level status column so the UI can toggle Active/Inactive.
+                    row.put("status", rs.getString("status"));
+                    return row;
+                },
+                pageParams.toArray());
+
+        return new RelationTableDataPage(columns, rows, request.page(), request.size(), total);
     }
 
     @Override
@@ -223,11 +244,8 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
     }
 
     private String exportSystemUserCsv(String userId, int maxRows) {
-        Set<String> userRoleIds = getUserRoleIds(userId);
-        if (!hasAccess(SYSTEM_USER_TABLE_ID, userRoleIds)) {
-            log.warn("Export CSV access denied for user {} on system user table", userId);
-            return "";
-        }
+        // Match querySystemUserTableData: any authenticated user may export User; there is no
+        // rt_table_access row for the virtual tableId, so hasAccess() would always deny.
         String tableName = sanitizeIdentifier(SYSTEM_USER_TABLE_NAME);
         List<String> fieldNames = SYSTEM_USER_FIELD_NAMES.stream().map(this::sanitizeIdentifier).toList();
         try {
@@ -249,27 +267,76 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
         }
     }
 
-    private PageResponse<Map<String, Object>> querySystemUserTableData(int page, int size, String search) {
+    private RelationTableDataPage querySystemUserTableData(RelationTableQueryRequest request) {
         String tableName = sanitizeIdentifier(SYSTEM_USER_TABLE_NAME);
-        List<String> fieldNames = SYSTEM_USER_FIELD_NAMES.stream().map(this::sanitizeIdentifier).toList();
-        String columns = String.join(", ", fieldNames);
+        List<PortalListColumnMeta> columnMeta = systemUserColumns();
+        Map<String, PortalListColumnMeta> byField = columnMeta.stream()
+                .collect(Collectors.toMap(PortalListColumnMeta::field, c -> c, (a, b) -> a, LinkedHashMap::new));
+        ListFilterSql filterSql = ListFilterSql.orderedById(byField, ListFilterSql.PHYSICAL_COLUMN);
 
-        List<Object> searchParams = new ArrayList<>();
-        String searchClause = buildSystemUserSearchClause(search, searchParams);
+        String selectColumns = SYSTEM_USER_FIELD_NAMES.stream()
+                .map(this::sanitizeIdentifier)
+                .collect(Collectors.joining(", "));
+
+        List<Object> params = new ArrayList<>();
+        // ListFilterSql / keyword clauses all start with " AND …"; seed WHERE so a filter-only
+        // request is not "FROM sys_users AND col ILIKE ?" (PSQL syntax error near AND).
+        StringBuilder where = new StringBuilder(" WHERE 1=1");
+        where.append(buildSystemUserSearchClause(request.search(), params));
+        where.append(filterSql.whereClause(request.filters(), params));
 
         Long total = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM " + tableName + searchClause,
-                Long.class, searchParams.toArray());
-        if (total == null) total = 0L;
+                "SELECT COUNT(*) FROM " + tableName + where,
+                Long.class, params.toArray());
+        if (total == null) {
+            total = 0L;
+        }
 
-        List<Object> dataParams = new ArrayList<>(searchParams);
-        dataParams.add(size);
-        dataParams.add(page * size);
+        List<Object> pageParams = new ArrayList<>(params);
+        pageParams.add(request.size());
+        pageParams.add(request.page() * request.size());
+        String orderBy = filterSql.orderBy(request.sortField(), request.sortDirection());
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT " + columns + " FROM " + tableName + searchClause + " LIMIT ? OFFSET ?",
-                dataParams.toArray());
-        return PageResponse.of(rows, page, size, total);
+                "SELECT " + selectColumns + " FROM " + tableName + where + orderBy + " LIMIT ? OFFSET ?",
+                pageParams.toArray());
+        return new RelationTableDataPage(columnMeta, rows, request.page(), request.size(), total);
     }
+
+    /** Built-in sys_users columns for the virtual Relation Table User view.
+     * Closed codes ({@code status}, {@code language}) are ENUM with options and
+     * {@code groupable = false} — see shared-list-components.md §6.5.2.
+     * Free-text columns stay TEXT. Do not use {@link PortalListColumnMeta#withOptions},
+     * which defaults groupable to true. */
+    private List<PortalListColumnMeta> systemUserColumns() {
+        List<PortalListColumnMeta> columns = new ArrayList<>();
+        for (String field : SYSTEM_USER_FIELD_NAMES) {
+            columns.add(systemUserColumn(field));
+        }
+        return columns;
+    }
+
+    private PortalListColumnMeta systemUserColumn(String field) {
+        return switch (field) {
+            case "status" -> enumColumn(field, field, SYSTEM_USER_STATUS_OPTIONS);
+            case "language" -> enumColumn(field, field, SYSTEM_USER_LANGUAGE_OPTIONS);
+            default -> PortalListColumnMeta.of(field, field, PortalListColumnMeta.Kind.TEXT);
+        };
+    }
+
+    /** ENUM filterable/sortable but never groupable on the RT endpoint. */
+    private static PortalListColumnMeta enumColumn(
+            String field, String label, List<PortalListColumnMeta.Option> options) {
+        return new PortalListColumnMeta(
+                field,
+                label,
+                PortalListColumnMeta.Kind.ENUM,
+                true,
+                true,
+                false,
+                PortalListColumnMeta.operatorsFor(PortalListColumnMeta.Kind.ENUM),
+                options);
+    }
+
 
     @Override
     @Transactional(readOnly = true)
@@ -1076,7 +1143,7 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
                 .collect(Collectors.joining(" OR "));
         String likePattern = "%" + search + "%";
         sanitizedFields.forEach(ignored -> outParams.add(likePattern));
-        return " WHERE (" + keywordClause + ")";
+        return " AND (" + keywordClause + ")";
     }
 
     private String sanitizeIdentifier(String identifier) {
