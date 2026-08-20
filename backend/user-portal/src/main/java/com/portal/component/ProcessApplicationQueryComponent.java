@@ -50,6 +50,7 @@ public class ProcessApplicationQueryComponent {
     private final MainTableViewInvolvementChecker mainTableViewInvolvementChecker;
     private final MainTableViewAccessResolver mainTableViewAccessResolver;
     private final JdbcTemplate jdbcTemplate;
+    private final MiBpmnNameMapCache miBpmnNameMapCache = new MiBpmnNameMapCache();
 
     /** 聚合扇出线程池（引擎 HTTP，不碰 DB），移出共享 commonPool。见 {@link com.portal.config.PortalAsyncConfig}。 */
     @Autowired
@@ -64,13 +65,13 @@ public class ProcessApplicationQueryComponent {
      * read-only fetches out concurrently, then apply the mutations + saves on the calling thread so JPA
      * writes keep their original single-threaded semantics.</p>
      */
-    private void enrichRunningAssigneesFromEngine(List<ProcessInstance> instances) {
+    void enrichRunningAssigneesFromEngine(List<ProcessInstance> instances) {
         if (instances == null || instances.isEmpty() || !workflowEngineClient.isAvailable()) {
             return;
         }
         List<ProcessInstance> needEnrich = instances.stream()
                 .filter(inst -> inst != null && "RUNNING".equals(inst.getStatus()))
-                .filter(this::needsAssigneeEnrichment)
+                .filter(ListAssigneeEnrichmentPolicy::needsEngineBackfill)
                 .toList();
         if (needEnrich.isEmpty()) {
             return;
@@ -91,15 +92,31 @@ public class ProcessApplicationQueryComponent {
                     continue;
                 }
                 ProcessAssigneeSnapshot snapshot = snapshotOpt.get();
-                instance.setCurrentAssignee(snapshot.getAssigneeUserId());
-                instance.setCandidateUsers(snapshot.getCandidateUserIds());
-                processInstanceRepository.save(instance);
+                if (!ListAssigneeEnrichmentPolicy.applySnapshot(instance, snapshot)) {
+                    continue;
+                }
+                persistAssigneeColumns(instance);
                 log.debug("Enriched assignee snapshot for process {}: assignee={}, candidates={}",
                         instance.getId(), snapshot.getAssigneeUserId(), snapshot.getCandidateUserIds());
             } catch (Exception e) {
                 log.warn("Failed to enrich assignee from engine for process {}: {}",
                         instance.getId(), e.getMessage());
             }
+        }
+    }
+
+    /**
+     * Two-column write so a list projection that omitted {@code __subTables__} cannot persist
+     * a stripped variables blob through JPA {@code save}.
+     */
+    private void persistAssigneeColumns(ProcessInstance instance) {
+        int updated = jdbcTemplate.update(
+                "UPDATE up_process_instance SET current_assignee = ?, candidate_users = ?,"
+                        + " lock_version = COALESCE(lock_version, 0) + 1 WHERE id = ?",
+                instance.getCurrentAssignee(), instance.getCandidateUsers(), instance.getId());
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Assignee snapshot update touched " + updated + " rows for " + instance.getId());
         }
     }
 
@@ -129,21 +146,6 @@ public class ProcessApplicationQueryComponent {
                     processInstanceId, e.getMessage());
             return Optional.empty();
         }
-    }
-
-    private boolean needsAssigneeEnrichment(ProcessInstance instance) {
-        String assignee = instance.getCurrentAssignee();
-        String candidates = instance.getCandidateUsers();
-        if (candidates != null && !candidates.isBlank()) {
-            return true;
-        }
-        if (assignee == null || assignee.isBlank()) {
-            return true;
-        }
-        Map<String, String> probe = userDisplayNameResolver.resolveBatch(
-                userDisplayNameResolver.collectAssigneeUserKeys(assignee, candidates));
-        String display = userDisplayNameResolver.resolveCurrentAssigneeDisplay(assignee, candidates, probe);
-        return display != null && display.equals(assignee.trim());
     }
 
     /**
@@ -196,7 +198,7 @@ public class ProcessApplicationQueryComponent {
      * 为本页所有实例，按 processDefinitionKey 解析一次 BPMN，建「内层 MI 任务名 → 外层 MI subProcess name」映射。
      * 引擎不可用/无 BPMN 时该 key 映射为空 map（调用方回退 currentNode）。COMPLETED 实例不需要（列表显 '-'）。
      */
-    private Map<String, Map<String, String>> buildMiNodeNameMaps(List<ProcessInstance> pageContent) {
+    Map<String, Map<String, String>> buildMiNodeNameMaps(List<ProcessInstance> pageContent) {
         Map<String, Map<String, String>> byKey = new HashMap<>();
         if (!workflowEngineClient.isAvailable()) {
             return byKey;
@@ -208,9 +210,9 @@ public class ProcessApplicationQueryComponent {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         for (String key : keys) {
             try {
-                byKey.put(key, workflowEngineClient.getBpmnXml(key)
+                byKey.put(key, miBpmnNameMapCache.getOrLoad(key, () -> workflowEngineClient.getBpmnXml(key)
                         .map(BpmnMiXmlSupport::buildMiInnerTaskNameToSubProcessName)
-                        .orElseGet(HashMap::new));
+                        .orElseGet(HashMap::new)));
             } catch (Exception e) {
                 log.debug("buildMiNodeNameMaps: BPMN parse failed for processDefKey {}: {}", key, e.getMessage());
                 byKey.put(key, new HashMap<>());
@@ -231,7 +233,7 @@ public class ProcessApplicationQueryComponent {
      * Assignee display name from {@link ProcessInstance#getCurrentAssignee()} / {@link ProcessInstance#getCandidateUsers()}
      * via {@link UserDisplayNameResolver} (single name; BU/Role OR pool {@code name1, name2, name3}).
      */
-    private ProcessInstanceInfo toProcessInstanceInfoForList(ProcessInstance instance, Map<String, String> userNameCache,
+    ProcessInstanceInfo toProcessInstanceInfoForList(ProcessInstance instance, Map<String, String> userNameCache,
             Map<String, Map<String, String>> miNameMapByProcessDefKey) {
         String currentAssigneeName = userDisplayNameResolver.resolveCurrentAssigneeDisplay(
                 instance.getCurrentAssignee(), instance.getCandidateUsers(), userNameCache);

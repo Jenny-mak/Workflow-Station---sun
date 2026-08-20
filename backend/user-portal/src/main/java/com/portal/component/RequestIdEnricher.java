@@ -43,9 +43,19 @@ public class RequestIdEnricher {
      */
     public static final String REQUEST_ID_FIELD = "__request_id";
 
+    private static final long SPEC_TTL_MS = 5 * 60 * 1000L;
+    private static final int MAX_CACHED_SPECS = 128;
+
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final ProcessInstanceRepository processInstanceRepository;
+    private final Map<String, CachedSpec> specCache = Collections.synchronizedMap(
+            new LinkedHashMap<>(32, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, CachedSpec> eldest) {
+                    return size() > MAX_CACHED_SPECS;
+                }
+            });
 
     /** 解析后的 Request ID 配置;{@code EMPTY} 表示该功能单元主表未配置(可缓存的负结果)。 */
     private record RequestIdSpec(List<String> fieldNames, String separator) {
@@ -183,34 +193,50 @@ public class RequestIdEnricher {
     /**
      * 通过 functionUnitCode 解析 PRIMARY MAIN 表的 request_id_config。
      * 走 PROCESS 表单的 PRIMARY 绑定 → dw_table_definitions,以拿到该表单真正的主表。
+     * Config is per FU, not per row; a short TTL avoids repeating the join on every page/filter.
      */
     private RequestIdSpec resolveSpec(String functionUnitCode) {
+        String code = functionUnitCode.trim();
+        long now = System.currentTimeMillis();
+        CachedSpec cached = specCache.get(code);
+        if (cached != null && now - cached.cachedAt < SPEC_TTL_MS) {
+            return cached.spec;
+        }
         try {
-            List<String> rows = jdbcTemplate.query(
-                    """
-                            SELECT td.request_id_config::text AS cfg
-                            FROM dw_function_units fu
-                            INNER JOIN dw_form_definitions fd
-                                ON fd.function_unit_id = fu.id AND fd.form_type = 'PROCESS'
-                            INNER JOIN dw_form_table_bindings ftb
-                                ON ftb.form_id = fd.id AND ftb.binding_type = 'PRIMARY'
-                            INNER JOIN dw_table_definitions td
-                                ON td.id = ftb.table_id
-                            WHERE fu.code = ?
-                            ORDER BY ftb.sort_order NULLS LAST, ftb.id
-                            LIMIT 1
-                            """,
-                    (rs, rowNum) -> rs.getString("cfg"),
-                    functionUnitCode.trim());
-            if (rows.isEmpty() || rows.get(0) == null || rows.get(0).isBlank()) {
-                return RequestIdSpec.EMPTY;
-            }
-            return parseSpec(rows.get(0));
+            RequestIdSpec spec = loadSpec(code);
+            specCache.put(code, new CachedSpec(spec, now));
+            return spec;
         } catch (Exception e) {
-            // 解析失败/表不可达不应阻断列表;退化为未配置
-            log.debug("Could not resolve Request ID config for functionUnitCode={}: {}", functionUnitCode, e.getMessage());
+            // 表不可达不应阻断列表;退化为未配置。不写入缓存,下次筛选/翻页会重试。
+            log.debug("Could not resolve Request ID config for functionUnitCode={}: {}", code, e.getMessage());
             return RequestIdSpec.EMPTY;
         }
+    }
+
+    private RequestIdSpec loadSpec(String functionUnitCode) {
+        List<String> rows = jdbcTemplate.query(
+                """
+                        SELECT td.request_id_config::text AS cfg
+                        FROM dw_function_units fu
+                        INNER JOIN dw_form_definitions fd
+                            ON fd.function_unit_id = fu.id AND fd.form_type = 'PROCESS'
+                        INNER JOIN dw_form_table_bindings ftb
+                            ON ftb.form_id = fd.id AND ftb.binding_type = 'PRIMARY'
+                        INNER JOIN dw_table_definitions td
+                            ON td.id = ftb.table_id
+                        WHERE fu.code = ?
+                        ORDER BY ftb.sort_order NULLS LAST, ftb.id
+                        LIMIT 1
+                        """,
+                (rs, rowNum) -> rs.getString("cfg"),
+                functionUnitCode);
+        if (rows.isEmpty() || rows.get(0) == null || rows.get(0).isBlank()) {
+            return RequestIdSpec.EMPTY;
+        }
+        return parseSpec(rows.get(0));
+    }
+
+    private record CachedSpec(RequestIdSpec spec, long cachedAt) {
     }
 
     private RequestIdSpec parseSpec(String json) {

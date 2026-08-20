@@ -89,7 +89,7 @@ class TaskQueryProperties {
             new WorkspaceTaskFilterComponent(
                 workflowEngineClient, virtualGroupAccessComponent, portalWorkspaceAuthService, businessUnitRepository),
             new MiParticipantEnrichmentComponent(jdbcTemplate),
-            new TaskHistoryComponent(workflowEngineClient, processInstanceRepository, processHistoryRepository, jdbcTemplate, requestIdEnricher),
+            new TaskHistoryComponent(workflowEngineClient, processHistoryRepository),
             requestIdEnricher
         );
         ReflectionTestUtils.setField(taskQueryComponent, "taskQueryExecutor", (java.util.concurrent.Executor) Runnable::run);

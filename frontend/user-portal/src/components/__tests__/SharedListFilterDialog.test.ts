@@ -217,5 +217,27 @@ describe('shared ListFilterDialog', () => {
     )
     expect(document.querySelector('.list-filter-user')).toBeTruthy()
     expect(remoteSearch).not.toHaveBeenCalled()
+    expect(confirmButton().disabled).toBe(true)
+  })
+
+  it('USER apply with a typed query and a single hit sends that person id', async () => {
+    const remoteSearch = vi.fn().mockResolvedValue([
+      { value: 'e26-id', label: '孙强 (E26-3002)' },
+    ])
+    const w = await mountDialog(
+      textColumn({
+        kind: 'USER',
+        operators: ['eq', 'ne'],
+      }),
+      { operator: 'eq', value: 'sun' },
+      remoteSearch,
+    )
+    await vi.waitFor(() => expect(remoteSearch).toHaveBeenCalledWith('sun'))
+    await nextTick()
+    expect(confirmButton().disabled).toBe(false)
+
+    confirmButton().click()
+    await w.vm.$nextTick()
+    expect(w.emitted('apply')).toEqual([[{ operator: 'eq', value: 'e26-id' }]])
   })
 })

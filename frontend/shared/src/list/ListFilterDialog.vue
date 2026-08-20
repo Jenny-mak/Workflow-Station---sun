@@ -10,6 +10,7 @@ import {
   type ListColumnMeta,
   type ListColumnOption,
 } from './columnMeta'
+import { resolveUserFilterValue } from './listFilterUserValue'
 
 const props = defineProps<{
   visible: boolean
@@ -88,7 +89,15 @@ const valueInputType = computed(() => {
 })
 const showOperator = computed(() => (props.column?.operators?.length ?? 0) > 1)
 const isDate = computed(() => props.column?.kind === 'DATETIME')
-const canApply = computed(() => isCompleteFilter(draft.value))
+const canApply = computed(() => {
+  if (isUser.value && needsValue.value) {
+    return resolveUserFilterValue(draft.value.value, remoteHits.value, {
+      appliedValue: props.filter?.value,
+      loading: remoteLoading.value,
+    }) != null
+  }
+  return isCompleteFilter(draft.value)
+})
 
 function onUserSearch(query: string) {
   if (searchTimer != null) {
@@ -130,10 +139,23 @@ onBeforeUnmount(() => {
   }
 })
 
+function appliedUserValue(): string {
+  const resolved = resolveUserFilterValue(draft.value.value, remoteHits.value, {
+    appliedValue: props.filter?.value,
+    loading: remoteLoading.value,
+  })
+  if (resolved == null) {
+    throw new Error(
+      `USER filter apply for ${props.column?.field ?? 'unknown'} without a selected person`,
+    )
+  }
+  return resolved
+}
+
 function onApply() {
   const payload: ListColumnFilter = { operator: draft.value.operator, value: '' }
   if (needsValue.value) {
-    payload.value = draft.value.value
+    payload.value = isUser.value ? appliedUserValue() : draft.value.value
     if (needsRange.value) {
       payload.value2 = draft.value.value2
     }
@@ -199,6 +221,7 @@ function onClear() {
           clearable
           filterable
           remote
+          default-first-option
           :remote-method="onUserSearch"
           :loading="remoteLoading"
           :placeholder="t('sharedList.filterUserPlaceholder')"

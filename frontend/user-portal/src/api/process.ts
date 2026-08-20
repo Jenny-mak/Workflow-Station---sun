@@ -1,4 +1,6 @@
 import request from './request'
+import type { ListColumnFilterRequest } from '@platform-shared/list/columnMeta'
+import type { PortalListPage } from '@/api/task'
 import type { MiAssignmentsMap } from '@/utils/miAssignmentConfig'
 
 export interface ProcessDefinition {
@@ -37,6 +39,16 @@ export interface ProcessInstance {
    */
   firstStepError?: string | null
   variables?: Record<string, unknown>
+}
+
+export interface MyApplicationQueryRequest {
+  page: number
+  size: number
+  status?: string
+  filters?: ListColumnFilterRequest[]
+  sortField?: string
+  sortDirection?: 'ASC' | 'DESC'
+  groupBy?: string
 }
 
 export interface ProcessStartRequest {
@@ -93,9 +105,16 @@ export const processApi = {
     return request.post<ProcessInstance>(`/processes/${processKey}/start`, data)
   },
 
-  // 获取我的申请列表
+  // 获取我的申请列表（兼容 GET：仅 page/size/status，无列声明）
   getMyApplications(params: { page?: number; size?: number; status?: string }) {
     return request.get('/processes/my-applications', { params })
+  },
+
+  queryMyApplications(body: MyApplicationQueryRequest) {
+    return request.post<{ data: PortalListPage<ProcessInstance> }>(
+      '/processes/my-applications/query',
+      body,
+    )
   },
 
   // 获取流程详情
