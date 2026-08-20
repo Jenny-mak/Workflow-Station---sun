@@ -122,7 +122,7 @@ class PortalRelationTablePropertyTest {
         when(jdbcTemplate.queryForObject(contains("rt_table_access"), eq(Long.class), any(Object[].class)))
                 .thenReturn(0L);
         assertThatThrownBy(() -> service.queryTableData(
-                tableId, userId, new com.portal.dto.RelationTableQueryRequest(0, 10, null, List.of(), null, null)))
+                tableId, userId, com.portal.dto.RelationTableQueryRequest.of(0, 10, null, List.of(), null, null)))
                 .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
 
         // Verify: exportCsv returns an empty payload when user has no access

@@ -74,7 +74,7 @@ class PortalRelationTableQueryDataSearchTest {
                 .thenReturn(Collections.emptyList());
 
         RelationTableDataPage result = serviceWith(jdbcTemplate, roleAccess).queryTableData(
-                tableId, userId, new RelationTableQueryRequest(0, 10, "acme", List.of(), null, null));
+                tableId, userId, RelationTableQueryRequest.of(0, 10, "acme", List.of(), null, null));
 
         assertThat(result.totalElements()).isEqualTo(1L);
         assertThat(result.columns()).extracting(c -> c.field()).containsExactly("name", "code");
@@ -135,7 +135,7 @@ class PortalRelationTableQueryDataSearchTest {
         serviceWith(jdbcTemplate, roleAccess).queryTableData(
                 tableId,
                 userId,
-                new RelationTableQueryRequest(
+                RelationTableQueryRequest.of(
                         0,
                         20,
                         null,
@@ -174,7 +174,7 @@ class PortalRelationTableQueryDataSearchTest {
         RelationTableDataPage page = serviceWith(jdbcTemplate, roleAccess).queryTableData(
                 systemUserTableId,
                 "user1",
-                new RelationTableQueryRequest(0, 20, null, List.of(), null, null));
+                RelationTableQueryRequest.of(0, 20, null, List.of(), null, null));
 
         assertThat(page.columns()).allMatch(c -> !c.groupable());
         var status = page.columns().stream().filter(c -> c.field().equals("status")).findFirst().orElseThrow();
@@ -207,7 +207,7 @@ class PortalRelationTableQueryDataSearchTest {
         serviceWith(jdbcTemplate, roleAccess).queryTableData(
                 systemUserTableId,
                 "user1",
-                new RelationTableQueryRequest(
+                RelationTableQueryRequest.of(
                         0,
                         20,
                         null,
@@ -235,7 +235,7 @@ class PortalRelationTableQueryDataSearchTest {
                 .thenReturn(0L);
 
         assertThatThrownBy(() -> serviceWith(jdbcTemplate, roleAccess).queryTableData(
-                100L, "user1", new RelationTableQueryRequest(0, 10, null, List.of(), null, null)))
+                100L, "user1", RelationTableQueryRequest.of(0, 10, null, List.of(), null, null)))
                 .isInstanceOf(AccessDeniedException.class);
     }
 }

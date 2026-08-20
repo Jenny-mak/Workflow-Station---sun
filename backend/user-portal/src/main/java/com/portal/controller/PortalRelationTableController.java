@@ -50,7 +50,7 @@ public class PortalRelationTableController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String search) {
-        RelationTableQueryRequest request = new RelationTableQueryRequest(
+        RelationTableQueryRequest request = RelationTableQueryRequest.of(
                 page, size, search, List.of(), null, null);
         return ResponseEntity.ok(ApiResponse.success(service.queryTableData(tableId, userId, request)));
     }

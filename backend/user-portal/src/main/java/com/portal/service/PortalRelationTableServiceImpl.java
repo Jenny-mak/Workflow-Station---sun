@@ -39,6 +39,8 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
     private static final String DATA_ROWS_TABLE = "rt_table_data_rows";
     private static final Long SYSTEM_USER_TABLE_ID = -1_000_000_001L;
     private static final String SYSTEM_USER_TABLE_NAME = "sys_users";
+    /** Design §10 #10 — deep pages slower than this emit a WARN without filter values or row payloads. */
+    private static final long SLOW_PAGE_WARN_MS = 1_000L;
     private static final List<String> SYSTEM_USER_FIELD_NAMES = List.of(
             "id", "username", "display_name", "full_name", "email", "employee_id", "status", "language");
     private static final List<String> DEFAULT_SYSTEM_USER_SEARCH_FIELDS = List.of(
@@ -146,6 +148,7 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
             return querySystemUserTableData(request);
         }
 
+        long startedNanos = System.nanoTime();
         Set<String> userRoleIds = getUserRoleIds(userId);
         if (!hasAccess(tableId, userRoleIds)) {
             throw new AccessDeniedException("Access denied for this table");
@@ -191,6 +194,7 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
                 },
                 pageParams.toArray());
 
+        logSlowPageIfNeeded("relation-tables", tableId, request, total, startedNanos);
         return new RelationTableDataPage(columns, rows, request.page(), request.size(), total);
     }
 
@@ -268,6 +272,7 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
     }
 
     private RelationTableDataPage querySystemUserTableData(RelationTableQueryRequest request) {
+        long startedNanos = System.nanoTime();
         String tableName = sanitizeIdentifier(SYSTEM_USER_TABLE_NAME);
         List<PortalListColumnMeta> columnMeta = systemUserColumns();
         Map<String, PortalListColumnMeta> byField = columnMeta.stream()
@@ -299,7 +304,19 @@ public class PortalRelationTableServiceImpl implements PortalRelationTableServic
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 "SELECT " + selectColumns + " FROM " + tableName + where + orderBy + " LIMIT ? OFFSET ?",
                 pageParams.toArray());
+        logSlowPageIfNeeded("relation-tables-user", SYSTEM_USER_TABLE_ID, request, total, startedNanos);
         return new RelationTableDataPage(columnMeta, rows, request.page(), request.size(), total);
+    }
+
+    private void logSlowPageIfNeeded(
+            String listKey, Long tableId, RelationTableQueryRequest request, long total, long startedNanos) {
+        long elapsedMs = (System.nanoTime() - startedNanos) / 1_000_000L;
+        if (elapsedMs <= SLOW_PAGE_WARN_MS) {
+            return;
+        }
+        log.warn(
+                "Slow relation-table page listKey={} tableId={} page={} size={} total={} elapsedMs={}",
+                listKey, tableId, request.page(), request.size(), total, elapsedMs);
     }
 
     /** Built-in sys_users columns for the virtual Relation Table User view.
