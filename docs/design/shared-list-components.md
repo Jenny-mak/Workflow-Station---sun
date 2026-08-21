@@ -1,11 +1,12 @@
 # 跨端列表共享组件与服务端分页接入规范
 
-> **状态：方案已定稿，尚未实现（2026-08-17）。** §12 的 6 项待确认**全部关闭**。
+> **状态：方案已定稿；Views / Relation Tables 已在接入（2026-08-20）。** §12 的 6 项待确认**全部关闭**。
 > 关键决策：§6.1（行可见范围两级过滤）、§6.1.1（SUB 行身份取 `row_id` 优先，写入侧→MAIN→SUB
 > 三步走）、§6.2（深分页不设上限，改慢查询日志）、§6.3.1（分组按字段语义声明，不是每列都给）、
 > **§6.3.2（筛选 kind 的权威是表 `data_type` / 视图系统列，不是 Form 组件；`FILE` 本期
 > display-only，禁止当 TEXT 按文件名凑合筛）**、
 > **§6.3.3（排序按 kind：字母 / 数值大小 / 新旧，数字不得按文本排）**、
+> **§6.5（Relation Tables：业务表 JSON 行；内置 User=`sys_users`；类型化筛选；RT 一律不分组）**、
 > **范围排除 developer-workstation**、**全程零兜底**。
 > 可以按 §8 分期 + playbook 逐提交执行。
 >
@@ -48,6 +49,8 @@
 - View 行可见性管控：skill `view-access-control`（本文的 §6.1 不得与之冲突）
 - 门户身份来源：[portal-bu-rbac.md](./portal-bu-rbac.md)（BU + Role 决定可见范围）
 - 长度 / 分层 / UX / 性能红线：`.cursor/rules/code-quality-standards.mdc`
+- FILE 列按文件名筛（未合入基线）：[list-file-name-filter.md](./list-file-name-filter.md)
+- Relation Tables / 内置 User：**正文 §6.5**（不再单开文档）
 - 错误处理红线（禁静默兜底、禁重复决策）：`.cursor/rules/error-handling-governance.mdc`
 
 ---
@@ -524,6 +527,63 @@ Function Unit 的 Table Design **没有 LOOKUP / CHOICE 类型**。`select` / `r
 分组项却没有 `count`，说明后端契约坏了 → 前端**抛错**（开发期立刻暴露），不要渲染 `—`、不要渲染 `0`、
 也不要跳过该分组头。渲染替代符号就是兜底，它把后端缺陷变成了用户以为正常的界面。
 
+### 6.5 Relation Tables 接入（含内置 User 虚拟表）
+
+Portal「Relation Tables」是共享列表的第二个消费者（Views 之后）。业务表与内置 User 共用列头 /
+筛选 / 分页，但**数据落点不同**，列声明与分组策略也不同。
+
+#### 6.5.1 业务 Relation：JSON 行，无每表物理表
+
+| 用途 | 物理表 |
+|------|--------|
+| 表 / 字段元数据 | `rt_table_definitions` / `rt_field_definitions` |
+| 行数据 | `rt_table_data_rows`（`data` JSONB）；**不为每张业务表再建物理表** |
+| 行级 Active/Inactive | `rt_table_data_rows.status`（toggle，**不是**列表数据列） |
+
+列表列声明：`RelationTableColumnSpec` 从 `rt_field_definitions.data_type` → kind（BOOLEAN /
+NUMBER / DATETIME / TEXT…；LOOKUP 按存的主键当 TEXT）。**一律 `groupable = false`**——查询端点
+没有 GROUP BY / 分组计数，声明不能承诺做不到的能力。VARCHAR 实为码表若要 ENUM，须在字段定义
+显式带 `options`；本期不扫全库推断。
+
+筛选 SQL：`ListFilterSql` + `JSON_ROW`（`data->>'field'`）。切表必须重置筛选 / 排序 / 搜索 /
+页码（§6.2）。
+
+#### 6.5.2 内置 User = `sys_users` 只读投影
+
+左侧「User」**不是** `rt_*` 业务表：tableId 固定 `-1000000001`，任意登录用户可读、永远
+`READONLY`，查询直连 `sys_users`。字段声明在
+`PortalRelationTableServiceImpl.systemUserColumns()`（无 `rt_field_definitions`）。
+
+| 列 | kind | 说明 |
+|----|------|------|
+| `status` | `ENUM` + options | `ACTIVE` / `INACTIVE` / `DISABLED` / `LOCKED` / `PENDING`（对齐 CHECK） |
+| `language` | `ENUM` + options | `en` / `zh_CN` / `zh-CN` / `zh_TW` / `zh-TW`（兼容 underscore / hyphen 存值） |
+| 其余 | `TEXT` | id / username / display_name / full_name / email / employee_id |
+
+封闭列筛法为 eq / ne / isNull / isNotNull，**禁止**再当 TEXT 用 contains。  
+**全部 `groupable = false`**（含 ENUM）：User 用途是检索 / LOOKUP / 导出，不是按状态分析；且 RT
+端点尚无 GROUP BY。勿直接调用 `PortalListColumnMeta.withOptions`（其默认 `groupable = true`），
+须规范构造器显式传入 `false`。
+
+筛选 SQL：`ListFilterSql` + `PHYSICAL_COLUMN`；WHERE 须以 `WHERE 1=1`（或等价）起头，再拼
+`AND …`，避免 `FROM sys_users AND col …`。
+
+**本轮非目标：** 业务表全量 VARCHAR→ENUM；User/RT 分组 UI；洗 `zh_CN`/`zh-CN` 存值。
+
+**验收正例：** User 的 status/language 筛选为下拉；列头无分组项。  
+**反例：** status/language 出现 contains；只改 `groupable=true` 未实现 GROUP BY；把 User 行写入
+`rt_table_data_rows`。
+
+**实现收尾（与 Views 同范式）：** 列元数据随 `POST …/data` 的 page 返回（不另开 `/columns`）；
+请求体非空 `groupBy` → 400；查询耗时 >1s 打 WARN（`listKey` / `tableId` / `page` / `size` /
+`total` / `elapsedMs`，不含筛选值与行内容）。
+
+**验证截图（PNG gitignore，PR 描述写绝对路径）：**
+
+- `frontend/user-portal/verification-screenshots/2026-08-20_list-relation-tables-shared.png`
+- `frontend/user-portal/verification-screenshots/2026-08-20_list-relation-user-after-enum.png`
+- `frontend/user-portal/verification-screenshots/2026-08-20_list-relation-user-status-enum-filter.png`
+
 ## 7. 影响面
 
 
@@ -561,7 +621,8 @@ Function Unit 的 Table Design **没有 LOOKUP / CHOICE 类型**。`select` / `r
 
 ### 阶段二：在 user-portal 打磨接入范式（3 个菜单；前两个各一提交，第三个拆三提交）
 
-顺序：`已办任务`（只读、字段简单）→ `关联表数据`（有切表换列的状态问题，正好验证 §6.2 的状态一致性）
+顺序：`已办任务`（只读、字段简单）→ `关联表数据`（有切表换列的状态问题，正好验证 §6.2 的状态一致性；
+内置 User 与 RT 列声明见 **§6.5**）
 → 一个带行可见范围的列表（正式跑通 §6.1 的失败测试 → 实现）。
 
 最后这个带行可见范围的列表如果是 Main Table View，**再拆成三个提交**，顺序不能换（§6.1.1）：

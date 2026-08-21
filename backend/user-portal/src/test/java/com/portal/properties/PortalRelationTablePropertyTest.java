@@ -3,7 +3,6 @@ package com.portal.properties;
 import com.platform.common.dto.RelationTableDTO;
 import com.platform.common.enums.RelationTableStatus;
 import com.portal.component.RoleAccessComponent;
-import com.portal.dto.PageResponse;
 import com.portal.service.PortalRelationTableService;
 import com.portal.service.PortalRelationTableServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,6 +16,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -118,11 +118,12 @@ class PortalRelationTablePropertyTest {
         List<RelationTableDTO> result = service.getVisibleTables(userId);
         assertThat(result).isEmpty();
 
-        // Verify: queryTableData returns empty when user has no access
+        // Verify: queryTableData rejects callers without access
         when(jdbcTemplate.queryForObject(contains("rt_table_access"), eq(Long.class), any(Object[].class)))
                 .thenReturn(0L);
-        PageResponse<Map<String, Object>> pageResult = service.queryTableData(tableId, userId, 0, 10, null);
-        assertThat(pageResult.getContent()).isEmpty();
+        assertThatThrownBy(() -> service.queryTableData(
+                tableId, userId, com.portal.dto.RelationTableQueryRequest.of(0, 10, null, List.of(), null, null)))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
 
         // Verify: exportCsv returns an empty payload when user has no access
         assertThat(service.exportCsv(tableId, userId, 1000)).isEmpty();

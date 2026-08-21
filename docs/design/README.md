@@ -64,7 +64,7 @@
 |------|------|
 | [feature-blueprint.md](./feature-blueprint.md) | 1.0 功能总蓝图（三应用 = 三层楼的整体视图，2.0 规划树） |
 | [user-profile-information-architecture.md](./user-profile-information-architecture.md) | 三端「个人中心 / 顶栏用户菜单」的信息边界与术语 |
-| [shared-list-components.md](./shared-list-components.md) | **列表共享组件 + 服务端分页接入规范**（状态：**方案已定稿，未实现**）：列头 / 列宽 / 筛选弹窗 / 分页四组件落 `frontend/shared/src/list/`；**本期范围只有 UP + AD，developer-workstation 一行不改**（`designer-list` 只作只读参考）；按菜单增量接入，每次必答「不越权 / 真分页 / 算子随字段类型 / 分组标签单边」，且**全程零兜底** |
+| [shared-list-components.md](./shared-list-components.md) | **列表共享组件 + 服务端分页接入规范**（状态：**方案已定稿；Views / RT 已在接**）：列头 / 列宽 / 筛选弹窗 / 分页；**§6.5 Relation Tables**（业务 JSON 行 + 内置 User=`sys_users`；类型化筛选；一律不分组）；本期不含 DW |
 | [list-file-name-filter.md](./list-file-name-filter.md) | **列表 FILE 列按文件名筛选**（状态：**方案评审中，未实现**）：基线仍是 display-only；下一期用与格子同一套抽名规则筛，禁止当 TEXT 比 URL；推荐查询侧 SQL 抽名（MVP），落库结构化为后续 |
 
 > 列表改造是**增量**的：共享组件纯新增，一个菜单一个提交，未接入的菜单行为不变。

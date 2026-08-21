@@ -3,7 +3,8 @@ package com.portal.controller;
 import com.platform.common.dto.RelationTableDTO;
 import com.platform.common.dto.ApiResponse;
 import com.portal.security.CurrentUserId;
-import com.portal.dto.PageResponse;
+import com.portal.dto.RelationTableDataPage;
+import com.portal.dto.RelationTableQueryRequest;
 import com.portal.service.PortalRelationTableService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,19 +43,25 @@ public class PortalRelationTableController {
     }
 
     @GetMapping("/{tableId}")
-    @Operation(summary = "分页查询表数据（只读）")
-    public ResponseEntity<ApiResponse<PageResponse<Map<String, Object>>>> queryTableData(
+    @Operation(summary = "分页查询表数据（只读；兼容 GET，仅 search）")
+    public ResponseEntity<ApiResponse<RelationTableDataPage>> queryTableDataGet(
             @PathVariable Long tableId,
             @CurrentUserId String userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String search) {
-        try {
-            PageResponse<Map<String, Object>> result = service.queryTableData(tableId, userId, page, size, search);
-            return ResponseEntity.ok(ApiResponse.success(result));
-        } catch (Exception e) {
-            return ResponseEntity.ok(ApiResponse.success(PageResponse.of(List.of(), page, size, 0)));
-        }
+        RelationTableQueryRequest request = RelationTableQueryRequest.of(
+                page, size, search, List.of(), null, null);
+        return ResponseEntity.ok(ApiResponse.success(service.queryTableData(tableId, userId, request)));
+    }
+
+    @PostMapping("/{tableId}/data")
+    @Operation(summary = "分页查询表数据（真分页；筛选/排序推入 SQL；无分组）")
+    public ResponseEntity<ApiResponse<RelationTableDataPage>> queryTableData(
+            @PathVariable Long tableId,
+            @CurrentUserId String userId,
+            @RequestBody RelationTableQueryRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(service.queryTableData(tableId, userId, request)));
     }
 
     @GetMapping("/{tableId}/export")

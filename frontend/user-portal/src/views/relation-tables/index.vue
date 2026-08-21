@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <div class="page-header">
       <span class="page-title">Relation Tables</span>
@@ -84,8 +84,8 @@
               placeholder="Search..."
               clearable
               style="width: 240px; margin-right: 12px;"
-              @keyup.enter="fetchData"
-              @clear="fetchData"
+              @keyup.enter="handleSearch"
+              @clear="handleSearch"
             >
               <template #prefix>
                 <el-icon><Search /></el-icon>
@@ -132,23 +132,52 @@
             </el-button>
           </div>
 
+          <div
+            ref="gridScrollRef"
+            class="list-data-grid-scroll"
+          >
+            <div
+              class="list-data-grid-inner"
+              :style="gridInnerStyle"
+            >
           <el-table
             v-loading="dataLoading"
             :data="dataRows"
             stripe
+            :fit="gridFits"
+            :table-layout="gridFits ? 'auto' : 'fixed'"
             style="width: 100%;"
+            class="list-data-grid"
+            :class="{ 'list-data-grid--fit': gridFits }"
           >
             <el-table-column
-              v-for="col in columns"
-              :key="col"
-              :prop="col"
-              :label="columnLabel(col)"
-              :min-width="isTimestampColumn(col) ? 180 : 120"
-              sortable
+              v-for="(col, colIndex) in displayColumns"
+              :key="col.field"
+              :prop="col.field"
+              :width="gridFits ? undefined : widthOf(col.field)"
+              :min-width="gridFits ? widthOf(col.field) : undefined"
               show-overflow-tooltip
             >
+              <template #header>
+                <ListColumnHeader
+                  :column="col"
+                  :sort="sort.field === col.field ? sort.direction : null"
+                  :filtered="!!columnFilters[col.field]"
+                  :width="widthOf(col.field)"
+                  :show-move="displayColumns.length > 1"
+                  :can-move-left="colIndex > 0"
+                  :can-move-right="colIndex < displayColumns.length - 1"
+                  @sort-change="(direction: 'ASC' | 'DESC') => applySort(col.field, direction)"
+                  @clear-sort="clearSort"
+                  @filter-open="openFilter(col.field)"
+                  @clear-filter="clearFilter(col.field)"
+                  @move="(direction: 'left' | 'right') => moveColumn(col.field, direction)"
+                  @width-change="(width: number) => setWidth(col.field, width)"
+                  @width-commit="persistWidths"
+                />
+              </template>
               <template #default="{ row }">
-                {{ isTimestampColumn(col) ? formatHKT(row[col]) : formatRelationCellDisplay(row[col]) }}
+                {{ isTimestampColumn(col.field) ? formatHKT(row[col.field]) : formatRelationCellDisplay(row[col.field]) }}
               </template>
             </el-table-column>
             <el-table-column
@@ -188,18 +217,16 @@
               </template>
             </el-table-column>
           </el-table>
+            </div>
+          </div>
 
-          <el-pagination
+          <ListPagination
             v-if="totalElements > 0"
-            style="margin-top: 16px; justify-content: flex-end;"
-            background
-            layout="total, sizes, prev, pager, next"
+            v-model:page="currentPage"
+            v-model:size="pageSize"
             :total="totalElements"
-            :page-size="pageSize"
-            :current-page="currentPage"
-            :page-sizes="[10, 20, 50, 100]"
-            @current-change="handlePageChange"
-            @size-change="handleSizeChange"
+            :loading="dataLoading"
+            @change="fetchData"
           />
         </template>
         <el-empty
@@ -208,6 +235,15 @@
         />
       </div>
     </div>
+
+    <ListFilterDialog
+      v-model:visible="filterDialog.visible"
+      :column="activeFilterColumn"
+      :filter="activeFilter"
+      :remote-search="searchListFilterUsers"
+      @apply="onFilterApply"
+      @clear="onFilterClear"
+    />
 
     <!-- Add/Edit Dialog -->
     <el-dialog
@@ -390,19 +426,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { Search, Download, Plus, Upload, ArrowDown, Expand, Fold } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { relationTableApi, type RelationTableDTO, type RelationFieldDef, type RelationImportResult, type LookupConfig } from '@/api/relationTable'
+import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
+import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
+import ListPagination from '@platform-shared/list/ListPagination.vue'
+import type { ListColumnFilter, ListColumnMeta } from '@platform-shared/list/columnMeta'
+import { relationTableApi, type RelationTableDTO, type RelationFieldDef, type RelationImportResult, type LookupConfig, type RelationTableQueryRequest } from '@/api/relationTable'
 import type { LookupFilterCondition } from '@/utils/lookupFilterConditions'
 import LookupField from '@/components/lookup/LookupField.vue'
 import LookupViewDisplay from '@/components/lookup/LookupViewDisplay.vue'
 import { buildDerivedFilterConditions, resolveDerivedLookup, normalizeLookupValueForSave, formatRelationCellDisplay, type FieldLike } from '@/components/lookup/useLookupBehaviors'
 import { collectComputedColumns, previewComputedRow } from '@/utils/computedFieldRuntime'
+import { useListColumnLayout } from '@/composables/list/useListColumnLayout'
+import { searchListFilterUsers } from '@/composables/list/searchListFilterUsers'
 
 const SYSTEM_FIELDS = new Set(['created_at', 'created_by', 'updated_at', 'updated_by', 'status'])
+const TIMESTAMP_COLUMNS = new Set(['created_at', 'updated_at'])
 
 const { t } = useI18n()
 const route = useRoute()
@@ -420,17 +463,106 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const totalElements = ref(0)
 const dataRows = ref<Record<string, any>[]>([])
-const columns = ref<string[]>([])
-// 字段名 → 显示名 映射，用于表头展示 Display Name 而非 Field Name
-const fieldDisplayNames = ref<Record<string, string>>({})
+// 列（含表头标签与可筛选/可排序能力）由查询响应声明，前端不自行推导
+const columns = ref<ListColumnMeta[]>([])
+/** Client-only display order; never sent to the query API. */
+const columnOrder = ref<string[]>([])
 
-const columnLabel = (col: string): string => fieldDisplayNames.value[col] || col
+const displayColumns = computed(() => {
+  if (columnOrder.value.length === 0) return columns.value
+  const byField = new Map(columns.value.map(c => [c.field, c]))
+  const ordered: ListColumnMeta[] = []
+  for (const field of columnOrder.value) {
+    const col = byField.get(field)
+    if (col) ordered.push(col)
+  }
+  for (const col of columns.value) {
+    if (!columnOrder.value.includes(col.field)) ordered.push(col)
+  }
+  return ordered
+})
+
+const columnFilters = ref<Record<string, ListColumnFilter>>({})
+const sort = reactive<{ field: string | null; direction: 'ASC' | 'DESC' | null }>({
+  field: null,
+  direction: null
+})
+const filterDialog = reactive({ visible: false, field: '' })
+
+const activeFilterColumn = computed<ListColumnMeta | null>(
+  () => columns.value.find(c => c.field === filterDialog.field) ?? null
+)
+const activeFilter = computed<ListColumnFilter | null>(
+  () => columnFilters.value[filterDialog.field] ?? null
+)
 
 const selectedTable = computed(() =>
   tables.value.find(t => t.id === selectedTableId.value) ?? null
 )
 
 const canWrite = computed(() => selectedTable.value?.permissionLevel === 'READ_WRITE')
+
+const layoutFields = computed(() => displayColumns.value.map(c => c.field))
+const layoutStorageKey = computed(() =>
+  selectedTableId.value != null ? `portal-list-layout:relation-table:${selectedTableId.value}` : '',
+)
+const columnOrderStorageKey = computed(() =>
+  selectedTableId.value != null ? `portal-list-column-order:relation-table:${selectedTableId.value}` : '',
+)
+const { gridScrollRef, gridFits, gridInnerStyle, widthOf, setWidth, persistWidths,
+} = useListColumnLayout({
+  storageKey: layoutStorageKey,
+  fields: layoutFields,
+  extraWidth: computed(() => (canWrite.value ? 200 : 0)),
+  defaultWidthOf: (field) => (TIMESTAMP_COLUMNS.has(field) ? 180 : 120),
+})
+
+function readStoredColumnOrder(key: string): string[] {
+  if (!key) return []
+  try {
+    const raw = sessionStorage.getItem(key)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as { columnOrder?: string[] }
+    return Array.isArray(parsed.columnOrder) ? parsed.columnOrder.filter(f => typeof f === 'string') : []
+  } catch {
+    // FALLBACK(ux): unreadable layout costs remembered order only; the row data is unaffected.
+    return []
+  }
+}
+
+function persistColumnOrder() {
+  const key = columnOrderStorageKey.value
+  if (!key) return
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ columnOrder: [...columnOrder.value] }))
+  } catch {
+    // FALLBACK(ux): quota errors must not interrupt the move the user just performed.
+  }
+}
+
+function syncColumnOrderFromServer(declared: ListColumnMeta[]) {
+  const declaredFields = declared.map(c => c.field)
+  const stored = readStoredColumnOrder(columnOrderStorageKey.value)
+  const next: string[] = []
+  for (const field of stored) {
+    if (declaredFields.includes(field) && !next.includes(field)) next.push(field)
+  }
+  for (const field of declaredFields) {
+    if (!next.includes(field)) next.push(field)
+  }
+  columnOrder.value = next
+}
+
+function moveColumn(field: string, direction: 'left' | 'right') {
+  const order = [...columnOrder.value]
+  const index = order.indexOf(field)
+  if (index < 0) return
+  const swapWith = direction === 'left' ? index - 1 : index + 1
+  if (swapWith < 0 || swapWith >= order.length) return
+  ;[order[index], order[swapWith]] = [order[swapWith], order[index]]
+  columnOrder.value = order
+  persistColumnOrder()
+}
 
 // ---- Editing state ----
 const fieldDefs = ref<RelationFieldDef[]>([])
@@ -470,7 +602,7 @@ const fetchTables = async () => {
   tableListLoading.value = true
   try {
     const res = await relationTableApi.getVisibleTables()
-    tables.value = res.data || []
+    tables.value = res.data
     // Honor a drill-down from Views: ?tableId=<id>&search=<value> preselects that table + filter.
     const queryTableId = route.query.tableId != null ? Number(route.query.tableId) : null
     const target = queryTableId != null && tables.value.some(t => t.id === queryTableId)
@@ -481,12 +613,9 @@ const fetchTables = async () => {
       if (queryTableId === target && typeof route.query.search === 'string') {
         searchKeyword.value = route.query.search
       }
-      fetchDisplayNames()
       fetchFieldDefs()
       fetchData()
     }
-  } catch {
-    tables.value = []
   } finally {
     tableListLoading.value = false
   }
@@ -494,84 +623,129 @@ const fetchTables = async () => {
 
 const fetchFieldDefs = async () => {
   if (!selectedTableId.value) { fieldDefs.value = []; return }
-  try {
-    const res: any = await relationTableApi.getFieldDefinitions(selectedTableId.value)
-    fieldDefs.value = res?.data ?? res ?? []
-  } catch {
-    fieldDefs.value = []
-  }
+  const res = await relationTableApi.getFieldDefinitions(selectedTableId.value)
+  fieldDefs.value = res.data
 }
+
+const buildQuery = (): RelationTableQueryRequest => {
+  const body: RelationTableQueryRequest = {
+    page: currentPage.value - 1,
+    size: pageSize.value
+  }
+  if (searchKeyword.value) {
+    body.search = searchKeyword.value
+  }
+  const filters = Object.entries(columnFilters.value).map(([field, filter]) => ({ field, ...filter }))
+  if (filters.length > 0) {
+    body.filters = filters
+  }
+  if (sort.field && sort.direction) {
+    body.sortField = sort.field
+    body.sortDirection = sort.direction
+  }
+  return body
+}
+
+// Switching tables while a query is in flight must not let the old table's rows land in the
+// new table's grid — a superseded response is dropped rather than rendered.
+let latestQuery = 0
 
 const fetchData = async () => {
   if (!selectedTableId.value) return
+  const queryId = ++latestQuery
   dataLoading.value = true
   try {
-    const params: Record<string, any> = {
-      page: currentPage.value - 1,
-      size: pageSize.value
+    const res = await relationTableApi.queryTableData(selectedTableId.value, buildQuery())
+    if (queryId !== latestQuery) return
+    const page = res.data
+    if (!Array.isArray(page.columns) || page.columns.length === 0) {
+      throw new Error('relation-table query response is missing its column declaration')
     }
-    if (searchKeyword.value) {
-      params.search = searchKeyword.value
-    }
-    const res: any = await relationTableApi.queryTableData(selectedTableId.value, params)
-    // Handle both wrapped (ApiResponse) and unwrapped response formats
-    const pageData = res?.data ?? res
-    dataRows.value = pageData?.content || []
-    totalElements.value = pageData?.totalElements || 0
-
-    if (dataRows.value.length > 0) {
-      // `status` is surfaced for the Active/Inactive toggle but is not a displayable data column.
-      columns.value = Object.keys(dataRows.value[0]).filter(c => c !== 'status')
-    } else {
-      columns.value = []
-    }
-  } catch (e) {
-    console.error('Failed to load table data:', e)
+    columns.value = page.columns
+    syncColumnOrderFromServer(page.columns)
+    dataRows.value = page.content
+    totalElements.value = page.totalElements
+  } catch (e: unknown) {
+    if (queryId !== latestQuery) return
+    const err = e as { response?: { data?: { message?: string; error?: { message?: string } } } }
+    ElMessage.error(
+      err?.response?.data?.error?.message
+        || err?.response?.data?.message
+        || (e instanceof Error ? e.message : 'Failed to load table data'),
+    )
+    columns.value = []
     dataRows.value = []
+    totalElements.value = 0
   } finally {
-    dataLoading.value = false
+    if (queryId === latestQuery) {
+      dataLoading.value = false
+    }
   }
 }
 
-const fetchDisplayNames = async () => {
-  if (!selectedTableId.value) return
-  fieldDisplayNames.value = {}
-  try {
-    const res: any = await relationTableApi.getViewFields(selectedTableId.value)
-    const fields = res?.data ?? res ?? []
-    const map: Record<string, string> = {}
-    for (const f of fields) {
-      if (f?.fieldName) map[f.fieldName] = f.displayLabel || f.fieldName
-    }
-    fieldDisplayNames.value = map
-  } catch {
-    fieldDisplayNames.value = {}
-  }
+/** Column state belongs to one table; carrying it across a switch would query B with A's columns. */
+const resetTableState = () => {
+  searchKeyword.value = ''
+  currentPage.value = 1
+  columns.value = []
+  columnOrder.value = []
+  columnFilters.value = {}
+  sort.field = null
+  sort.direction = null
+  filterDialog.visible = false
+  filterDialog.field = ''
 }
 
 const handleSelectTable = (index: string) => {
   selectedTableId.value = Number(index)
-  searchKeyword.value = ''
-  currentPage.value = 1
-  columns.value = []
-  fieldDisplayNames.value = {}
-  fetchDisplayNames()
+  resetTableState()
   fetchFieldDefs()
   fetchData()
 }
 
-const handlePageChange = (page: number) => {
-  currentPage.value = page
-  fetchData()
-}
-
-const handleSizeChange = (size: number) => {
-  pageSize.value = size
+/** A new keyword changes the result set, so the old page number no longer addresses anything. */
+const handleSearch = () => {
   currentPage.value = 1
   fetchData()
 }
 
-const TIMESTAMP_COLUMNS = new Set(['created_at', 'updated_at'])
+const openFilter = (field: string) => {
+  filterDialog.field = field
+  filterDialog.visible = true
+}
+
+const clearFilter = (field: string) => {
+  const { [field]: _removed, ...rest } = columnFilters.value
+  columnFilters.value = rest
+  currentPage.value = 1
+  fetchData()
+}
+
+const onFilterApply = (filter: ListColumnFilter) => {
+  columnFilters.value = { ...columnFilters.value, [filterDialog.field]: filter }
+  filterDialog.visible = false
+  currentPage.value = 1
+  fetchData()
+}
+
+const onFilterClear = () => {
+  filterDialog.visible = false
+  clearFilter(filterDialog.field)
+}
+
+const applySort = (field: string, direction: 'ASC' | 'DESC') => {
+  sort.field = field
+  sort.direction = direction
+  currentPage.value = 1
+  fetchData()
+}
+
+const clearSort = () => {
+  sort.field = null
+  sort.direction = null
+  currentPage.value = 1
+  fetchData()
+}
 
 const isTimestampColumn = (col: string): boolean => TIMESTAMP_COLUMNS.has(col)
 
@@ -884,6 +1058,10 @@ const handleConfirmImport = async () => {
 onMounted(fetchTables)
 </script>
 
+<style lang="scss">
+@import '@/styles/listDataGrid.scss';
+</style>
+
 <style scoped>
 .page-container {
   padding: 20px;
@@ -902,6 +1080,7 @@ onMounted(fetchTables)
   display: flex;
   gap: 16px;
   height: calc(100vh - 140px);
+  min-height: 0;
 }
 
 .table-list-panel {
@@ -948,11 +1127,16 @@ onMounted(fetchTables)
 .data-grid-panel {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .grid-toolbar {
   display: flex;
   align-items: center;
   margin-bottom: 12px;
+  flex-shrink: 0;
 }
 </style>

@@ -80,6 +80,31 @@ export interface PageResponse<T> {
   hasPrevious: boolean
 }
 
+/** Mirrors RelationTableQueryRequest — paging plus shared-header filters/sort (no groupBy). */
+export interface RelationTableQueryRequest {
+  page: number
+  size: number
+  search?: string | null
+  filters?: Array<{ field: string; operator: string; value?: string | null; value2?: string | null }>
+  sortField?: string | null
+  sortDirection?: 'ASC' | 'DESC' | null
+}
+
+export interface RelationTableColumnMeta {
+  field: string
+  label: string
+  kind: string
+  filterable: boolean
+  sortable: boolean
+  groupable: boolean
+  operators: string[]
+  options?: { value: string; label: string }[]
+}
+
+export interface RelationTableDataPage extends PageResponse<Record<string, unknown>> {
+  columns: RelationTableColumnMeta[]
+}
+
 // ==================== API ====================
 
 export const relationTableApi = {
@@ -87,9 +112,9 @@ export const relationTableApi = {
   getVisibleTables: () =>
     request.get<{ data: RelationTableDTO[] }>('/relation-tables'),
 
-  /** 分页查询表数据（只读） */
-  queryTableData: (tableId: number, params: { page?: number; size?: number; search?: string }) =>
-    request.get<{ data: PageResponse<Record<string, any>> }>(`/relation-tables/${tableId}`, { params }),
+  /** 分页查询表数据（真分页；筛选/排序推入 SQL） */
+  queryTableData: (tableId: number, body: RelationTableQueryRequest) =>
+    request.post<{ data: RelationTableDataPage }>(`/relation-tables/${tableId}/data`, body),
 
   /** 导出 CSV */
   exportCsv: (tableId: number, maxRows = 10000) =>
