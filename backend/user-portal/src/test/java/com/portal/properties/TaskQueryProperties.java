@@ -563,6 +563,9 @@ class TaskQueryProperties {
 
         when(workflowEngineClient.getUserAllVisibleTasks(anyString(), anyList(), anyList(), anyInt(), anyInt()))
                 .thenReturn(Optional.of(body));
+        when(workflowEngineClient.getUserAllVisibleTasks(
+                anyString(), anyList(), anyList(), anyInt(), anyInt(), any()))
+                .thenReturn(Optional.of(body));
         when(workflowEngineClient.getUserTasks(anyString(), anyInt(), anyInt()))
                 .thenReturn(Optional.of(body));
     }

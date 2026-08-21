@@ -60,6 +60,14 @@ public class TaskController {
         return ApiResponse.success(result);
     }
 
+    @Operation(summary = "Query To Do list (shared list chrome)")
+    @PostMapping("/todo/query")
+    public ApiResponse<PortalListPage<TaskInfo>> queryTodoTasks(
+            @CurrentUserId String userId,
+            @RequestBody TodoTaskQueryRequest request) {
+        return ApiResponse.success(taskQueryComponent.queryTodoList(userId, request));
+    }
+
     @Operation(summary = "Get task detail")
     @GetMapping("/{taskId}")
     public ApiResponse<TaskInfo> getTaskDetail(

@@ -279,6 +279,15 @@ public class WorkflowEngineClient {
     }
 
     /**
+     * Same with optional Flowable pushdown criteria (taskName / sort).
+     */
+    public Optional<Map<String, Object>> getUserAllVisibleTasks(String userId, List<String> groupIds,
+                                                                 List<String> deptRoles, int page, int size,
+                                                                 com.portal.util.EngineTaskPushdown.Criteria criteria) {
+        return taskClient.getUserAllVisibleTasks(userId, groupIds, deptRoles, page, size, criteria);
+    }
+
+    /**
      * Returns task detail
      */
     public Optional<Map<String, Object>> getTaskById(String taskId) {

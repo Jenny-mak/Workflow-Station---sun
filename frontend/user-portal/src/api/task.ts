@@ -29,6 +29,16 @@ export interface CompletedTaskQueryRequest {
   endTime?: string
 }
 
+export interface TodoTaskQueryRequest {
+  page: number
+  size: number
+  filters?: ListColumnFilterRequest[]
+  sortField?: string
+  sortDirection?: 'ASC' | 'DESC'
+  groupBy?: string
+  assignmentTypes?: string[]
+}
+
 export interface TaskQueryRequest {
   userId?: string
   assignmentTypes?: string[]
@@ -234,6 +244,10 @@ export function batchUrgeTasks(taskIds: string[], message?: string) {
 // Query completed tasks
 export function queryCompletedTasks(params: CompletedTaskQueryRequest) {
   return request.post<{ data: PortalListPage<TaskInfo> }>('/tasks/completed/query', params)
+}
+
+export function queryTodoTasks(params: TodoTaskQueryRequest) {
+  return request.post<{ data: PortalListPage<TaskInfo> }>('/tasks/todo/query', params)
 }
 
 // Assign a user to a sub-table row

@@ -44,6 +44,12 @@ public class TaskQueryRequest {
     /** 搜索关键词 */
     private String keyword;
 
+    /** Shared-list column filters (AND). */
+    private List<ListColumnFilter> filters;
+
+    /** Shared-list group-by field (forces portal fullScan). */
+    private String groupBy;
+
     /** 排序字段 */
     private String sortBy;
 

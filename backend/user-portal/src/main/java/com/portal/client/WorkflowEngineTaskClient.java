@@ -101,6 +101,16 @@ public class WorkflowEngineTaskClient {
      */
     public Optional<Map<String, Object>> getUserAllVisibleTasks(String userId, List<String> groupIds,
                                                                  List<String> deptRoles, int page, int size) {
+        return getUserAllVisibleTasks(userId, groupIds, deptRoles, page, size,
+                com.portal.util.EngineTaskPushdown.Criteria.empty());
+    }
+
+    /**
+     * Same as {@link #getUserAllVisibleTasks(String, List, List, int, int)} with optional engine pushdown criteria.
+     */
+    public Optional<Map<String, Object>> getUserAllVisibleTasks(String userId, List<String> groupIds,
+                                                                 List<String> deptRoles, int page, int size,
+                                                                 com.portal.util.EngineTaskPushdown.Criteria criteria) {
         if (!engine.isAvailable()) {
             return Optional.empty();
         }
@@ -122,6 +132,26 @@ public class WorkflowEngineTaskClient {
             SecurityContextUtils.getCurrentActiveBusinessUnitId()
                     .filter(id -> id != null && !id.isBlank())
                     .ifPresent(bu -> ub.queryParam("activeBusinessUnitId", bu));
+            if (criteria != null) {
+                if (criteria.taskNameLike() != null && !criteria.taskNameLike().isBlank()) {
+                    ub.queryParam("taskNameLike", criteria.taskNameLike());
+                }
+                if (criteria.taskNameLikeMode() != null && !criteria.taskNameLikeMode().isBlank()) {
+                    ub.queryParam("taskNameLikeMode", criteria.taskNameLikeMode());
+                }
+                if (criteria.taskNameExact() != null && !criteria.taskNameExact().isBlank()) {
+                    ub.queryParam("taskNameExact", criteria.taskNameExact());
+                }
+                if (criteria.priority() != null) {
+                    ub.queryParam("priority", criteria.priority());
+                }
+                if (criteria.sortBy() != null && !criteria.sortBy().isBlank()) {
+                    ub.queryParam("sortBy", criteria.sortBy());
+                }
+                if (criteria.sortDirection() != null && !criteria.sortDirection().isBlank()) {
+                    ub.queryParam("sortDirection", criteria.sortDirection());
+                }
+            }
             String url = ub.encode().build().toUriString();
 
             ResponseEntity<Map<String, Object>> response = engine.restTemplate().exchange(

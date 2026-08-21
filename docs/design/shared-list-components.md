@@ -1,6 +1,12 @@
 # 跨端列表共享组件与服务端分页接入规范
 
-> **状态：方案已定稿；Views / Relation Tables 已在接入（2026-08-20）。** §12 的 6 项待确认**全部关闭**。
+> **状态：方案已定稿；Views / Relation Tables / 已办任务 / My Requests / To Do 已接入（2026-08-24）。**
+> §12 的 6 项待确认**全部关闭**。Delegations（规则+审计）与 Permissions（申请+审批）另分支，
+> 未写入本状态行；AD / DW 仍未做。
+> To Do 采用引擎 pushdown（Mine 真分页）+ 不可 push 时 fullScan 精确 total；
+> **默认不再把 standing-rule Proxy 并进 To Do**（Proxy 仍走 Delegations / assignmentTypes=DELEGATED）。
+> **已知未做 → [#1545](../../.kiro/issues/index.yaml)**：默认路径稳 ≤500ms、groupBy/日期去掉 portal fullScan
+> （须引擎侧 SQL，另开改造；投影表仍暂缓）。
 > 关键决策：§6.1（行可见范围两级过滤）、§6.1.1（SUB 行身份取 `row_id` 优先，写入侧→MAIN→SUB
 > 三步走）、§6.2（深分页不设上限，改慢查询日志）、§6.3.1（分组按字段语义声明，不是每列都给）、
 > **§6.3.2（筛选 kind 的权威是表 `data_type` / 视图系统列，不是 Form 组件；`FILE` 本期
@@ -583,6 +589,7 @@ NUMBER / DATETIME / TEXT…；LOOKUP 按存的主键当 TEXT）。**一律 `grou
 - `frontend/user-portal/verification-screenshots/2026-08-20_list-relation-tables-shared.png`
 - `frontend/user-portal/verification-screenshots/2026-08-20_list-relation-user-after-enum.png`
 - `frontend/user-portal/verification-screenshots/2026-08-20_list-relation-user-status-enum-filter.png`
+
 
 ## 7. 影响面
 

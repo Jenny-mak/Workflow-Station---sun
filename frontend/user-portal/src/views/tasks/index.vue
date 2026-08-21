@@ -4,228 +4,138 @@
       <h1>{{ t('task.title') }}</h1>
     </div>
 
-    <!-- 筛选条件 -->
-    <div class="portal-card filter-card">
-      <el-form
-        :inline="true"
-        :model="filterForm"
+    <div
+      v-loading="loading"
+      class="portal-card"
+    >
+      <div
+        ref="gridScrollRef"
+        class="list-data-grid-scroll"
       >
-        <el-form-item :label="t('task.assignmentType')">
-          <el-select
-            v-model="filterForm.assignmentTypes"
-            multiple
-            clearable
-            :placeholder="t('common.all')"
-            style="width: 200px;"
+        <div
+          class="list-data-grid-inner"
+          :style="gridInnerStyle"
+        >
+          <el-table
+            :data="displayRows"
+            stripe
+            :fit="gridFits"
+            table-layout="fixed"
+            style="width: 100%;"
+            class="list-data-grid"
+            :class="{ 'list-data-grid--fit': gridFits }"
+            :span-method="spanMethod(1)"
+            :row-class-name="rowClassName"
+            :selectable="(row: object) => !isListGroupHeaderRow(row)"
+            @selection-change="handleSelectionChange"
           >
-            <el-option
-              value="USER"
-              :label="t('task.user')"
-            />
-            <el-option
-              value="VIRTUAL_GROUP"
-              :label="t('task.virtualGroup')"
-            />
-            <el-option
-              value="DEPT_ROLE"
-              :label="t('task.deptRole')"
-            />
-            <el-option
-              value="DELEGATED"
-              :label="t('task.delegated')"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('task.priority')">
-          <el-select
-            v-model="filterForm.priorities"
-            multiple
-            clearable
-            :placeholder="t('common.all')"
-            style="width: 160px;"
-          >
-            <el-option
-              value="URGENT"
-              :label="t('task.urgent')"
-            />
-            <el-option
-              value="HIGH"
-              :label="t('task.high')"
-            />
-            <el-option
-              value="NORMAL"
-              :label="t('task.normal')"
-            />
-            <el-option
-              value="LOW"
-              :label="t('task.low')"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-input
-            v-model="filterForm.keyword"
-            :placeholder="t('common.search')"
-            clearable
-            style="width: 200px;"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
+            <template #empty>
+              <div
+                v-if="loading"
+                class="table-empty-loading"
+              >
+                <el-icon class="table-empty-loading__icon is-loading">
+                  <Loading />
+                </el-icon>
+                <span>{{ t('common.loading') }}</span>
+              </div>
+              <span v-else>{{ t('task.noTasks') }}</span>
             </template>
-          </el-input>
-        </el-form-item>
-        <el-form-item>
-          <el-button
-            type="primary"
-            @click="handleSearch"
-          >
-            {{ t('common.search') }}
-          </el-button>
-          <el-button @click="handleReset">
-            {{ t('common.reset') }}
-          </el-button>
-        </el-form-item>
-      </el-form>
-    </div>
+            <el-table-column
+              type="selection"
+              width="50"
+              fixed
+            />
+            <el-table-column
+              v-for="(col, colIndex) in displayColumns"
+              :key="col.field"
+              :prop="col.field"
+              :width="gridFits ? undefined : widthOf(col.field)"
+              :min-width="gridFits ? widthOf(col.field) : undefined"
+              show-overflow-tooltip
+            >
+              <template #header>
+                <ListColumnHeader
+                  :column="col"
+                  :sort="sort.field === col.field ? sort.direction : null"
+                  :grouped="groupBy === col.field"
+                  :filtered="!!columnFilters[col.field]"
+                  :width="widthOf(col.field)"
+                  :show-move="displayColumns.length > 1"
+                  :can-move-left="colIndex > 0"
+                  :can-move-right="colIndex < displayColumns.length - 1"
+                  @sort-change="(direction: 'ASC' | 'DESC') => onSort(col.field, direction)"
+                  @clear-sort="onClearSort"
+                  @group-change="(grouped: boolean) => onGroup(col.field, grouped)"
+                  @filter-open="openFilter(col.field)"
+                  @clear-filter="onClearFilter(col.field)"
+                  @move="(direction: 'left' | 'right') => moveColumn(col.field, direction)"
+                  @width-change="(width: number) => setWidth(col.field, width)"
+                  @width-commit="persistWidths"
+                />
+              </template>
+              <template #default="{ row }">
+                <template v-if="isListGroupHeaderRow(row)">
+                  <div class="group-header-cell">
+                    <strong>{{ groupHeaderLabel(row._groupLabel) }}</strong>
+                    <span class="group-count">({{ row._groupCount }})</span>
+                  </div>
+                </template>
+                <el-link
+                  v-else-if="col.field === 'requestId'"
+                  type="primary"
+                  @click="viewTask(row)"
+                >
+                  {{ row.requestId || '-' }}
+                </el-link>
+                <template v-else-if="col.field === 'currentStepName'">
+                  {{ row.currentStepName || row.taskName || '-' }}
+                </template>
+                <span
+                  v-else-if="col.field === 'assignmentType'"
+                  class="assignment-type"
+                  :class="getAssignmentClass(row)"
+                >
+                  {{ t(`task.${getAssignmentKey(row)}`) }}
+                </span>
+                <span
+                  v-else-if="col.field === 'priority'"
+                  class="priority"
+                  :class="getPriorityClass(row.priority)"
+                >
+                  {{ getPriorityLabel(row.priority) }}
+                </span>
+                <span
+                  v-else-if="col.field === 'createTime' || col.field === 'dueDate'"
+                  style="white-space: nowrap;"
+                  :class="{ overdue: col.field === 'dueDate' && row.isOverdue }"
+                >
+                  {{ formatDate(row[col.field]) }}
+                  <el-tag
+                    v-if="col.field === 'dueDate' && row.isOverdue"
+                    type="danger"
+                    size="small"
+                    style="margin-left: 4px;"
+                  >
+                    {{ t('task.overdue') }}
+                  </el-tag>
+                </span>
+                <template v-else>
+                  {{ row[col.field as keyof TaskInfo] || '-' }}
+                </template>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
 
-    <!-- 任务列表：先渲染表格结构，数据异步填充（加载中仅在空表时提示，翻页时保留上一页数据直至返回） -->
-    <div class="portal-card">
-      <el-table
-        :data="taskList"
-        stripe
-        table-layout="fixed"
-        @selection-change="handleSelectionChange"
-      >
-        <template #empty>
-          <div
-            v-if="loading"
-            class="tasks-table-empty-loading"
-          >
-            <el-icon class="tasks-table-empty-loading__icon is-loading">
-              <Loading />
-            </el-icon>
-            <span>{{ t('common.loading') }}</span>
-          </div>
-          <span v-else>{{ t('task.noTasks') }}</span>
-        </template>
-        <el-table-column
-          type="selection"
-          width="50"
-        />
-        <el-table-column
-          prop="requestId"
-          :label="t('task.requestId')"
-          min-width="130"
-          show-overflow-tooltip
-        >
-          <template #default="{ row }">
-            <el-link
-              type="primary"
-              @click="viewTask(row)"
-            >
-              {{ row.requestId || '-' }}
-            </el-link>
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="taskName"
-          :label="t('task.taskName')"
-          min-width="160"
-          show-overflow-tooltip
-        />
-        <el-table-column
-          prop="currentStepName"
-          :label="t('task.currentStep')"
-          min-width="130"
-          show-overflow-tooltip
-        >
-          <template #default="{ row }">
-            {{ row.currentStepName || row.taskName || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="processDefinitionName"
-          :label="t('task.processName')"
-          min-width="140"
-          show-overflow-tooltip
-        />
-        <el-table-column
-          prop="assignmentType"
-          :label="t('task.assignmentType')"
-          width="130"
-          :show-overflow-tooltip="false"
-          class-name="no-wrap-header"
-        >
-          <template #default="{ row }">
-            <el-tag
-              :class="['assignment-tag', getAssignmentClass(row)]"
-              size="small"
-            >
-              {{ t(`task.${getAssignmentKey(row)}`) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="initiatorName"
-          :label="t('task.initiator')"
-          width="100"
-          show-overflow-tooltip
-        >
-          <template #default="{ row }">
-            {{ row.initiatorName || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="priority"
-          :label="t('task.priority')"
-          width="80"
-        >
-          <template #default="{ row }">
-            <el-tag
-              :class="['priority-tag', getPriorityClass(row.priority)]"
-              size="small"
-            >
-              {{ getPriorityLabel(row.priority) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="createTime"
-          :label="t('task.createTime')"
-          width="150"
-        >
-          <template #default="{ row }">
-            {{ formatDate(row.createTime) }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="dueDate"
-          :label="t('task.dueDate')"
-          width="130"
-        >
-          <template #default="{ row }">
-            <span :class="{ 'overdue': row.isOverdue }">
-              {{ row.dueDate ? formatDate(row.dueDate) : '-' }}
-            </span>
-            <el-tag
-              v-if="row.isOverdue"
-              type="danger"
-              size="small"
-              style="margin-left: 4px;"
-            >
-              {{ t('task.overdue') }}
-            </el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <!-- 批量操作 -->
       <div
         v-if="selectedTasks.length > 0"
         class="batch-actions"
       >
         <span>{{ t('task.selected', { count: selectedTasks.length }) }}</span>
         <el-button
+          type="warning"
           size="small"
           @click="handleBatchUrge"
         >
@@ -233,65 +143,48 @@
         </el-button>
       </div>
 
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.size"
+      <ListPagination
+        v-model:page="pagination.page"
+        v-model:size="pagination.size"
         :total="pagination.total"
-        :page-sizes="[10, 20, 50, 100]"
-        :disabled="loading"
-        layout="total, sizes, prev, pager, next, jumper"
-        style="margin-top: 16px; justify-content: flex-end;"
-        @size-change="handleSizeChange"
-        @current-change="handlePageChange"
+        :loading="loading"
+        @change="loadTasks"
       />
     </div>
 
-    <!-- 委托/转办/催办对话框 -->
+    <ListFilterDialog
+      v-model:visible="filterDialog.visible"
+      :column="activeFilterColumn"
+      :filter="activeFilter"
+      @apply="onFilterApply"
+      @clear="onFilterClear"
+    />
+
     <el-dialog
       v-model="actionDialogVisible"
       :title="actionDialogTitle"
       width="500px"
-      class="task-action-dialog"
+      class="task-action-form"
     >
       <el-form
         :model="actionForm"
-        label-width="auto"
-        label-position="left"
-        class="task-action-form"
+        label-width="100px"
       >
         <el-form-item
           v-if="currentAction !== 'urge' && currentAction !== 'batchUrge'"
           :label="t('task.targetUser')"
+          required
         >
-          <el-select
+          <el-input
             v-model="actionForm.targetUserId"
-            filterable
-            :placeholder="t('task.selectUser')"
-            style="width: 100%;"
-          >
-            <el-option
-              label="Li Si"
-              value="user_2"
-            />
-            <el-option
-              label="Wang Wu"
-              value="user_3"
-            />
-            <el-option
-              label="Zhao Liu"
-              value="user_4"
-            />
-          </el-select>
+            :placeholder="t('task.enterUserId')"
+          />
         </el-form-item>
-        <el-form-item
-          :label="currentAction === 'urge' || currentAction === 'batchUrge' ? t('task.urgeMessage') : t('task.reasonDescription')"
-          class="task-action-reason-item"
-        >
-          <el-input 
-            v-model="actionForm.reason" 
-            type="textarea" 
-            :rows="5" 
-            :placeholder="currentAction === 'urge' || currentAction === 'batchUrge' ? t('task.urgeMessagePlaceholder') : t('task.reasonPlaceholder')" 
+        <el-form-item :label="t('common.reason')">
+          <el-input
+            v-model="actionForm.reason"
+            type="textarea"
+            :rows="3"
           />
         </el-form-item>
       </el-form>
@@ -315,87 +208,128 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Search, Loading } from '@element-plus/icons-vue'
-import { queryTasks, delegateTask, transferTask, urgeTask, batchUrgeTasks, TaskInfo } from '@/api/task'
+import { Loading } from '@element-plus/icons-vue'
+import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
+import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
+import ListPagination from '@platform-shared/list/ListPagination.vue'
+import type { ListColumnFilter } from '@platform-shared/list/columnMeta'
+import { queryTodoTasks, batchUrgeTasks, type TaskInfo } from '@/api/task'
+import { usePortalListGrid } from '@/composables/list/usePortalListGrid'
 import { formatDate } from '@/utils/dateFormat'
 import { usePendingTaskStore } from '@/stores/pendingTask'
+
+const TODO_COL_WIDTHS: Record<string, number> = {
+  requestId: 140,
+  taskName: 160,
+  currentStepName: 160,
+  processDefinitionName: 160,
+  assignmentType: 130,
+  initiatorName: 120,
+  priority: 100,
+  createTime: 170,
+  dueDate: 180,
+}
 
 const pendingTaskStore = usePendingTaskStore()
 const { t } = useI18n()
 const router = useRouter()
-
 const loading = ref(true)
-const taskList = ref<TaskInfo[]>([])
 const selectedTasks = ref<TaskInfo[]>([])
 
-const filterForm = reactive({
-  assignmentTypes: [] as string[],
-  priorities: [] as string[],
-  keyword: ''
-})
-
-const pagination = reactive({
-  page: 1,
-  size: 20,
-  total: 0
+const {
+  displayColumns,
+  displayRows,
+  groupBy,
+  columnFilters,
+  sort,
+  filterDialog,
+  pagination,
+  activeFilterColumn,
+  activeFilter,
+  gridScrollRef,
+  gridFits,
+  gridInnerStyle,
+  widthOf,
+  setWidth,
+  persistWidths,
+  beginQuery,
+  isCurrentQuery,
+  applyPage,
+  buildQuery,
+  moveColumn,
+  openFilter,
+  applyFilter,
+  clearFilter,
+  applySort,
+  clearSort,
+  applyGroup,
+  rowClassName,
+  spanMethod,
+  groupHeaderLabel,
+  isListGroupHeaderRow,
+} = usePortalListGrid<TaskInfo>({
+  storageKey: 'portal-list-layout:todo-tasks',
+  extraWidth: 50,
+  defaultWidthOf: (field) => TODO_COL_WIDTHS[field] ?? 120,
 })
 
 const actionDialogVisible = ref(false)
 const actionDialogTitle = ref('')
 const currentAction = ref('')
-const currentTask = ref<TaskInfo | null>(null)
 const actionForm = reactive({
   targetUserId: '',
-  reason: ''
+  reason: '',
 })
 
 const loadTasks = async () => {
+  const seq = beginQuery()
   loading.value = true
   try {
-    const res = await queryTasks({
-      assignmentTypes: filterForm.assignmentTypes.length > 0 ? filterForm.assignmentTypes : undefined,
-      priorities: filterForm.priorities.length > 0 ? filterForm.priorities : undefined,
-      keyword: filterForm.keyword || undefined,
-      page: pagination.page - 1,
-      size: pagination.size
-    })
-    // API 返回格式: { success: true, data: { content: [], totalElements: 0 } }
-    const data = res.data || res
-    taskList.value = data.content || []
-    pagination.total = data.totalElements || 0
-    pendingTaskStore.syncCountFromListTotal(data.totalElements as number | undefined)
+    const res = await queryTodoTasks(buildQuery())
+    if (!isCurrentQuery(seq)) return
+    applyPage(res.data, 'todo/query response is missing its column declaration')
+    pendingTaskStore.syncCountFromListTotal(res.data.totalElements)
   } catch (error) {
-    console.error('Failed to load tasks:', error)
-    taskList.value = []
-    pagination.total = 0
+    if (!isCurrentQuery(seq)) return
+    if (!(error as { response?: unknown })?.response) {
+      ElMessage.error(error instanceof Error ? error.message : t('task.loadFailed'))
+    }
   } finally {
-    loading.value = false
+    if (isCurrentQuery(seq)) loading.value = false
   }
 }
 
-const handleSearch = () => {
-  pagination.page = 1
+function onSort(field: string, direction: 'ASC' | 'DESC') {
+  applySort(field, direction)
   loadTasks()
 }
 
-const handleReset = () => {
-  filterForm.assignmentTypes = []
-  filterForm.priorities = []
-  filterForm.keyword = ''
-  handleSearch()
-}
-
-const handleSizeChange = () => {
-  pagination.page = 1
+function onClearSort() {
+  clearSort()
   loadTasks()
 }
 
-const handlePageChange = () => {
+function onGroup(field: string, grouped: boolean) {
+  applyGroup(field, grouped)
   loadTasks()
+}
+
+function onClearFilter(field: string) {
+  clearFilter(field)
+  loadTasks()
+}
+
+function onFilterApply(filter: ListColumnFilter) {
+  applyFilter(filter)
+  loadTasks()
+}
+
+function onFilterClear() {
+  onClearFilter(filterDialog.field)
 }
 
 const handleSelectionChange = (selection: TaskInfo[]) => {
-  selectedTasks.value = selection
+  selectedTasks.value = selection.filter((row) => !isListGroupHeaderRow(row))
 }
 
 const viewTask = (task: TaskInfo) => {
@@ -410,30 +344,15 @@ const handleBatchUrge = () => {
 }
 
 const submitAction = async () => {
-  if (currentAction.value !== 'urge' && currentAction.value !== 'batchUrge' && !actionForm.targetUserId) {
-    ElMessage.warning(t('task.selectUser'))
-    return
-  }
-  
   try {
-    if (currentAction.value === 'delegate') {
-      await delegateTask(currentTask.value!.taskId, actionForm.targetUserId, actionForm.reason)
-      ElMessage.success(t('common.success'))
-    } else if (currentAction.value === 'transfer') {
-      await transferTask(currentTask.value!.taskId, actionForm.targetUserId, actionForm.reason)
-      ElMessage.success(t('common.success'))
-    } else if (currentAction.value === 'urge') {
-      await urgeTask(currentTask.value!.taskId, actionForm.reason)
-      ElMessage.success(t('common.success'))
-    } else if (currentAction.value === 'batchUrge') {
-      const taskIds = selectedTasks.value.map(t => t.taskId)
+    if (currentAction.value === 'batchUrge') {
+      const taskIds = selectedTasks.value.map((task) => task.taskId)
       await batchUrgeTasks(taskIds, actionForm.reason)
       ElMessage.success(t('common.success'))
     }
     actionDialogVisible.value = false
     loadTasks()
   } catch (error) {
-    console.error('Task action failed:', error)
     const msg =
       (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
       ?? (error as { message?: string })?.message
@@ -447,7 +366,6 @@ const getAssignmentKey = (task: TaskInfo) => {
   if (bpmn === 'INITIATOR' || bpmn === 'PROCESS_INITIATOR') {
     return 'processInitiator'
   }
-  // 设计器 FIXED_BU_ROLE：引擎运行时多为 CANDIDATE_USERS，需用 BPMN 扩展区分「固定 BU+角色」池
   if (bpmn === 'FIXED_BU_ROLE') {
     return 'fixedBuRole'
   }
@@ -456,11 +374,11 @@ const getAssignmentKey = (task: TaskInfo) => {
   }
   const type = task.assignmentType
   const map: Record<string, string> = {
-    'USER': 'user',
-    'VIRTUAL_GROUP': 'virtualGroup',
-    'DEPT_ROLE': 'deptRole',
-    'DELEGATED': 'delegated',
-    'CANDIDATE_USERS': 'candidateUsers'
+    USER: 'user',
+    VIRTUAL_GROUP: 'virtualGroup',
+    DEPT_ROLE: 'deptRole',
+    DELEGATED: 'delegated',
+    CANDIDATE_USERS: 'candidateUsers',
   }
   return map[type] || 'user'
 }
@@ -475,54 +393,42 @@ const getAssignmentClass = (task: TaskInfo) => {
     delegated: 'delegated',
     candidateUsers: 'virtual-group',
     fixedBuRole: 'virtual-group',
-    buRole: 'virtual-group'
+    buRole: 'virtual-group',
   }
   return map[key] || 'user'
 }
 
-// 将优先级转换为翻译键
-const getPriorityLabel = (priority: any): string => {
+const getPriorityLabel = (priority: string | number | undefined): string => {
   if (!priority) return t('task.normal')
-  
-  // 如果是字符串，直接使用
   if (typeof priority === 'string') {
     const upperPriority = priority.toUpperCase()
     if (['URGENT', 'HIGH', 'NORMAL', 'LOW'].includes(upperPriority)) {
       return t(`task.${upperPriority.toLowerCase()}`)
     }
   }
-  
-  // 如果是数字，映射到对应的优先级
   if (typeof priority === 'number') {
     if (priority >= 75) return t('task.urgent')
     if (priority >= 50) return t('task.high')
     if (priority >= 25) return t('task.normal')
     return t('task.low')
   }
-  
   return t('task.normal')
 }
 
-// 获取优先级 CSS 类名
-const getPriorityClass = (priority: any): string => {
+const getPriorityClass = (priority: string | number | undefined): string => {
   if (!priority) return 'normal'
-  
-  // 如果是字符串，直接使用
   if (typeof priority === 'string') {
     const upperPriority = priority.toUpperCase()
     if (['URGENT', 'HIGH', 'NORMAL', 'LOW'].includes(upperPriority)) {
       return upperPriority.toLowerCase()
     }
   }
-  
-  // 如果是数字，映射到对应的优先级
   if (typeof priority === 'number') {
     if (priority >= 75) return 'urgent'
     if (priority >= 50) return 'high'
     if (priority >= 25) return 'normal'
     return 'low'
   }
-  
   return 'normal'
 }
 
@@ -531,11 +437,41 @@ onMounted(() => {
 })
 </script>
 
+<style lang="scss">
+@import '@/styles/listDataGrid.scss';
+</style>
+
 <style lang="scss" scoped>
+.table-empty-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  padding: 24px 0;
+
+  &__icon {
+    font-size: 18px;
+  }
+}
+
 .tasks-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+
+  :deep(.portal-card) {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
   .page-header {
     margin-bottom: 20px;
-    
+    flex-shrink: 0;
+
     h1 {
       font-size: 24px;
       font-weight: 500;
@@ -543,54 +479,29 @@ onMounted(() => {
       margin: 0;
     }
   }
-  
-  .filter-card {
-    margin-bottom: 20px;
-    
-    .el-form {
-      margin-bottom: -18px;
-    }
-  }
 
-  .tasks-table-empty-loading {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--text-secondary);
-    padding: 24px 0;
-
-    &__icon {
-      font-size: 18px;
-    }
-  }
-  
   .batch-actions {
     display: flex;
     align-items: center;
     gap: 16px;
-    margin-top: 16px;
+    margin-top: 12px;
     padding: 12px 16px;
     background: #f5f7fa;
     border-radius: 4px;
-    
+    flex-shrink: 0;
+
     span {
       color: var(--text-secondary);
     }
   }
-  
+
   .overdue {
     color: var(--error-red);
   }
 }
-
-.tasks-page :deep(.no-wrap-header .cell) {
-  white-space: nowrap !important;
-  overflow: visible !important;
-}
 </style>
 
 <style lang="scss">
-/* 弹窗挂载到 body，需用全局样式 */
 .task-action-form .el-form-item__label {
   white-space: nowrap;
 }
