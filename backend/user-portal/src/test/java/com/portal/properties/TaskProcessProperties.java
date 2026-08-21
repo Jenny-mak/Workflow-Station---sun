@@ -113,7 +113,7 @@ class TaskProcessProperties {
             new WorkspaceTaskFilterComponent(
                 workflowEngineClient, virtualGroupAccessComponent, portalWorkspaceAuthService, businessUnitRepository),
             new MiParticipantEnrichmentComponent(jdbcTemplate),
-            new TaskHistoryComponent(workflowEngineClient, processInstanceRepository, processHistoryRepository, jdbcTemplate, requestIdEnricher),
+            new TaskHistoryComponent(workflowEngineClient, processHistoryRepository),
             requestIdEnricher
         );
         TaskPermissionEvaluator taskPermissionEvaluator =

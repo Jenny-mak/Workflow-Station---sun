@@ -38,6 +38,7 @@ public class ProcessController {
     private final FunctionUnitAccessComponent functionUnitAccessComponent;
     private final com.portal.component.PortalPrimaryKeyAllocationComponent portalPrimaryKeyAllocationComponent;
     private final TaskQueryComponent taskQueryComponent;
+    private final com.portal.component.MyApplicationListQueryComponent myApplicationListQueryComponent;
     private final TaskProcessComponent taskProcessComponent;
 
     @GetMapping("/definitions")
@@ -269,6 +270,18 @@ public class ProcessController {
         int safeSize = size < 1 ? 20 : Math.min(size, 100);
         Page<ProcessInstanceInfo> result = processComponent.getMyApplications(userId, status, PageRequest.of(safePage, safeSize));
         return ApiResponse.success(PageResponse.of(result));
+    }
+
+    @PostMapping("/my-applications/query")
+    @Operation(summary = "Query my applications (true paging; column filters, sort and grouping)")
+    public ApiResponse<PortalListPage<ProcessInstanceInfo>> queryMyApplications(
+            @CurrentUserId String userId,
+            @RequestBody MyApplicationQueryRequest request) {
+        if (userId == null || userId.isBlank()) {
+            throw new FunctionUnitAccessComponent.FunctionUnitAccessDeniedException(
+                    "Please login first before viewing your applications");
+        }
+        return ApiResponse.success(myApplicationListQueryComponent.query(userId, request));
     }
 
     @GetMapping("/{processId}")

@@ -2,6 +2,8 @@ package com.portal.component;
 
 import com.portal.client.WorkflowEngineClient;
 import com.portal.dto.PageResponse;
+import com.portal.dto.PortalListPage;
+import com.portal.dto.CompletedTaskQueryRequest;
 import com.portal.dto.TaskActionInfo;
 import com.portal.dto.TaskInfo;
 import com.portal.dto.TaskQueryRequest;
@@ -71,6 +73,9 @@ public class TaskQueryComponent {
     @Lazy
     @Autowired
     private ProcessComponent processComponent;
+
+    @Autowired
+    private CompletedTaskListQueryComponent completedTaskListQueryComponent;
 
     /**
      * 有界扇出线程池，替代 commonPool。每个扇出任务运行时各借一条 Hikari 连接，
@@ -681,7 +686,7 @@ public class TaskQueryComponent {
     /**
      * Query tasks completed by a user.
      */
-    public PageResponse<TaskInfo> queryCompletedTasks(TaskQueryRequest request) {
-        return taskHistoryComponent.queryCompletedTasks(request);
+    public PortalListPage<TaskInfo> queryCompletedTasks(String userId, CompletedTaskQueryRequest request) {
+        return completedTaskListQueryComponent.query(userId, request);
     }
 }

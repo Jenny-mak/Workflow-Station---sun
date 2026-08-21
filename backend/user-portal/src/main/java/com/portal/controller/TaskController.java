@@ -24,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -192,12 +193,10 @@ public class TaskController {
     
     @Operation(summary = "Query completed task list")
     @PostMapping("/completed/query")
-    public ApiResponse<PageResponse<TaskInfo>> queryCompletedTasks(
+    public ApiResponse<PortalListPage<TaskInfo>> queryCompletedTasks(
             @CurrentUserId String userId,
-            @RequestBody @Valid TaskQueryRequest request) {
-        request.setUserId(userId);
-        PageResponse<TaskInfo> result = taskQueryComponent.queryCompletedTasks(request);
-        return ApiResponse.success(result);
+            @RequestBody CompletedTaskQueryRequest request) {
+        return ApiResponse.success(taskQueryComponent.queryCompletedTasks(userId, request));
     }
 
     @Operation(summary = "Search users (for transfer/delegate)")
@@ -206,9 +205,12 @@ public class TaskController {
     public ApiResponse<List<Map<String, Object>>> searchUsers(
             @RequestParam(required = false, defaultValue = "") String keyword) {
         try {
+            // URI.create keeps the already-encoded keyword. RestTemplate.exchange(String)
+            // treats the URL as a template and percent-encodes `%` again, so 李 becomes a
+            // search for the literal "%E6%9D%8E" and the people picker shows No data.
             String url = adminCenterUrl + "/api/v1/admin/users?keyword=" + SafeUrlInput.encodeQueryValue(keyword) + "&size=20";
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-                    url, HttpMethod.GET, null,
+                    URI.create(url), HttpMethod.GET, null,
                     new ParameterizedTypeReference<Map<String, Object>>() {});
             Map<String, Object> body = response.getBody();
             List<Map<String, Object>> users = body != null

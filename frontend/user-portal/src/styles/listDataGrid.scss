@@ -46,3 +46,21 @@
   width: 100% !important;
   min-width: 100% !important;
 }
+
+.list-data-grid .group-header-row {
+  background: var(--el-fill-color-light) !important;
+  cursor: default;
+  font-weight: 600;
+}
+
+.list-data-grid .group-header-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.list-data-grid .group-count {
+  color: var(--el-text-color-secondary);
+  font-weight: normal;
+  font-size: 12px;
+}

@@ -1,6 +1,34 @@
 import type { AxiosRequestConfig } from 'axios'
 import { request } from './request'
 
+import type { ListColumnFilterRequest, ListColumnMeta } from '@platform-shared/list/columnMeta'
+
+export interface PortalListGroup {
+  label: string | null
+  count: number
+}
+
+export interface PortalListPage<T> {
+  columns: ListColumnMeta[]
+  content: T[]
+  groups?: PortalListGroup[]
+  page: number
+  size: number
+  totalElements: number
+}
+
+export interface CompletedTaskQueryRequest {
+  page: number
+  size: number
+  filters?: ListColumnFilterRequest[]
+  sortField?: string
+  sortDirection?: 'ASC' | 'DESC'
+  groupBy?: string
+  keyword?: string
+  startTime?: string
+  endTime?: string
+}
+
 export interface TaskQueryRequest {
   userId?: string
   assignmentTypes?: string[]
@@ -204,8 +232,8 @@ export function batchUrgeTasks(taskIds: string[], message?: string) {
 }
 
 // Query completed tasks
-export function queryCompletedTasks(params: TaskQueryRequest) {
-  return request.post<{ data: PageResponse<TaskInfo> }>('/tasks/completed/query', params)
+export function queryCompletedTasks(params: CompletedTaskQueryRequest) {
+  return request.post<{ data: PortalListPage<TaskInfo> }>('/tasks/completed/query', params)
 }
 
 // Assign a user to a sub-table row

@@ -7,27 +7,20 @@ import com.portal.dto.TaskInfo;
 import com.portal.dto.TaskQueryRequest;
 import com.portal.dto.TaskStatistics;
 import com.portal.entity.ProcessHistory;
-import com.portal.entity.ProcessInstance;
 import com.portal.repository.ProcessHistoryRepository;
-import com.portal.repository.ProcessInstanceRepository;
 import com.portal.util.WorkflowEnginePayloadHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * Task history, completed-task and statistics queries against the workflow engine,
@@ -39,10 +32,7 @@ import java.util.Set;
 public class TaskHistoryComponent {
 
     private final WorkflowEngineClient workflowEngineClient;
-    private final ProcessInstanceRepository processInstanceRepository;
     private final ProcessHistoryRepository processHistoryRepository;
-    private final JdbcTemplate jdbcTemplate;
-    private final RequestIdEnricher requestIdEnricher;
 
     /** Lazy: breaks cycle with {@link TaskQueryComponent} which delegates to this component. */
     @Lazy
@@ -228,158 +218,5 @@ public class TaskHistoryComponent {
         }
 
         return history;
-    }
-
-    /**
-     * Query tasks completed by a user.
-     * Multi-instance subtasks are flagged so the frontend can hide
-     * the Action tag and Detail link (their detail is already visible
-     * in the Participant Info Form on the application detail page).
-     */
-    @SuppressWarnings("unchecked")
-    public PageResponse<TaskInfo> queryCompletedTasks(TaskQueryRequest request) {
-        if (!workflowEngineClient.isAvailable()) {
-            throw new IllegalStateException("Flowable engine unavailable, please check if workflow-engine-core service is running");
-        }
-
-        String userId = request.getUserId();
-        int page = request.getPage() != null ? request.getPage() : 0;
-        int size = request.getSize() != null ? request.getSize() : 20;
-        String keyword = request.getKeyword();
-        String startTime = request.getStartTime() != null ? request.getStartTime().toString() : null;
-        String endTime = request.getEndTime() != null ? request.getEndTime().toString() : null;
-
-        try {
-            Optional<Map<String, Object>> result = workflowEngineClient.getCompletedTasks(
-                userId, page, size, keyword, startTime, endTime);
-
-            if (result.isPresent()) {
-                Map<String, Object> data = result.get();
-                List<Map<String, Object>> content = (List<Map<String, Object>>) data.get("content");
-                long totalElements = data.get("totalElements") != null
-                    ? ((Number) data.get("totalElements")).longValue() : 0;
-
-                List<TaskInfo> tasks = new ArrayList<>();
-                if (content != null) {
-                    // Batch-fetch process definition names once (avoids one findById per task row).
-                    Map<String, String> processNameById = resolveProcessNamesForCompletedTasks(content);
-                    for (Map<String, Object> taskMap : content) {
-                        tasks.add(convertCompletedTaskToTaskInfo(taskMap, processNameById));
-                    }
-                }
-
-                // Tag multi-instance subtasks so the frontend can suppress
-                // the Action column and Detail link for them.
-                Set<String> miTaskIds = findMultiInstanceTaskIds(
-                        tasks.stream().map(TaskInfo::getTaskId).filter(Objects::nonNull).toList());
-                if (!miTaskIds.isEmpty()) {
-                    for (TaskInfo t : tasks) {
-                        if (miTaskIds.contains(t.getTaskId())) {
-                            t.setMultiInstanceSubTask(true);
-                        }
-                    }
-                }
-
-                // Request ID from the completed process instances' frozen variables.
-                requestIdEnricher.enrichTaskRequestIds(tasks);
-
-                return PageResponse.of(tasks, page, size, totalElements);
-            }
-        } catch (Exception e) {
-            log.error("Failed to query completed tasks from Flowable: {}", e.getMessage(), e);
-            throw new IllegalStateException("Failed to query completed tasks: " + e.getMessage(), e);
-        }
-
-        return PageResponse.of(Collections.emptyList(), page, size, 0);
-    }
-
-    /**
-     * Batch-check which of the given task IDs are multi-instance subtasks
-     * by looking at wf_extended_task_info.extended_properties.
-     */
-    private Set<String> findMultiInstanceTaskIds(List<String> taskIds) {
-        if (taskIds == null || taskIds.isEmpty()) return Collections.emptySet();
-        try {
-            String placeholders = String.join(",", Collections.nCopies(taskIds.size(), "?"));
-            String sql = "SELECT task_id FROM wf_extended_task_info "
-                    + "WHERE task_id IN (" + placeholders + ") "
-                    + "AND is_deleted = false "
-                    + "AND extended_properties LIKE '%\"multiInstance\":true%'";
-            List<String> ids = jdbcTemplate.query(sql,
-                    (rs, i) -> rs.getString("task_id"),
-                    taskIds.toArray());
-            return new HashSet<>(ids);
-        } catch (Exception e) {
-            log.debug("findMultiInstanceTaskIds skipped: {}", e.getMessage());
-            return Collections.emptySet();
-        }
-    }
-
-    /**
-     * Batch-resolve the local function-unit process names for a page of completed tasks.
-     * One {@code findAllById} instead of a per-row {@code findById} (N+1 avoidance).
-     */
-    private Map<String, String> resolveProcessNamesForCompletedTasks(List<Map<String, Object>> content) {
-        Set<String> ids = new HashSet<>();
-        for (Map<String, Object> taskMap : content) {
-            String pid = EngineTaskMapper.engineStringField(taskMap.get("processInstanceId"));
-            if (pid != null && !pid.isEmpty()) {
-                ids.add(pid);
-            }
-        }
-        if (ids.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        Map<String, String> nameById = new java.util.HashMap<>();
-        try {
-            for (ProcessInstance pi : processInstanceRepository.findAllById(ids)) {
-                if (pi.getProcessDefinitionName() != null) {
-                    nameById.put(pi.getId(), pi.getProcessDefinitionName());
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Failed to batch-resolve process definition names for {} completed tasks: {}",
-                    ids.size(), e.getMessage());
-        }
-        return nameById;
-    }
-
-    /**
-     * Convert a completed task Map to TaskInfo.
-     *
-     * @param processNameById local function-unit names keyed by processInstanceId (batch-resolved by the caller)
-     */
-    private TaskInfo convertCompletedTaskToTaskInfo(Map<String, Object> taskMap, Map<String, String> processNameById) {
-        String processDefinitionKey = (String) taskMap.get("processDefinitionKey");
-        String processDefinitionName = (String) taskMap.get("processDefinitionName");
-        if (processDefinitionName == null || processDefinitionName.isEmpty()) {
-            processDefinitionName = processDefinitionKey;
-        }
-
-        // Override the BPMN name returned by Flowable with the local function-unit name (batch-resolved, no per-row query).
-        String processInstanceId = EngineTaskMapper.engineStringField(taskMap.get("processInstanceId"));
-        if (processInstanceId != null && !processInstanceId.isEmpty()) {
-            String localName = processNameById.get(processInstanceId);
-            if (localName != null) {
-                processDefinitionName = localName;
-            }
-        }
-
-        return TaskInfo.builder()
-                .taskId(EngineTaskMapper.engineStringField(taskMap.get("taskId")))
-                .taskName((String) taskMap.get("taskName"))
-                .description((String) taskMap.get("taskDescription"))
-                .processInstanceId(EngineTaskMapper.engineStringField(taskMap.get("processInstanceId")))
-                .processDefinitionKey(processDefinitionKey)
-                .processDefinitionName(processDefinitionName)
-                .taskDefinitionKey((String) taskMap.get("taskDefinitionKey"))
-                .assignee(EngineTaskMapper.engineStringField(taskMap.get("assignee")))
-                .status("COMPLETED")
-                .createTime(EngineTaskMapper.parseDateTime(taskMap.get("startTime")))
-                .completedTime(EngineTaskMapper.parseDateTime(taskMap.get("endTime")))
-                .durationInMillis(taskMap.get("durationInMillis") != null
-                    ? ((Number) taskMap.get("durationInMillis")).longValue() : null)
-                .action((String) taskMap.get("action"))
-                .build();
     }
 }

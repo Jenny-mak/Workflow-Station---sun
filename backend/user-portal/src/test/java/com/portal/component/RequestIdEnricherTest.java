@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -84,5 +86,19 @@ class RequestIdEnricherTest {
                 "{\"fieldNames\":[\"dept\"],\"separator\":\"-\"}");
         assertThat(enricher.buildRequestId(null, vars("dept", "HR"))).isNull();
         assertThat(enricher.buildRequestId("FU1", null)).isNull();
+    }
+
+    @Test
+    void cachesPrimaryTableConfigAcrossListPages() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.query(any(String.class), any(RowMapper.class), eq("FU1")))
+                .thenReturn(List.of("{\"fieldNames\":[\"dept\"],\"separator\":\"-\"}"));
+        RequestIdEnricher enricher = new RequestIdEnricher(
+                jdbc, objectMapper, mock(ProcessInstanceRepository.class));
+
+        assertThat(enricher.buildRequestId("FU1", vars("dept", "HR"))).isEqualTo("HR");
+        assertThat(enricher.buildRequestId("FU1", vars("dept", "IT"))).isEqualTo("IT");
+
+        verify(jdbc, times(1)).query(any(String.class), any(RowMapper.class), eq("FU1"));
     }
 }
