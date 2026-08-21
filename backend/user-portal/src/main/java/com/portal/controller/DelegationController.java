@@ -1,10 +1,13 @@
 package com.portal.controller;
 
 import com.portal.component.DelegationComponent;
+import com.portal.component.DelegationListQueryComponent;
 import com.platform.common.dto.ApiResponse;
 import com.portal.security.CurrentUserId;
+import com.portal.dto.DelegationListQueryRequest;
 import com.portal.dto.DelegationRuleRequest;
 import com.portal.dto.PageResponse;
+import com.portal.dto.PortalListPage;
 import com.portal.entity.DelegationAudit;
 import com.portal.entity.DelegationRule;
 import com.platform.common.i18n.I18nService;
@@ -28,6 +31,7 @@ import java.util.List;
 public class DelegationController {
 
     private final DelegationComponent delegationComponent;
+    private final DelegationListQueryComponent delegationListQueryComponent;
     private final I18nService i18nService;
 
     @Operation(summary = "获取委托规则列表")
@@ -36,6 +40,14 @@ public class DelegationController {
             @CurrentUserId String userId) {
         List<DelegationRule> rules = delegationComponent.getDelegationRules(userId);
         return ApiResponse.success(rules);
+    }
+
+    @Operation(summary = "Query my delegation rules (shared list)")
+    @PostMapping("/query")
+    public ApiResponse<PortalListPage<DelegationRule>> queryDelegationRules(
+            @CurrentUserId String userId,
+            @RequestBody DelegationListQueryRequest request) {
+        return ApiResponse.success(delegationListQueryComponent.queryRules(userId, request));
     }
 
     @Operation(summary = "获取有效委托规则")
@@ -119,5 +131,13 @@ public class DelegationController {
         PageResponse<DelegationAudit> response = PageResponse.of(
                 auditPage.getContent(), page, size, auditPage.getTotalElements());
         return ApiResponse.success(response);
+    }
+
+    @Operation(summary = "Query delegation audit records (shared list)")
+    @PostMapping("/audit/query")
+    public ApiResponse<PortalListPage<DelegationAudit>> queryDelegationAudit(
+            @CurrentUserId String userId,
+            @RequestBody DelegationListQueryRequest request) {
+        return ApiResponse.success(delegationListQueryComponent.queryAudit(userId, request));
     }
 }

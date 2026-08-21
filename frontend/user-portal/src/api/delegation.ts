@@ -1,4 +1,6 @@
 import { request } from './request'
+import type { PortalListPage } from './task'
+import type { ListColumnFilter } from '@platform-shared/list/columnMeta'
 
 export interface DelegationRule {
   id: number
@@ -38,47 +40,55 @@ export interface DelegationAudit {
   createdAt: string
 }
 
-// 获取委托规则列表
+export interface DelegationListQueryRequest {
+  page: number
+  size: number
+  filters?: Array<ListColumnFilter & { field: string }>
+  sortField?: string
+  sortDirection?: 'ASC' | 'DESC'
+  groupBy?: string
+}
+
 export function getDelegationRules() {
   return request.get<{ data: DelegationRule[] }>('/delegations')
 }
 
-// 获取有效委托规则
+export function queryDelegationRules(params: DelegationListQueryRequest) {
+  return request.post<{ data: PortalListPage<DelegationRule> }>('/delegations/query', params)
+}
+
 export function getActiveDelegationRules() {
   return request.get<{ data: DelegationRule[] }>('/delegations/active')
 }
 
-// 创建委托规则
 export function createDelegationRule(data: DelegationRuleRequest) {
   return request.post<{ data: DelegationRule }>('/delegations', data)
 }
 
-// 更新委托规则
 export function updateDelegationRule(ruleId: number, data: DelegationRuleRequest) {
   return request.put<{ data: DelegationRule }>(`/delegations/${ruleId}`, data)
 }
 
-// 删除委托规则
 export function deleteDelegationRule(ruleId: number) {
   return request.delete(`/delegations/${ruleId}`)
 }
 
-// 暂停委托规则
 export function suspendDelegationRule(ruleId: number) {
   return request.post<{ data: DelegationRule }>(`/delegations/${ruleId}/suspend`)
 }
 
-// 恢复委托规则
 export function resumeDelegationRule(ruleId: number) {
   return request.post<{ data: DelegationRule }>(`/delegations/${ruleId}/resume`)
 }
 
-// 获取代理任务
 export function getProxyTasks() {
   return request.get<{ data: DelegationRule[] }>('/delegations/proxy-tasks')
 }
 
-// 获取委托审计记录
 export function getDelegationAuditRecords(page: number = 0, size: number = 20) {
   return request.get<{ data: { content: DelegationAudit[]; totalElements: number; totalPages: number } }>('/delegations/audit', { params: { page, size } })
+}
+
+export function queryDelegationAudit(params: DelegationListQueryRequest) {
+  return request.post<{ data: PortalListPage<DelegationAudit> }>('/delegations/audit/query', params)
 }
