@@ -137,7 +137,6 @@
       <el-select
         v-model="primaryWorkTab"
         class="work-domain-select"
-        @change="onPrimaryWorkDomainChange"
       >
         <el-option
           :label="t('permission.sectionMyRequests')"
@@ -164,201 +163,28 @@
                 class="tab-badge"
               />
             </template>
-            <el-empty
-              v-if="pendingList.length === 0 && !loadingPending"
-              :description="t('permission.noPendingRequests')"
+            <PermissionRequestSharedList
+              ref="myPendingListRef"
+              scope="MY_PENDING"
+              storage-key="portal-list-layout:permission-my-pending"
+              :empty-text="t('permission.noPendingRequests')"
+              action-mode="cancel"
+              @total="onMyPendingTotal"
+              @cancel="cancelRequest"
             />
-            <el-table
-              v-else
-              v-loading="loadingPending"
-              :data="pendingList"
-              stripe
-            >
-              <el-table-column
-                prop="requestType"
-                :label="t('permission.requestType')"
-                width="160"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getRequestTypeTag(row.requestType)"
-                    size="small"
-                  >
-                    {{ getRequestTypeLabel(row.requestType) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.requestTarget')"
-                min-width="150"
-              >
-                <template #default="{ row }">
-                  {{ getTargetName(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.beneficiaryColumn')"
-                width="130"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  {{ row.applicantUsername || row.applicantId || '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.submittedByColumn')"
-                width="120"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  <span v-if="row.submittedByUserId && row.submittedByUserId !== row.applicantId">
-                    {{ row.submittedByUsername || row.submittedByUserId }}
-                    <el-tag
-                      size="small"
-                      type="info"
-                      class="proxy-tag"
-                    >{{ t('permission.proxyBadge') }}</el-tag>
-                  </span>
-                  <span v-else>{{ t('permission.selfBeneficiary') }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="reason"
-                :label="t('permission.reason')"
-                min-width="150"
-                show-overflow-tooltip
-              />
-              <el-table-column
-                prop="createdAt"
-                :label="t('permission.applyTime')"
-                width="160"
-              >
-                <template #default="{ row }">
-                  {{ formatDateTime(row.createdAt) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('common.actions')"
-                width="150"
-                fixed="right"
-              >
-                <template #default="{ row }">
-                  <el-button
-                    v-if="canCancelAsBeneficiary(row)"
-                    type="danger"
-                    size="small"
-                    text
-                    @click="cancelRequest(row)"
-                  >
-                    {{ t('permission.cancelRequest') }}
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
           </el-tab-pane>
 
           <el-tab-pane
             :label="t('permission.tabCompleted')"
             name="completed"
           >
-            <el-empty
-              v-if="historyList.length === 0 && !loadingHistory"
-              :description="t('permission.noRequests')"
+            <PermissionRequestSharedList
+              ref="myCompletedListRef"
+              scope="MY_COMPLETED"
+              storage-key="portal-list-layout:permission-my-completed"
+              :empty-text="t('permission.noRequests')"
+              action-mode="none"
             />
-            <el-table
-              v-else
-              v-loading="loadingHistory"
-              :data="historyList"
-              stripe
-            >
-              <el-table-column
-                prop="requestType"
-                :label="t('permission.requestType')"
-                width="140"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getRequestTypeTag(row.requestType)"
-                    size="small"
-                  >
-                    {{ getRequestTypeLabel(row.requestType) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.requestTarget')"
-                min-width="180"
-              >
-                <template #default="{ row }">
-                  {{ getTargetName(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.beneficiaryColumn')"
-                width="120"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  {{ row.applicantUsername || row.applicantId || '-' }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.submittedByColumn')"
-                width="110"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  <span v-if="row.submittedByUserId && row.submittedByUserId !== row.applicantId">
-                    {{ row.submittedByUsername || row.submittedByUserId }}
-                  </span>
-                  <span v-else>—</span>
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="reason"
-                :label="t('permission.reason')"
-                min-width="150"
-                show-overflow-tooltip
-              />
-              <el-table-column
-                prop="status"
-                :label="t('permission.status')"
-                width="100"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getStatusType(row.status)"
-                    size="small"
-                  >
-                    {{ getStatusLabel(row.status) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="approverComment"
-                :label="t('approval.comment')"
-                min-width="150"
-                show-overflow-tooltip
-              />
-              <el-table-column
-                prop="createdAt"
-                :label="t('permission.applyTime')"
-                width="160"
-              >
-                <template #default="{ row }">
-                  {{ formatDateTime(row.createdAt) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="updatedAt"
-                :label="t('permission.approvedAt')"
-                width="160"
-              >
-                <template #default="{ row }">
-                  {{ formatDateTime(row.updatedAt) }}
-                </template>
-              </el-table-column>
-            </el-table>
           </el-tab-pane>
         </el-tabs>
       </div>
@@ -367,7 +193,6 @@
         <el-tabs
           v-model="approvalTab"
           class="list-tabs"
-          @tab-change="onApprovalTabChange"
         >
           <el-tab-pane name="pendingApproval">
             <template #label>
@@ -378,180 +203,31 @@
                 class="tab-badge"
               />
             </template>
-            <el-empty
-              v-if="approverPendingList.length === 0 && !loadingApproverPending"
-              :description="t('approval.noPendingApprovals')"
+            <PermissionRequestSharedList
+              ref="approvalPendingListRef"
+              scope="APPROVALS_PENDING"
+              storage-key="portal-list-layout:permission-approvals-pending"
+              :empty-text="t('approval.noPendingApprovals')"
+              action-mode="approve"
+              :enabled="isApprover"
+              @total="onApprovalPendingTotal"
+              @approve="showApproveDialog"
+              @reject="showRejectDialog"
             />
-            <el-table
-              v-else
-              v-loading="loadingApproverPending"
-              :data="approverPendingList"
-              stripe
-            >
-              <el-table-column
-                prop="applicantId"
-                :label="t('permission.beneficiaryColumn')"
-                width="150"
-              >
-                <template #default="{ row }">
-                  {{ getApplicantDisplay(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.submittedByColumn')"
-                width="130"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  {{ getSubmitterDisplay(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="requestType"
-                :label="t('permission.requestType')"
-                width="140"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getRequestTypeTag(row.requestType)"
-                    size="small"
-                  >
-                    {{ getRequestTypeLabel(row.requestType) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.requestTarget')"
-                min-width="180"
-              >
-                <template #default="{ row }">
-                  {{ getTargetName(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="reason"
-                :label="t('permission.reason')"
-                min-width="200"
-                show-overflow-tooltip
-              />
-              <el-table-column
-                prop="createdAt"
-                :label="t('permission.applyTime')"
-                width="160"
-              >
-                <template #default="{ row }">
-                  {{ formatDateTime(row.createdAt) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('common.actions')"
-                width="180"
-                fixed="right"
-              >
-                <template #default="{ row }">
-                  <el-button
-                    type="success"
-                    size="small"
-                    @click="showApproveDialog(row)"
-                  >
-                    {{ t('approval.approve') }}
-                  </el-button>
-                  <el-button
-                    type="danger"
-                    size="small"
-                    @click="showRejectDialog(row)"
-                  >
-                    {{ t('approval.reject') }}
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
           </el-tab-pane>
 
           <el-tab-pane
             :label="t('permission.tabApprovalHistory')"
             name="approvalHistory"
           >
-            <el-empty
-              v-if="approverHistoryList.length === 0 && !loadingApproverHistory"
-              :description="t('approval.noApprovalHistory')"
+            <PermissionRequestSharedList
+              ref="approvalHistoryListRef"
+              scope="APPROVALS_HISTORY"
+              storage-key="portal-list-layout:permission-approvals-history"
+              :empty-text="t('approval.noApprovalHistory')"
+              action-mode="none"
+              :enabled="isApprover"
             />
-            <el-table
-              v-else
-              v-loading="loadingApproverHistory"
-              :data="approverHistoryList"
-              stripe
-            >
-              <el-table-column
-                prop="applicantId"
-                :label="t('permission.beneficiaryColumn')"
-                width="150"
-              >
-                <template #default="{ row }">
-                  {{ getApplicantDisplay(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.submittedByColumn')"
-                width="130"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  {{ getSubmitterDisplay(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="requestType"
-                :label="t('permission.requestType')"
-                width="140"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getRequestTypeTag(row.requestType)"
-                    size="small"
-                  >
-                    {{ getRequestTypeLabel(row.requestType) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('permission.requestTarget')"
-                min-width="180"
-              >
-                <template #default="{ row }">
-                  {{ getTargetName(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="status"
-                :label="t('permission.status')"
-                width="100"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    :type="getStatusType(row.status)"
-                    size="small"
-                  >
-                    {{ getStatusLabel(row.status) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="approverComment"
-                :label="t('approval.comment')"
-                min-width="150"
-                show-overflow-tooltip
-              />
-              <el-table-column
-                prop="approvedAt"
-                :label="t('approval.processedAt')"
-                width="160"
-              >
-                <template #default="{ row }">
-                  {{ formatDateTime(row.approvedAt || row.updatedAt) }}
-                </template>
-              </el-table-column>
-            </el-table>
           </el-tab-pane>
         </el-tabs>
       </div>
@@ -1017,6 +693,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePendingApprovalStore } from '@/stores/pendingApproval'
+import PermissionRequestSharedList from '@/components/permissions/PermissionRequestSharedList.vue'
 import { usePermissionFormatters } from '@/composables/permissions/usePermissionFormatters'
 import { useMyBuRoles } from '@/composables/permissions/useMyBuRoles'
 import { useMyRequests } from '@/composables/permissions/useMyRequests'
@@ -1034,17 +711,39 @@ const { t } = useI18n()
 const pendingApprovalStore = usePendingApprovalStore()
 const primaryWorkTab = ref<PrimaryWorkTab>('myRequests')
 
+type SharedListExpose = { reload: () => void | Promise<void> }
+const myPendingListRef = ref<SharedListExpose | null>(null)
+const myCompletedListRef = ref<SharedListExpose | null>(null)
+const approvalPendingListRef = ref<SharedListExpose | null>(null)
+const approvalHistoryListRef = ref<SharedListExpose | null>(null)
+
+const pendingCount = ref(0)
+const approvalPendingCount = ref(0)
+
+function reloadMyLists() {
+  void myPendingListRef.value?.reload()
+  void myCompletedListRef.value?.reload()
+}
+
+function reloadApprovalLists() {
+  void approvalPendingListRef.value?.reload()
+  void approvalHistoryListRef.value?.reload()
+}
+
+/** Thin wrappers for apply / exit / remove success paths. */
+const loadPendingRequests = () => {
+  void myPendingListRef.value?.reload()
+}
+const loadHistoryRequests = () => {
+  void myCompletedListRef.value?.reload()
+}
+
 // 纯展示/格式化辅助（状态、类型标签、目标名称、时间格式化等）
 const {
   getApplicantDisplay,
-  getSubmitterDisplay,
   rowRemovalKey,
   removalRowLabel,
   beneficiaryOptionLabel,
-  canCancelAsBeneficiary,
-  getStatusType,
-  getStatusLabel,
-  getRequestTypeTag,
   getRequestTypeLabel,
   getTargetName,
   formatDateTime
@@ -1053,44 +752,27 @@ const {
 // 我的业务单元角色
 const { loadingMyBuRoles, myBuRoles, loadMyBuRoles } = useMyBuRoles()
 
-// 我的申请（进行中 / 已完成、取消申请）
-const {
-  myRequestTab,
-  loadingPending,
-  loadingHistory,
-  pendingList,
-  historyList,
-  pendingCount,
-  loadPendingRequests,
-  loadHistoryRequests,
-  cancelRequest
-} = useMyRequests(t)
+// 我的申请（tab + 取消申请）
+const { myRequestTab, cancelRequest } = useMyRequests(t, { reloadMyLists })
 
-// 审批侧（审批人列表、批准/拒绝）
+// 审批侧（审批人身份、批准/拒绝）
 const {
   approvalTab,
   isApprover,
-  approverPendingList,
-  approverHistoryList,
-  loadingApproverPending,
-  loadingApproverHistory,
   approveDialogVisible,
   rejectDialogVisible,
   currentApproverRequest,
   approveComment,
   rejectComment,
   submittingApproval,
-  approvalPendingCount,
   checkApproverStatus,
-  loadApproverPending,
-  onApprovalTabChange,
   showApproveDialog,
   showRejectDialog,
   handleApprove,
   handleReject
 } = useApprovals(t, {
-  loadPendingRequests,
-  loadHistoryRequests,
+  reloadMyLists,
+  reloadApprovalLists,
   fetchPendingCount: () => pendingApprovalStore.fetchPendingCount()
 })
 
@@ -1101,13 +783,12 @@ const showPendingApprovalsBanner = computed(() =>
   })
 )
 
-function onPrimaryWorkDomainChange(domain: string | number | boolean) {
-  if (domain === 'approvals') {
-    void loadApproverPending()
-    if (approvalTab.value === 'approvalHistory') {
-      onApprovalTabChange('approvalHistory')
-    }
-  }
+function onMyPendingTotal(n: number) {
+  pendingCount.value = n
+}
+
+function onApprovalPendingTotal(n: number) {
+  approvalPendingCount.value = n
 }
 
 // 申请权限对话框
@@ -1177,12 +858,10 @@ onMounted(async () => {
   await checkApproverStatus()
   loadMyBuRoles()
   loadExitBuMemberships()
-  loadPendingRequests()
-  loadHistoryRequests()
-  if (isApprover.value) {
-    await loadApproverPending()
-  }
   await pendingApprovalStore.fetchPendingCount()
+  if (isApprover.value && pendingApprovalStore.count > 0) {
+    approvalPendingCount.value = pendingApprovalStore.count
+  }
   primaryWorkTab.value = resolvePrimaryWorkTab({
     isApprover: isApprover.value,
     approvalPendingCount: approvalPendingCount.value
@@ -1268,11 +947,6 @@ onMounted(async () => {
     :deep(.el-tabs__header) {
       margin-bottom: 12px;
     }
-  }
-
-  .proxy-tag {
-    margin-left: 6px;
-    vertical-align: middle;
   }
 
   :deep(.apply-form) {

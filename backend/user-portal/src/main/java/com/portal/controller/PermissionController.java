@@ -1,12 +1,15 @@
 package com.portal.controller;
 
 import com.portal.component.PermissionComponent;
+import com.portal.component.PermissionRequestListQueryComponent;
 import com.portal.component.RoleAccessComponent;
 import com.platform.common.dto.ApiResponse;
 import com.portal.security.CurrentUserId;
 import com.portal.dto.PageResponse;
+import com.portal.dto.PermissionListQueryRequest;
 import com.portal.dto.PermissionRequestDto;
 import com.portal.dto.PermissionRequestListItem;
+import com.portal.dto.PortalListPage;
 import com.portal.entity.PermissionRequest;
 import com.portal.enums.PermissionRequestStatus;
 import com.platform.common.i18n.I18nService;
@@ -33,6 +36,7 @@ import java.util.Objects;
 public class PermissionController {
 
     private final PermissionComponent permissionComponent;
+    private final PermissionRequestListQueryComponent permissionRequestListQueryComponent;
     private final RoleAccessComponent roleAccessComponent;
     private final I18nService i18nService;
 
@@ -401,6 +405,14 @@ public class PermissionController {
         Page<PermissionRequestListItem> result = permissionComponent.getMyRequests(
                 userId, status, PageRequest.of(safePage, safeSize));
         return ApiResponse.success(PageResponse.of(result));
+    }
+
+    @PostMapping("/requests/query")
+    @Operation(summary = "Query permission requests / approvals (shared list)")
+    public ApiResponse<PortalListPage<PermissionRequestListItem>> queryPermissionRequests(
+            @CurrentUserId String userId,
+            @RequestBody PermissionListQueryRequest request) {
+        return ApiResponse.success(permissionRequestListQueryComponent.query(userId, request));
     }
 
     @GetMapping("/requests/{requestId}")
