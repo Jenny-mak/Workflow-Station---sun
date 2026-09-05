@@ -206,6 +206,11 @@
             :handle-exceed="() => handleUploadExceed(col)"
             :handle-error="() => handleUploadError(col)"
           />
+          <FormUploadFileDetails
+            :files="detailFilesOf(col.field)"
+            :readonly="isColReadonly(col)"
+            :labels="uploadDetailLabels"
+          />
         </div>
 
         <!-- tree (el-tree with checkbox, uses id/label node format) -->
@@ -359,6 +364,7 @@
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FormUploadDropZone from '@platform-shared/upload/FormUploadDropZone.vue'
+import FormUploadFileDetails from '@platform-shared/upload/FormUploadFileDetails.vue'
 import type { FormInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { buildInitialRow, buildRules, isColReadonly as designerColReadonly, mergeFormRowWithSeed } from './subTableAddDialogHelpers'
@@ -434,6 +440,20 @@ function writeUploadColumn(
 
 function isColReadonly(col: DialogColumn): boolean {
   return isDialogFieldDisabled(col.field, designerColReadonly(col) || isTableAuditField(col.field))
+}
+
+const uploadDetailLabels = computed(() => ({
+  description: t('form.fileNet.description'),
+  callbackUrl: t('form.fileNet.callbackUrl'),
+  status: t('form.fileNet.status'),
+  completed: t('form.fileNet.statusCompleted'),
+  saveFailed: t('form.fileNet.saveFailed'),
+}))
+
+function detailFilesOf(field: string): Array<{ url: string; name: string }> {
+  return (uploadFileLists.value[field] || [])
+    .filter((item) => item.url)
+    .map((item) => ({ url: String(item.url), name: String(item.name || item.url) }))
 }
 
 const signatureCanvasRefs = ref<Record<string, HTMLCanvasElement>>({})

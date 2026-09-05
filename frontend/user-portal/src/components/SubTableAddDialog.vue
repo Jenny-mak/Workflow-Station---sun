@@ -344,6 +344,11 @@
                       @click="previewDialogFile(col, item.url)"
                     >{{ item.name }}</span>
                     <span v-if="!(uploadFileLists[col.field] || []).length">-</span>
+                    <FormUploadFileDetails
+                      :files="detailFilesOf(col.field)"
+                      :readonly="true"
+                      :labels="uploadDetailLabels"
+                    />
                   </div>
                   <!-- upload -->
                   <div
@@ -366,6 +371,11 @@
                       :handle-exceed="() => handleUploadExceed(col)"
                       :handle-error="() => handleUploadError(col)"
                       :handle-preview="(file: { url?: string }) => previewDialogFile(col, file.url)"
+                    />
+                    <FormUploadFileDetails
+                      :files="detailFilesOf(col.field)"
+                      :readonly="isColDisabled(col)"
+                      :labels="uploadDetailLabels"
                     />
                   </div>
 
@@ -668,6 +678,7 @@ import { computed, defineAsyncComponent, inject, nextTick, onBeforeUnmount, ref,
 import { useI18n } from 'vue-i18n'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import FormUploadDropZone from '@platform-shared/upload/FormUploadDropZone.vue'
+import FormUploadFileDetails from '@platform-shared/upload/FormUploadFileDetails.vue'
 import '@wangeditor/editor/dist/css/style.css'
 import { isUploadColumn, getLookupSelectedDisplayField } from './subTableAddDialogHelpers'
 import type { DialogColumn } from './subTableAddDialogHelpers'
@@ -1045,6 +1056,20 @@ const {
   handleUploadError,
   handleUploadExceed,
 } = useSubTableDialogUpload(formData, () => props.columns, t)
+
+const uploadDetailLabels = computed(() => ({
+  description: t('upload.fileDescription'),
+  callbackUrl: t('upload.callbackUrl'),
+  status: t('upload.autoSendToFileNet'),
+  completed: t('upload.statusCompleted'),
+  saveFailed: t('upload.descriptionSaveFailed'),
+}))
+
+function detailFilesOf(field: string): Array<{ url: string; name: string }> {
+  return (uploadFileLists.value[field] || [])
+    .filter((item) => item.url)
+    .map((item) => ({ url: String(item.url), name: String(item.name || item.url) }))
+}
 
 const previewPlaylist = inject(FILE_PREVIEW_PLAYLIST_KEY, null)
 

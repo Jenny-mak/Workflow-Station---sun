@@ -532,18 +532,23 @@ export default {
     pageTitle: '表單設計 — 上傳',
     crumb: '開發工作站 · 功能單元 · 表單設計',
     intro:
-      '表單上的上傳欄位可以一次選多個檔案。預設最多 10 個，每個 10MB。需要單檔時，把「最多檔案數」設為 1。已儲存 JSON 裡若仍是「多選」關閉且「數量限制」為 1，那是當年產生器寫死的值，不是設計者選擇——在你改「最多檔案數」之前，它們同樣最多 10 個。屬性面板只顯示「最多檔案數」。',
+      '表單上的上傳欄位可以一次選多個檔案。預設最多 10 個，每個 10MB。需要單檔時，把「最多檔案數」設為 1。已儲存 JSON 裡若仍是「多選」關閉且「數量限制」為 1，那是當年產生器寫死的值，不是設計者選擇——在你改「最多檔案數」之前，它們同樣最多 10 個。屬性面板顯示「最多檔案數」、禁止下載、Readonly，以及 Advance（FileNet）。',
     flowTitle: '操作順序',
     flow1: '開啟表單設計並選取一個上傳欄位',
     flow2: '設定「最多檔案數」（預設 10；1 表示單檔）',
-    flow3: '儲存表單，再在預覽或使用者入口核對',
+    flow3: '需要時打開 Advance，填寫 FileNet 請求頭與倉庫對應',
+    flow4: '儲存表單，再在預覽或使用者入口核對',
     maxTitle: '最多檔案數',
     maxBody:
       '在上傳欄位屬性裡，「最多檔案數」就是上限。預設 10。設為 1 即單檔。每個檔案最大 10MB。同時最多 3 個上傳請求。屬性面板不再顯示「多選」和元件自帶的數量限制，只認「最多檔案數」。欄位提示為：支援格式：jpg/png/pdf/docx/xlsx。最多 10 個檔案，每個 10MB。',
     maxSample: '上傳屬性面板上的「最多檔案數」',
+    advanceTitle: 'Advance（FileNet）',
+    advanceBody:
+      'Advance 在上傳屬性最下方，預設關閉。打開後可保存 Header Info、Repository Detail 和文件屬性對應。Search Detail List、Retrieve Request Information、Order By 只是占位。權杖和主機位址不要寫在這個面板。Advance 不會隱藏執行時明細。',
+    advanceSample: '上傳屬性裡的 Advance 開關',
     runtimeTitle: '執行時別人看到什麼',
     runtimeBody:
-      '可以把多個檔案拖進虛線框，也可以點擊虛線框，在檔案總管裡一次選多個檔案（Ctrl 或 Shift 連選）。使用者入口和表單預覽會保留整份清單。子表列表格顯示第一個檔案名，其餘用 +N，例如 report.pdf +2。如果上傳欄位設定了配套檔名欄，會把原始檔名寫進去，多個檔案用分號加空白拼接。傳送郵件從 FILE 欄位取附件時會帶上每一個已存檔案。',
+      '可以把多個檔案拖進虛線框，也可以點擊虛線框，在檔案總管裡一次選多個檔案（Ctrl 或 Shift 連選）。使用者入口和表單預覽會保留整份清單。上傳控制項下方每個已存檔案顯示 File Description（表單可寫時可填）、Callback URL（平台檔案連結）、Auto Send to FileNet（接上 FileNet 歸檔前顯示 Completed）。子表新增/編輯對話框同樣顯示這三項。子表列表格仍顯示第一個檔案名，其餘用 +N，例如 report.pdf +2。如果上傳欄位設定了配套檔名欄，會把原始檔名寫進去，多個檔案用分號加空白拼接。傳送郵件從 FILE 欄位取附件時會帶上每一個已存檔案。',
     runtimeSample: '子表儲存格上的 report.pdf +2',
     failTitle: '失敗時',
     failBody:

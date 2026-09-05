@@ -444,37 +444,44 @@
 
     <!-- upload (Task 6.8) -->
     <template v-else-if="field.type === 'upload'">
-      <FormUploadDropZone
-        v-if="!readonly"
-        :action="resolvedUploadUrl"
-        :accept="field.uploadAccept || ''"
-        :limit="uploadLimit"
-        :multiple="uploadMultiple"
-        :disabled="isDisabled"
-        :file-list="fileList"
-        :http-request="httpRequest"
-        :drag-text="t('upload.dragText')"
-        :click-text="t('upload.clickText')"
-        :tip="field.uploadAccept || '.jpg/.png/.pdf/.docx/.xlsx'"
-        :handle-success="onUploadSuccess"
-        :handle-change="onUploadChange"
-        :handle-remove="onUploadRemove"
-        :handle-exceed="onUploadExceed"
-        :handle-preview="previewCurrentFile"
-      />
-      <div
-        v-else
-        class="upload-readonly-list"
-      >
-        <span
-          v-for="item in fileList"
-          :key="item.url"
-          class="file-preview-link"
-          @click="previewCurrentFile(item)"
+      <div class="upload-field-wrap">
+        <FormUploadDropZone
+          v-if="!readonly"
+          :action="resolvedUploadUrl"
+          :accept="field.uploadAccept || ''"
+          :limit="uploadLimit"
+          :multiple="uploadMultiple"
+          :disabled="isDisabled"
+          :file-list="fileList"
+          :http-request="httpRequest"
+          :drag-text="t('upload.dragText')"
+          :click-text="t('upload.clickText')"
+          :tip="field.uploadAccept || '.jpg/.png/.pdf/.docx/.xlsx'"
+          :handle-success="onUploadSuccess"
+          :handle-change="onUploadChange"
+          :handle-remove="onUploadRemove"
+          :handle-exceed="onUploadExceed"
+          :handle-preview="previewCurrentFile"
+        />
+        <div
+          v-else
+          class="upload-readonly-list"
         >
-          {{ item.name }}
-        </span>
-        <span v-if="!fileList.length">-</span>
+          <span
+            v-for="item in fileList"
+            :key="item.url"
+            class="file-preview-link"
+            @click="previewCurrentFile(item)"
+          >
+            {{ item.name }}
+          </span>
+          <span v-if="!fileList.length">-</span>
+        </div>
+        <FormUploadFileDetails
+          :files="uploadDetailFiles"
+          :readonly="readonly || isDisabled"
+          :labels="uploadDetailLabels"
+        />
       </div>
     </template>
 
@@ -659,6 +666,7 @@ import { computed, inject, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import FormUploadDropZone from '@platform-shared/upload/FormUploadDropZone.vue'
+import FormUploadFileDetails from '@platform-shared/upload/FormUploadFileDetails.vue'
 import '@wangeditor/editor/dist/css/style.css'
 import type { FormField } from './formRendererHelpers'
 import LookupField from './lookup/LookupField.vue'
@@ -806,6 +814,17 @@ const {
   onUploadExceed,
   previewCurrentFile,
 } = useFieldUpload(props, emit)
+
+const uploadDetailFiles = computed(() => fileList.value
+  .filter((item) => item.url)
+  .map((item) => ({ url: item.url, name: item.name || item.url })))
+const uploadDetailLabels = computed(() => ({
+  description: t('upload.fileDescription'),
+  callbackUrl: t('upload.callbackUrl'),
+  status: t('upload.autoSendToFileNet'),
+  completed: t('upload.statusCompleted'),
+  saveFailed: t('upload.descriptionSaveFailed'),
+}))
 
 // Editor — registers onBeforeUnmount first (matches original order).
 const {

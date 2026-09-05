@@ -48,6 +48,18 @@ describe('applyUploadPropsFromRule', () => {
     expect(f.cannotDownload).toBe(true)
   })
 
+  it('ignores fileNet props and keeps upload behavior unchanged', () => {
+    const f = field()
+    applyUploadPropsFromRule(f, {
+      type: 'upload',
+      props: { fileNet: { enabled: true, headerInfo: [] } },
+    })
+    expect(f.uploadUrl).toBe('/api/v1/upload')
+    expect(f.cannotDownload).toBeUndefined()
+    expect(f.uploadLimit).toBe(10)
+    expect((f as { fileNet?: unknown }).fileNet).toBeUndefined()
+  })
+
   it('inherits cannotDownload from other FU forms for the same field key', () => {
     const f = field()
     const blocked = collectCannotDownloadFieldKeysFromForms([

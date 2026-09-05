@@ -584,18 +584,23 @@ export default {
     pageTitle: 'Form Design — Upload',
     crumb: 'Developer Workstation · Function Units · Form Design',
     intro:
-      'An Upload field on the form can take several files. Default is 10 files, 10MB each. Set Max files to 1 if the field must stay a single file. Saved JSON that still has Multiple off and Limit 1 was a generator default, not a designer choice — those fields also accept up to 10 until you set Max files. The properties panel only shows Max files.',
+      'An Upload field on the form can take several files. Default is 10 files, 10MB each. Set Max files to 1 if the field must stay a single file. Saved JSON that still has Multiple off and Limit 1 was a generator default, not a designer choice — those fields also accept up to 10 until you set Max files. The properties panel shows Max files, Can not download, Readonly, and Advance (FileNet).',
     flowTitle: 'Order of work',
     flow1: 'Open Form Design and select an Upload field',
     flow2: 'Set Max files (default 10; 1 means a single file)',
-    flow3: 'Save the form, then check Preview or User Portal',
+    flow3: 'Optionally turn on Advance and fill FileNet header / repository mapping',
+    flow4: 'Save the form, then check Preview or User Portal',
     maxTitle: 'Max files',
     maxBody:
       'On the Upload field properties, Max files is the cap. Default 10. Set 1 for a single file. Each file can be up to 10MB. At most 3 uploads run at once. The properties panel does not show Multiple or Maximum number of uploads allowed; Max files is the only cap. The field tip reads: Supported formats: jpg/png/pdf/docx/xlsx. Up to 10 files, 10MB each.',
     maxSample: 'the Max files number on the Upload properties panel',
+    advanceTitle: 'Advance (FileNet)',
+    advanceBody:
+      'Advance is at the bottom of the Upload properties. It is off by default. Turn it on to store Header Info, Repository Detail, and document-property mapping on this field. Search Detail List, Retrieve Request Information, and Order By are shown as placeholders only. Tokens and host URLs do not belong on this panel. Advance does not hide the runtime detail block.',
+    advanceSample: 'the Advance switch under Upload properties',
     runtimeTitle: 'What people see at runtime',
     runtimeBody:
-      'Drop several files onto the dashed box, or click it and select several files in one go (Ctrl or Shift click in the file picker). User Portal and Form Preview keep the whole list. A sub-table list cell shows the first file name and +N for the rest, for example report.pdf +2. If a companion filename column is configured on the Upload field, the original names are written there, joined with a semicolon and space. Send Email attachments from a FILE field include every stored file.',
+      'Drop several files onto the dashed box, or click it and select several files in one go (Ctrl or Shift click in the file picker). User Portal and Form Preview keep the whole list. Under the upload control, each stored file shows File Description (editable while the form is writable), Callback URL (the platform file link), and Auto Send to FileNet (Completed until FileNet archive is connected). A sub-table add/edit dialog shows the same three fields. A sub-table list cell still shows the first file name and +N for the rest, for example report.pdf +2. If a companion filename column is configured on the Upload field, the original names are written there, joined with a semicolon and space. Send Email attachments from a FILE field include every stored file.',
     runtimeSample: 'report.pdf +2 on a sub-table cell',
     failTitle: 'When it fails',
     failBody:

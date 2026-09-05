@@ -12,7 +12,7 @@ Do not invent UI labels. Ground answers in these articles and the screenshots un
 - /help/email-monitor — Email Monitor (inbound connection, monitor template, extraction wizard, Start Event #start-event; field catalog for every control)
 - /help/up-tasks-to-claim — To Do: claim pool on the same list; Claim all; selection-bar Claim/Unclaim; Unclaim all (own holds); auto-claim on open (default off); Leader / Approver / SYS_ADMIN force unclaim
 - /help/task-delegate — Delegate a task (User Portal To Do; specified user lookup or BU+Role; does not change Current Assignee)
-- /help/form-upload — Form Design Upload (drop or multi-select files; Max files default 10; set 1 for a single file; list cells show firstName +N)
+- /help/form-upload — Form Design Upload (drop or multi-select files; Max files default 10; set 1 for a single file; Advance stores FileNet mapping; runtime shows description, platform callback URL, Completed status; list cells show firstName +N)
 - /help/form-events — How to write events (control Edit + Form event: parameters, values, required, lock, show/hide, options, errors, banners, lookup filter, focus, labels, hooks, user)
 - /help/form-events-basic — Basic palette control events (Input, Select, Date, Upload, …)
 - /help/form-events-extend — Extend and MI control events (Sub-Table, Lookup, Assignment Mode, …)

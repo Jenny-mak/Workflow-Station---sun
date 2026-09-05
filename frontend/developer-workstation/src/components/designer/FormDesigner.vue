@@ -2005,6 +2005,21 @@ const designerConfig = computed(() => ({
             value: false,
           },
           { type: 'switch', field: 'readonly', title: 'Readonly' },
+          {
+            type: 'FileNetAdvancedEditor',
+            field: 'fileNet',
+            title: t('form.fileNet.panelTitle'),
+            value: {
+              enabled: false,
+              connectionUid: '',
+              headerInfo: [],
+              repositoryDetail: { repositoryID: '', documentClass: '', objectStoreName: '' },
+              docProperty: [],
+              searchDetailList: [],
+              retrieveRequest: {},
+              orderBy: [],
+            },
+          },
         ]
       },
     },

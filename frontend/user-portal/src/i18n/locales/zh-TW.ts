@@ -1017,7 +1017,12 @@ export default {
     typeError: '檔案格式不正確',
     limitExceed: '最多只能上傳 {limit} 個檔案',
     success: '上傳成功',
-    failed: '上傳失敗'
+    failed: '上傳失敗',
+    fileDescription: '檔案描述',
+    callbackUrl: 'Callback URL',
+    autoSendToFileNet: 'Auto Send to FileNet',
+    statusCompleted: 'Completed',
+    descriptionSaveFailed: '檔案描述儲存失敗',
   },
   filePreview: {
     previewFile: '預覽檔案',

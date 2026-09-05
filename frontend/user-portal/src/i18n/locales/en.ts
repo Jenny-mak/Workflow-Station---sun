@@ -1045,7 +1045,12 @@ export default {
     typeError: 'Invalid file format',
     limitExceed: 'Maximum {limit} files allowed',
     success: 'Upload successful',
-    failed: 'Upload failed'
+    failed: 'Upload failed',
+    fileDescription: 'File Description',
+    callbackUrl: 'Callback URL',
+    autoSendToFileNet: 'Auto Send to FileNet',
+    statusCompleted: 'Completed',
+    descriptionSaveFailed: 'Could not save the file description',
   },
   filePreview: {
     previewFile: 'Preview file',

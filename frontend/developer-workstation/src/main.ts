@@ -35,6 +35,7 @@ import FormControlTypeSelect from './components/designer/FormControlTypeSelect.v
 import RecordNoteScopeSelect from './components/designer/RecordNoteScopeSelect.vue'
 import SensitiveMaskPropsEditor from './components/designer/SensitiveMaskPropsEditor.vue'
 import UploadMaxFilesEditor from './components/designer/UploadMaxFilesEditor.vue'
+import FileNetAdvancedEditor from './components/designer/FileNetAdvancedEditor.vue'
 import FormUploadDrop from './components/designer/FormUploadDrop.vue'
 import SensitiveMaskedInput from './components/designer/SensitiveMaskedInput.vue'
 import MiAssignmentPlaceholderWidget from './components/designer/MiAssignmentPlaceholderWidget.vue'
@@ -136,6 +137,7 @@ FcDesigner.addMenu({
 // Sensitive mask: props panel editor + Input display wrapper (Preview / canvas).
 FcDesigner.component('SensitiveMaskPropsEditor', SensitiveMaskPropsEditor)
 FcDesigner.component('UploadMaxFilesEditor', UploadMaxFilesEditor)
+FcDesigner.component('FileNetAdvancedEditor', FileNetAdvancedEditor)
 FcDesigner.component('formUploadDrop', FormUploadDrop)
 FcDesigner.component('input', SensitiveMaskedInput)
 
