@@ -67,10 +67,18 @@
             class="er-node"
             :class="{ 'is-collapsed': !nodeProps.data.expanded }"
           >
-            <!-- `nodrag` keeps VueFlow's drag handler from swallowing the click. -->
+            <!--
+              The header is both the expand/collapse control and the card's
+              drag grip. It must NOT carry `nodrag`: VueFlow's drag filter
+              walks up from the pressed element to the node root, so a
+              `nodrag` header would exclude the whole card from dragging (a
+              collapsed card is almost entirely header). Press-vs-click is
+              disambiguated by movement instead — see `onHeaderPointerDown`.
+            -->
             <div
-              class="er-node-header nodrag"
-              @click.stop="toggleExpanded(nodeProps.id)"
+              class="er-node-header"
+              @pointerdown="onHeaderPointerDown"
+              @click.stop="onHeaderClick($event, nodeProps.id)"
             >
               <div class="er-node-heading">
                 <span class="er-node-title">{{ nodeProps.data.displayName }}</span>
@@ -143,10 +151,11 @@
                   :class="{ 'er-handle-pk': field.isPrimaryKey }"
                 />
               </div>
+              <!-- A real control, not a grip: `nodrag` keeps a press here from moving the card. -->
               <button
                 v-if="nodeProps.data.hiddenCount"
                 type="button"
-                class="er-more-row"
+                class="er-more-row nodrag"
                 @click.stop="toggleExpanded(nodeProps.id)"
               >
                 {{ t('table.relationMoreFields', { count: nodeProps.data.hiddenCount }) }}
@@ -183,7 +192,7 @@ import {
   chooseHandleSides,
   visibleFieldsForCard,
   type LayoutEdgeInput,
-} from '@/utils/relationDiagramLayout'
+} from '@platform-shared/relationDiagramLayout'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -509,6 +518,34 @@ function handleNodeDragStop({ node }: { node: Node }) {
   buildEdges()
 }
 
+/**
+ * Where the pointer went down on a card header, so a release can be judged a
+ * click (expand/collapse) or the tail of a drag (move the card, change nothing).
+ */
+let headerPressAt: { x: number; y: number } | null = null
+
+/** Movement under this many px still counts as a click, not a drag. */
+const CLICK_SLOP_PX = 4
+
+function onHeaderPointerDown(event: PointerEvent) {
+  headerPressAt = { x: event.clientX, y: event.clientY }
+}
+
+/**
+ * The header doubles as the drag grip, so a mouse-up after dragging a card also
+ * fires `click`. Toggle only when the pointer effectively stayed put; otherwise
+ * every reposition would expand or collapse the card the user just moved.
+ */
+function onHeaderClick(event: MouseEvent, nodeId: string) {
+  const pressed = headerPressAt
+  headerPressAt = null
+  if (pressed) {
+    const moved = Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y)
+    if (moved > CLICK_SLOP_PX) return
+  }
+  toggleExpanded(nodeId)
+}
+
 function toggleExpanded(nodeId: string) {
   const next = new Set(expandedIds.value)
   if (next.has(nodeId)) next.delete(nodeId)
@@ -633,8 +670,13 @@ watch(
   padding: 6px 10px;
   background: #409eff;
   color: #ffffff;
-  cursor: pointer;
+  // The header both toggles the card and drags it, so advertise the move affordance.
+  cursor: grab;
   user-select: none;
+
+  &:active {
+    cursor: grabbing;
+  }
 }
 
 .er-node-heading {

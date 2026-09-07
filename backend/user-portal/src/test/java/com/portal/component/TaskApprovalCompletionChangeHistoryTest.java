@@ -116,6 +116,100 @@ class TaskApprovalCompletionChangeHistoryTest {
     }
 
     @Test
+    @DisplayName("two complete rows with the same payload stay two rows at the diff layer")
+    void twoCompleteIdenticalPayloadsRemainTwoRows() {
+        List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
+                List.of(Map.of(
+                        "row_id", "uuid-old",
+                        "correspondence_channel", "Email",
+                        "correspondence_type", "Customer Notification",
+                        "mdc_status", "Draft",
+                        "processed_date", "2026-09-05")),
+                List.of(
+                        Map.of(
+                                "row_id", "uuid-new-1",
+                                "correspondence_channel", "Letter",
+                                "correspondence_type", "Customer Notification",
+                                "mdc_status", "Draft",
+                                "processed_date", "2026-09-05"),
+                        Map.of(
+                                "row_id", "uuid-new-2",
+                                "correspondence_channel", "Letter",
+                                "correspondence_type", "Customer Notification",
+                                "mdc_status", "Draft",
+                                "processed_date", "2026-09-05")));
+        assertEquals(2, changes.size());
+        assertEquals(1, changes.stream().filter(c -> "ROW_UPDATE".equals(c.getChangeType())).count());
+        assertEquals(1, changes.stream().filter(c -> "ROW_ADD".equals(c.getChangeType())).count());
+        assertEquals(0, changes.stream().filter(c -> "ROW_DELETE".equals(c.getChangeType())).count());
+    }
+
+    @Test
+    @DisplayName("editing one row and adding a distinct second row is update+add, not a phantom delete")
+    void extraDistinctRowIsUpdateAndAddNotDelete() {
+        List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
+                List.of(Map.of(
+                        "row_id", "uuid-old",
+                        "correspondence_type", "Customer Notification",
+                        "mdc_status", "Draft",
+                        "processed_date", "2026-09-05")),
+                List.of(
+                        Map.of(
+                                "row_id", "uuid-new-1",
+                                "correspondence_type", "Customer Notification",
+                                "mdc_status", "Acknowledged",
+                                "processed_date", "2026-09-26"),
+                        Map.of(
+                                "row_id", "uuid-new-2",
+                                "correspondence_type", "Complaint",
+                                "mdc_status", "Closed",
+                                "processed_date", "2026-09-10")));
+        assertEquals(2, changes.size());
+        assertEquals(1, changes.stream().filter(c -> "ROW_UPDATE".equals(c.getChangeType())).count());
+        assertEquals(1, changes.stream().filter(c -> "ROW_ADD".equals(c.getChangeType())).count());
+        assertEquals(0, changes.stream().filter(c -> "ROW_DELETE".equals(c.getChangeType())).count());
+    }
+
+    @Test
+    @DisplayName("an identity-only same-id overlay does not record clearing every business field")
+    void identityOnlyOverlayDoesNotRecordFieldClears() {
+        List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
+                List.of(Map.of(
+                        "row_id", "uuid-same",
+                        "correspondence_channel", "Email",
+                        "correspondence_mode", "Outbound",
+                        "mdc_status", "Draft")),
+                List.of(Map.of("row_id", "uuid-same")));
+        assertEquals(List.of(), changes);
+    }
+
+    @Test
+    @DisplayName("clearing every business field on the same row is recorded as an update")
+    void clearingEveryBusinessFieldIsRecorded() {
+        List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
+                List.of(Map.of(
+                        "row_id", "uuid-same",
+                        "correspondence_channel", "Email",
+                        "correspondence_mode", "Outbound",
+                        "mdc_status", "Draft")),
+                List.of(Map.of(
+                        "row_id", "uuid-same",
+                        "correspondence_channel", "",
+                        "correspondence_mode", "",
+                        "mdc_status", "")));
+        assertEquals(1, changes.size());
+        assertEquals("ROW_UPDATE", changes.get(0).getChangeType());
+        assertEquals(Map.of(
+                "correspondence_channel", "Email",
+                "correspondence_mode", "Outbound",
+                "mdc_status", "Draft"), changes.get(0).getOldValues());
+        assertEquals(Map.of(
+                "correspondence_channel", "",
+                "correspondence_mode", "",
+                "mdc_status", ""), changes.get(0).getNewValues());
+    }
+
+    @Test
     @DisplayName("continues to record an actual user-editable sub-table field change")
     void recordsActualBusinessFieldChange() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(

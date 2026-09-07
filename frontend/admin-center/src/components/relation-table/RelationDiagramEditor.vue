@@ -1,12 +1,34 @@
 <template>
   <div class="relation-diagram-editor">
-    <el-alert
-      type="info"
-      :closable="false"
-      class="diagram-hint"
-    >
-      {{ t('erDiagram.diagramHint') }}
-    </el-alert>
+    <div class="diagram-toolbar">
+      <el-alert
+        type="info"
+        :closable="false"
+        class="diagram-hint"
+      >
+        {{ t('erDiagram.diagramHint') }}
+      </el-alert>
+      <div class="diagram-actions">
+        <el-button
+          size="small"
+          @click="expandAll"
+        >
+          {{ t('erDiagram.expandAll') }}
+        </el-button>
+        <el-button
+          size="small"
+          @click="collapseAll"
+        >
+          {{ t('erDiagram.collapseAll') }}
+        </el-button>
+        <el-button
+          size="small"
+          @click="relayout"
+        >
+          {{ t('erDiagram.autoLayout') }}
+        </el-button>
+      </div>
+    </div>
 
     <div
       v-if="!tables.length"
@@ -41,23 +63,60 @@
         <Controls :show-interactive="false" />
 
         <template #node-erTable="nodeProps">
-          <div class="er-node">
-            <div class="er-node-header">
-              <span class="er-node-title">{{ nodeProps.data.displayName }}</span>
-              <span class="er-node-subtitle">{{ nodeProps.data.tableName }}</span>
+          <div
+            class="er-node"
+            :class="{ 'is-collapsed': !nodeProps.data.expanded }"
+          >
+            <!--
+              The header is both the expand/collapse control and the card's
+              drag grip. It must NOT carry `nodrag`: VueFlow's drag filter
+              walks up from the pressed element to the node root, so a
+              `nodrag` header would exclude the whole card from dragging (a
+              collapsed card is almost entirely header). Press-vs-click is
+              disambiguated by movement instead — see `onHeaderPointerDown`.
+            -->
+            <div
+              class="er-node-header"
+              @pointerdown="onHeaderPointerDown"
+              @click.stop="onHeaderClick($event, nodeProps.id)"
+            >
+              <div class="er-node-heading">
+                <span class="er-node-title">{{ nodeProps.data.displayName }}</span>
+                <span class="er-node-subtitle">{{ nodeProps.data.tableName }}</span>
+              </div>
+              <el-icon
+                v-if="nodeProps.data.hiddenCount || nodeProps.data.expanded"
+                class="er-node-caret"
+                :class="{ 'is-open': nodeProps.data.expanded }"
+              >
+                <ArrowRight />
+              </el-icon>
             </div>
             <div class="er-node-body">
               <div
-                v-for="field in nodeProps.data.fields"
+                v-for="field in nodeProps.data.visibleFields"
                 :key="field.fieldName"
                 class="er-field-row"
                 :class="{ 'is-pk': field.isPrimaryKey, 'is-fk': field.isForeignKey }"
               >
+                <!--
+                  Each side carries a source AND a target handle sharing one id
+                  and one spot: an edge end resolves to the handle matching its
+                  role, so both ends anchor on the card edge facing the other
+                  card instead of falling back to the node's default side.
+                -->
+                <Handle
+                  :id="`${field.fieldName}::l`"
+                  type="target"
+                  :position="Position.Left"
+                  class="er-handle"
+                  :class="{ 'er-handle-pk': field.isPrimaryKey }"
+                />
                 <Handle
                   :id="`${field.fieldName}::l`"
                   type="source"
                   :position="Position.Left"
-                  class="er-handle"
+                  class="er-handle er-handle-overlay"
                   :class="{ 'er-handle-pk': field.isPrimaryKey }"
                 />
                 <span class="er-field-badges">
@@ -79,12 +138,28 @@
                 <span class="er-field-type">{{ field.dataType }}</span>
                 <Handle
                   :id="`${field.fieldName}::r`"
-                  type="source"
+                  type="target"
                   :position="Position.Right"
                   class="er-handle"
                   :class="{ 'er-handle-pk': field.isPrimaryKey }"
                 />
+                <Handle
+                  :id="`${field.fieldName}::r`"
+                  type="source"
+                  :position="Position.Right"
+                  class="er-handle er-handle-overlay"
+                  :class="{ 'er-handle-pk': field.isPrimaryKey }"
+                />
               </div>
+              <!-- A real control, not a grip: `nodrag` keeps a press here from moving the card. -->
+              <button
+                v-if="nodeProps.data.hiddenCount"
+                type="button"
+                class="er-more-row nodrag"
+                @click.stop="toggleExpanded(nodeProps.id)"
+              >
+                {{ t('erDiagram.moreFields', { count: nodeProps.data.hiddenCount }) }}
+              </button>
             </div>
           </div>
         </template>
@@ -97,6 +172,7 @@
 import { ref, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowRight } from '@element-plus/icons-vue'
 import {
   VueFlow,
   Handle,
@@ -111,6 +187,12 @@ import {
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import type { RelationTableResponse, FieldDefinitionResponse } from '@/api/relationTable'
+import {
+  layoutRelationDiagram,
+  chooseHandleSides,
+  visibleFieldsForCard,
+  type LayoutEdgeInput,
+} from '@platform-shared/relationDiagramLayout'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -123,6 +205,14 @@ export interface RelationRow {
   relationType: string
   targetTableId: number | null
   targetFieldName: string
+}
+
+interface DiagramField {
+  fieldName: string
+  displayName?: string
+  dataType?: string
+  isPrimaryKey: boolean
+  isForeignKey: boolean
 }
 
 const props = defineProps<{
@@ -140,42 +230,97 @@ const { fitView } = useVueFlow()
 const nodes = ref<Node[]>([])
 const edges = ref<Edge[]>([])
 
-// Keep dragged positions so node rebuilds don't reset layout.
+// Positions the user dragged; auto-layout fills in the rest.
 const positionMap = ref<Record<string, { x: number; y: number }>>({})
+// Cards start collapsed to keys only; ids here are the ones the user opened.
+const expandedIds = ref<Set<string>>(new Set())
 
-const NODE_WIDTH = 240
-const COL_GAP = 320
-const ROW_GAP = 280
-const PER_ROW = 3
+const NODE_WIDTH = 260
+const COLUMN_GAP = 200
+const ROW_GAP = 60
+const HEADER_HEIGHT = 46
+const FIELD_ROW_HEIGHT = 26
+const MORE_ROW_HEIGHT = 24
 
-function gridPosition(index: number): { x: number; y: number } {
-  const col = index % PER_ROW
-  const row = Math.floor(index / PER_ROW)
-  return { x: col * COL_GAP, y: row * ROW_GAP }
+function tableFields(table: RelationTableResponse): DiagramField[] {
+  return (table.fieldDefinitions || []).map((f: FieldDefinitionResponse) => ({
+    fieldName: f.fieldName,
+    displayName: f.displayName,
+    dataType: f.dataType,
+    isPrimaryKey: !!f.isPrimaryKey,
+    isForeignKey: !!f.isForeignKey,
+  }))
+}
+
+function visibleFieldsFor(fields: DiagramField[], expanded: boolean): DiagramField[] {
+  return visibleFieldsForCard(fields, expanded)
+}
+
+function nodeHeight(visibleCount: number, hiddenCount: number): number {
+  return (
+    HEADER_HEIGHT + visibleCount * FIELD_ROW_HEIGHT + (hiddenCount ? MORE_ROW_HEIGHT : 0)
+  )
+}
+
+/**
+ * Distance from a card's top to the middle of the row a relation attaches to.
+ * The layout aligns on these so lines come out horizontal rather than stepped.
+ */
+function anchorOffset(tableId: number | null, fieldName: string): number | undefined {
+  if (tableId == null) return undefined
+  const table = props.tables.find(tb => tb.id === tableId)
+  if (!table) return undefined
+  const visible = visibleFieldsFor(tableFields(table), expandedIds.value.has(String(tableId)))
+  const index = visible.findIndex(f => f.fieldName === fieldName)
+  if (index < 0) return undefined
+  return HEADER_HEIGHT + index * FIELD_ROW_HEIGHT + FIELD_ROW_HEIGHT / 2
+}
+
+/** Relations reduced to the table-level graph the layout ranks columns from. */
+function layoutEdgeInputs(): LayoutEdgeInput[] {
+  return props.modelValue
+    .filter(r => r.sourceTableId != null && r.targetTableId != null)
+    .map(r => ({
+      source: String(r.sourceTableId),
+      target: String(r.targetTableId),
+      sourceAnchorOffset: anchorOffset(r.sourceTableId, r.sourceFieldName),
+      targetAnchorOffset: anchorOffset(r.targetTableId, r.targetFieldName),
+    }))
 }
 
 function buildNodes() {
-  nodes.value = props.tables.map((table, index) => {
+  const built = props.tables.map(table => {
     const id = String(table.id)
-    const position = positionMap.value[id] || gridPosition(index)
-    positionMap.value[id] = position
+    const expanded = expandedIds.value.has(id)
+    const fields = tableFields(table)
+    const visibleFields = visibleFieldsFor(fields, expanded)
+    const hiddenCount = fields.length - visibleFields.length
     return {
       id,
       type: 'erTable',
-      position,
+      position: { x: 0, y: 0 },
       data: {
         tableName: table.tableName,
         displayName: table.displayName || table.tableName,
-        fields: (table.fieldDefinitions || []).map((f: FieldDefinitionResponse) => ({
-          fieldName: f.fieldName,
-          displayName: f.displayName,
-          dataType: f.dataType,
-          isPrimaryKey: !!f.isPrimaryKey,
-          isForeignKey: !!f.isForeignKey,
-        })),
+        expanded,
+        visibleFields,
+        hiddenCount,
       },
       style: { width: `${NODE_WIDTH}px` },
-    } as Node
+      height: nodeHeight(visibleFields.length, hiddenCount),
+    }
+  })
+
+  const { positions } = layoutRelationDiagram(
+    built.map(n => ({ id: n.id, height: n.height })),
+    layoutEdgeInputs(),
+    { nodeWidth: NODE_WIDTH, columnGap: COLUMN_GAP, rowGap: ROW_GAP },
+  )
+
+  nodes.value = built.map(n => {
+    // A card the user moved keeps its spot; everything else follows the layout.
+    const position = positionMap.value[n.id] || positions[n.id] || { x: 0, y: 0 }
+    return { ...n, position } as Node
   })
 }
 
@@ -212,17 +357,25 @@ function fieldFromHandle(handle: string | null | undefined): string {
   return idx >= 0 ? handle.slice(0, idx) : handle
 }
 
-function nodeCenterX(tableId: number | null): number {
+function nodeX(tableId: number | null): number {
   if (tableId == null) return 0
-  const pos = positionMap.value[String(tableId)]
-  return pos ? pos.x + NODE_WIDTH / 2 : 0
+  return nodes.value.find(n => n.id === String(tableId))?.position.x ?? 0
 }
 
-/** Pick the closest sides so edges enter/exit toward each other instead of wrapping around. */
-function chooseSides(fkTableId: number | null, pkTableId: number | null): { src: 'l' | 'r'; tgt: 'l' | 'r' } {
-  return nodeCenterX(fkTableId) >= nodeCenterX(pkTableId)
-    ? { src: 'l', tgt: 'r' }
-    : { src: 'r', tgt: 'l' }
+/**
+ * Whether the row a relation anchors on is currently rendered.
+ *
+ * Relations are derived from FK/PK field metadata, and a collapsed card keeps
+ * exactly those keys, so this holds for every relation. It is asserted rather
+ * than assumed: an unanchored line would be drawn from an arbitrary row, and
+ * silently hiding it would look like the relation had been lost.
+ */
+function anchorRowIsVisible(tableId: number | null, fieldName: string): boolean {
+  if (tableId == null) return false
+  const table = props.tables.find(tb => tb.id === tableId)
+  if (!table) return false
+  const visible = visibleFieldsFor(tableFields(table), expandedIds.value.has(String(tableId)))
+  return visible.some(f => f.fieldName === fieldName)
 }
 
 function buildEdges() {
@@ -237,13 +390,28 @@ function buildEdges() {
         fieldExists(r.targetTableId, r.targetFieldName),
     )
     .map(r => {
-      const sides = chooseSides(r.sourceTableId, r.targetTableId)
+      const sides = chooseHandleSides(nodeX(r.sourceTableId), nodeX(r.targetTableId))
+      if (
+        !anchorRowIsVisible(r.sourceTableId, r.sourceFieldName) ||
+        !anchorRowIsVisible(r.targetTableId, r.targetFieldName)
+      ) {
+        // Broken invariant: surface it instead of dropping the line in silence.
+        console.warn(
+          '[RelationDiagram] relation has no visible anchor row and was not drawn',
+          r,
+        )
+        return null
+      }
       return {
         id: `rel-${r.sourceTableId}-${r.sourceFieldName}`,
         source: String(r.sourceTableId),
-        sourceHandle: handleId(r.sourceFieldName, sides.src),
+        sourceHandle: handleId(r.sourceFieldName, sides.source),
         target: String(r.targetTableId),
-        targetHandle: handleId(r.targetFieldName, sides.tgt),
+        targetHandle: handleId(r.targetFieldName, sides.target),
+        // Route out of / into the card edge that faces the other card, so a
+        // line never doubles back across the card it belongs to.
+        sourcePosition: sides.source === 'r' ? Position.Right : Position.Left,
+        targetPosition: sides.target === 'l' ? Position.Left : Position.Right,
         type: 'smoothstep',
         label: relationTypeShortLabel(r.relationType),
         markerEnd: MarkerType.ArrowClosed,
@@ -252,6 +420,7 @@ function buildEdges() {
         labelBgStyle: { fill: '#ecf5ff' },
       } as Edge
     })
+    .filter((e): e is Edge => e !== null)
 }
 
 function isPkField(tableId: number, fieldName: string): boolean {
@@ -348,6 +517,64 @@ function handleNodeDragStop({ node }: { node: Node }) {
   buildEdges()
 }
 
+/**
+ * Where the pointer went down on a card header, so a release can be judged a
+ * click (expand/collapse) or the tail of a drag (move the card, change nothing).
+ */
+let headerPressAt: { x: number; y: number } | null = null
+
+/** Movement under this many px still counts as a click, not a drag. */
+const CLICK_SLOP_PX = 4
+
+function onHeaderPointerDown(event: PointerEvent) {
+  headerPressAt = { x: event.clientX, y: event.clientY }
+}
+
+/**
+ * The header doubles as the drag grip, so a mouse-up after dragging a card also
+ * fires `click`. Toggle only when the pointer effectively stayed put; otherwise
+ * every reposition would expand or collapse the card the user just moved.
+ */
+function onHeaderClick(event: MouseEvent, nodeId: string) {
+  const pressed = headerPressAt
+  headerPressAt = null
+  if (pressed) {
+    const moved = Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y)
+    if (moved > CLICK_SLOP_PX) return
+  }
+  toggleExpanded(nodeId)
+}
+
+function toggleExpanded(nodeId: string) {
+  const next = new Set(expandedIds.value)
+  if (next.has(nodeId)) next.delete(nodeId)
+  else next.add(nodeId)
+  expandedIds.value = next
+  // Card height changed, so re-run the layout for any card the user hasn't moved.
+  buildNodes()
+  buildEdges()
+}
+
+function expandAll() {
+  expandedIds.value = new Set(props.tables.map(tb => String(tb.id)))
+  buildNodes()
+  buildEdges()
+}
+
+function collapseAll() {
+  expandedIds.value = new Set()
+  buildNodes()
+  buildEdges()
+}
+
+/** Drop manual placements and re-run the card-free-gutter layout. */
+function relayout() {
+  positionMap.value = {}
+  buildNodes()
+  buildEdges()
+  nextTick(() => fitView({ padding: 0.2 }))
+}
+
 watch(
   () => props.tables,
   () => {
@@ -360,7 +587,10 @@ watch(
 
 watch(
   () => props.modelValue,
-  () => buildEdges(),
+  () => {
+    buildNodes()
+    buildEdges()
+  },
   { deep: true },
 )
 </script>
@@ -372,8 +602,23 @@ watch(
   height: 100%;
 }
 
-.diagram-hint {
+.diagram-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 12px;
+}
+
+.diagram-hint {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.diagram-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .diagram-empty {
@@ -388,12 +633,28 @@ watch(
 
 .diagram-canvas {
   position: relative;
-  height: 620px;
+  // `.vue-flow` is `height: 100%`, which only resolves against a DEFINITE
+  // parent height. A flex-grown box is not definite for that purpose: the
+  // canvas would look right while VueFlow's pane collapsed to 0px, leaving
+  // `fitView` nothing to fit and the cards painted off-canvas. Keep an
+  // explicit height (matching Developer Workstation).
+  height: 560px;
   width: 100%;
   border: 1px solid #e4e7ed;
   border-radius: 4px;
   background: #fafafa;
   overflow: hidden;
+
+  // Relation lines must stay readable over the cards they run between.
+  // VueFlow writes node z-index inline, so both sides need !important to win.
+  :deep(.vue-flow__edges),
+  :deep(.vue-flow__edge) {
+    z-index: 10 !important;
+  }
+
+  :deep(.vue-flow__node) {
+    z-index: 1 !important;
+  }
 }
 
 .er-node {
@@ -407,11 +668,26 @@ watch(
 
 .er-node-header {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 6px 10px;
   background: #409eff;
   color: #ffffff;
+  // The header both toggles the card and drags it, so advertise the move affordance.
+  cursor: grab;
+  user-select: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.er-node-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .er-node-title {
@@ -430,6 +706,15 @@ watch(
   text-overflow: ellipsis;
 }
 
+.er-node-caret {
+  flex-shrink: 0;
+  transition: transform 0.15s;
+
+  &.is-open {
+    transform: rotate(90deg);
+  }
+}
+
 .er-node-body {
   display: flex;
   flex-direction: column;
@@ -440,12 +725,30 @@ watch(
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
+  height: 26px;
+  padding: 0 12px;
   border-top: 1px solid #f0f2f5;
   white-space: nowrap;
 
   &.is-pk {
     background: #fdf6ec;
+  }
+}
+
+.er-more-row {
+  height: 24px;
+  padding: 0 12px;
+  border: none;
+  border-top: 1px solid #f0f2f5;
+  background: #f8f9fb;
+  color: #909399;
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+
+  &:hover {
+    color: #409eff;
+    background: #ecf5ff;
   }
 }
 
@@ -484,6 +787,12 @@ watch(
 
 .er-handle-pk {
   background: #e6a23c;
+}
+
+// The source twin sits exactly on its target twin; only one dot should show.
+.er-handle-overlay {
+  background: transparent;
+  border-color: transparent;
 }
 
 .er-field-row:hover .er-handle {

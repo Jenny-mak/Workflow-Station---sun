@@ -5,7 +5,7 @@ import {
   visibleFieldsForCard,
   type LayoutEdgeInput,
   type LayoutNodeInput,
-} from '../relationDiagramLayout'
+} from '@platform-shared/relationDiagramLayout'
 
 const OPTIONS = { nodeWidth: 260, columnGap: 200, rowGap: 60 }
 
