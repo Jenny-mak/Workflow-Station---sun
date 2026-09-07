@@ -80,7 +80,7 @@ public class CompletedTaskListQueryComponent {
         String sql = "SELECT ht.ID_ AS task_id, ht.NAME_ AS task_name, ht.PROC_INST_ID_ AS process_instance_id,"
                 + " ht.PROC_DEF_ID_ AS process_definition_id, ht.TASK_DEF_KEY_ AS task_definition_key,"
                 + " ht.ASSIGNEE_ AS assignee, ht.START_TIME_ AS start_time, ht.END_TIME_ AS end_time,"
-                + " ht.DURATION_ AS duration, " + CompletedTaskColumnSpec.ACTION_SQL + " AS action,"
+                + " ht.DURATION_ AS duration,"
                 + " pi.process_definition_key, pi.process_definition_name, pi.function_unit_code,"
                 + " (pi.variables - '__subTables__')::text AS variables"
                 + where + orderBy + " LIMIT ? OFFSET ?";
@@ -122,7 +122,6 @@ public class CompletedTaskListQueryComponent {
                 .createTime(toLocalDateTime(rs.getTimestamp("start_time")))
                 .completedTime(toLocalDateTime(rs.getTimestamp("end_time")))
                 .durationInMillis(longOrNull(rs, "duration"))
-                .action(rs.getString("action"))
                 .build();
         return task;
     }

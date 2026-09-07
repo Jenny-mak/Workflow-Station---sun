@@ -72,17 +72,6 @@
                 >
                   {{ row.requestId || '-' }}
                 </el-link>
-                <el-tag
-                  v-else-if="col.field === 'action' && !row.multiInstanceSubTask"
-                  :type="getActionTagType(row.action)"
-                  size="small"
-                  style="white-space: nowrap;"
-                >
-                  {{ t(`action.${row.action || 'completed'}`) }}
-                </el-tag>
-                <span
-                  v-else-if="col.field === 'action'"
-                >-</span>
                 <span
                   v-else-if="col.field === 'createTime' || col.field === 'completedTime'"
                   style="white-space: nowrap;"
@@ -251,17 +240,6 @@ const formatDuration = (ms: number | undefined) => {
   } else {
     return `${seconds}s`
   }
-}
-
-const getActionTagType = (action: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' => {
-  const typeMap: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
-    approved: 'success',
-    rejected: 'danger',
-    transferred: 'warning',
-    delegated: 'info',
-    completed: 'primary',
-  }
-  return typeMap[action] || 'primary'
 }
 
 onMounted(() => {
