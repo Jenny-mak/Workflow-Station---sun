@@ -211,7 +211,9 @@ function onFilterClear() {
 }
 
 const viewTask = (task: TaskInfo) => {
-  const query: Record<string, string> = {}
+  // `fromList` tells PortalLayout which sidebar entry stays lit: `/tasks/:id` alone
+  // cannot say whether the detail was opened from To Do or from Completed Tasks.
+  const query: Record<string, string> = { fromList: 'completed' }
   if (task.completedTime) {
     query.snapshotTime = task.completedTime
   }
