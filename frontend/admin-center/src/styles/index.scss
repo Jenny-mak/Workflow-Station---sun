@@ -18,7 +18,7 @@ html, body, #app {
   --el-font-family: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
-// ==================== 设计令牌（参考稿：深色侧栏 + 暖灰画布 + 品牌红胶囊按钮） ====================
+// ==================== 设计令牌（参考稿：深色侧栏 + 暖灰画布 + 品牌红按钮） ====================
 :root {
   --primary-color: #db0011;
   --primary-light: #f5222d;
@@ -49,14 +49,16 @@ html, body, #app {
 
 // ==================== Element Plus 组件覆盖 ====================
 
-// 按钮：胶囊造型（参考稿的 Create Namespace 圆角按钮）
+// ==================== 按钮 ====================
+// 圆角一律交给 Element Plus 默认（--el-border-radius-base，4px）——三端按钮外形必须一致。
+// 这里曾有一条 `.el-button { border-radius: 999px }`（胶囊造型），但它是否生效取决于打包顺序：
+// admin-center / user-portal 里 EP 的 el-button 样式是懒加载 chunk，晚于本文件加载并把圆角
+// 重置回 4px；developer-workstation 把 EP 样式打进了入口 CSS（早于本文件），胶囊规则反而胜出。
+// 结果三端只有 DW 是胶囊按钮。改法是删掉这条覆盖而不是提权：`.el-button.is-round` /
+// `.is-circle` 与提权后的选择器同权，提权会连带把圆形按钮压成方角。
+// 需要胶囊按钮时用 Element Plus 自带的 `round` 属性，别再加全局覆盖。
 .el-button {
-  border-radius: 999px;
   font-weight: 500;
-}
-
-.el-button.is-circle {
-  border-radius: 50%;
 }
 
 .el-button--primary {

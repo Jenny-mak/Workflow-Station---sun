@@ -1,5 +1,5 @@
 // Workflow Station 统一设计系统（三端镜像：admin-center 为源，user-portal / developer-workstation 同步）
-// 内容：设计令牌 + Inter 字体 + Element Plus 覆盖（胶囊按钮 / 卡片 / 账册风格表格 / 软色标签 / 圆角输入）
+// 内容：设计令牌 + Inter 字体 + Element Plus 覆盖（按钮 / 卡片 / 账册风格表格 / 软色标签 / 圆角输入）
 // 注意：Element Plus 的 per-component CSS 是懒加载 chunk，会晚于全局样式加载并重置
 // 组件上的 CSS 变量，因此下方一律用提权选择器（双类名 / thead）压住。
 
@@ -40,14 +40,16 @@ html, body, #app {
   text-rendering: optimizeLegibility;
 }
 
-// ==================== 按钮：胶囊造型 ====================
+// ==================== 按钮 ====================
+// 圆角一律交给 Element Plus 默认（--el-border-radius-base，4px）——三端按钮外形必须一致。
+// 这里曾有一条 `.el-button { border-radius: 999px }`（胶囊造型），但它是否生效取决于打包顺序：
+// admin-center / user-portal 里 EP 的 el-button 样式是懒加载 chunk，晚于本文件加载并把圆角
+// 重置回 4px；developer-workstation 把 EP 样式打进了入口 CSS（早于本文件），胶囊规则反而胜出。
+// 结果三端只有 DW 是胶囊按钮。改法是删掉这条覆盖而不是提权：`.el-button.is-round` /
+// `.is-circle` 与提权后的选择器同权，提权会连带把圆形按钮压成方角。
+// 需要胶囊按钮时用 Element Plus 自带的 `round` 属性，别再加全局覆盖。
 .el-button {
-  border-radius: 999px;
   font-weight: 500;
-}
-
-.el-button.is-circle {
-  border-radius: 50%;
 }
 
 .el-button--primary {
