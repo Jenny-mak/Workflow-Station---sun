@@ -355,20 +355,33 @@ const sections = computed<NavSection[]>(() => {
 })
 
 /**
+ * 详情页把来源列表写在 `fromList` 里：`/tasks/123` 这种路径本身说不出
+ * 「从 To Do 进来」还是「从 Completed Tasks 进来」，只按前缀匹配会一律点亮 To Do。
+ */
+const FROM_LIST_ITEM_PATH: Record<string, string> = {
+  completed: '/tasks/completed',
+}
+
+/**
  * 当前条目 = 与 route.path 匹配得最深的那一条：精确命中优先，其次前缀命中。
  * 这样 /tasks/123 落在「To Do」上，而 /tasks/completed 仍然落在自己那条。
+ * 带 `fromList` 的详情页优先认来源列表（该条目当前不可见时退回前缀匹配）。
  */
 const activeItemPath = computed(() => {
+  const fromList = route.query.fromList
+  const fromPath = typeof fromList === 'string' ? FROM_LIST_ITEM_PATH[fromList] : undefined
+  let exact = ''
   let best = ''
   for (const section of sections.value) {
     for (const group of section.groups) {
       for (const item of group.items) {
-        if (route.path === item.to) return item.to
+        if (fromPath && item.to === fromPath) return item.to
+        if (route.path === item.to) exact = item.to
         if (route.path.startsWith(`${item.to}/`) && item.to.length > best.length) best = item.to
       }
     }
   }
-  return best
+  return exact || best
 })
 
 const activeSection = computed(() => {

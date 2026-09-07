@@ -108,6 +108,8 @@ export function createProcessStartState() {
     id: string
     label: string
     type?: 'primary' | 'success' | 'warning' | 'danger' | 'info'
+    /** 设计器配置的按钮颜色（`#RRGGBB`），有值时覆盖 type 的语义配色。 */
+    buttonColor?: string
     action?: string
     actionType?: string
     configJson?: string

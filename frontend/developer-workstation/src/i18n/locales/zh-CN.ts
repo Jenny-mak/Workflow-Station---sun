@@ -976,6 +976,8 @@ export default {
     title: '动作设计器',
     actionName: '动作名称',
     actionType: '动作类型',
+    buttonColor: '按钮颜色',
+    buttonColorPlaceholder: 'RRGGBB',
     test: '测试执行',
     description: '描述',
     boundNodes: '绑定节点',

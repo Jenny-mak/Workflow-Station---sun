@@ -31,6 +31,9 @@ public class ActionDefinitionRequest {
     private Map<String, Object> configJson;
     
     private String icon;
+
+    /** User Portal 按钮颜色，`#RRGGBB`；列宽 VARCHAR(20)，超长直接拒绝而不是让 DB 报 500。 */
+    @Size(max = 20, message = "{validation.action_button_color_max_length}")
     private String buttonColor;
     private String description;
 }

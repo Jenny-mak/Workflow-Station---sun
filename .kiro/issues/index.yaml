@@ -3288,6 +3288,41 @@
 - id: "1598"
   status: fixed
   fixed_at: "2026-09-07"
+  severity: minor
+  category: ui
+  summary: "Developer Workstation 按钮是胶囊造型，与 Admin Center / User Portal 的 4px 直角按钮不一致"
+  file: "frontend/developer-workstation/src/styles/ws-theme.scss"
+  detail: |
+    现象：/dev 全站 el-button（含按钮组、is-link 小按钮）border-radius 999px，
+    /admin 与 /portal 同类按钮是 4px。主色、字号、内边距三端本来就一致，只有外形不同。
+    根因：三端镜像的设计系统里有一条 `.el-button { border-radius: 999px }`（胶囊造型），
+    它是否生效取决于打包顺序 —— admin-center / user-portal 里 Element Plus 的 el-button
+    样式是懒加载 chunk，晚于全局样式加载并把圆角重置回 --el-border-radius-base(4px)；
+    developer-workstation 把 EP 样式打进了入口 CSS（早于全局样式），胶囊规则反而胜出。
+    即三端里只有 DW 真正应用了这条规则，admin/portal 从一开始就是「写了但不生效」。
+    修复：三端同步删掉这条覆盖（及其配套的 .el-button.is-circle），圆角交回 EP 默认。
+    没有用提权选择器（`.el-button.el-button`）—— 它与 EP 的 `.el-button.is-round` /
+    `.is-circle` 同权，会把圆形/胶囊按钮一起压成方角。需要胶囊时用 EP 的 `round` 属性。
+    验证：三端重新 build + 重建 *-frontend 容器；Playwright 量 computed border-radius，
+    DW 由 999px → 4px（小号 is-link 3px，与 admin 完全一致），admin / portal 无变化。
+    截图：frontend/developer-workstation/verification-screenshots/2026-09-07_btn-unify-{before,after}-dw-*.png，
+    参照 frontend/admin-center/verification-screenshots/2026-09-07_btn-unify-reference-admin-*.png。
+    第二处（同轮一并修）：DW 的 variables.scss 还覆盖了 --el-color-success(#00A651) /
+    --el-color-warning(#FF6600) / --el-color-danger(#DB0011)，admin / portal 用 EP 默认，
+    导致 warning 的 Deploy、danger 的 Delete 跨端不同色。而且这里只覆盖得到基色，
+    覆盖不到 EP 派生的 light-3/5/7/8/9 与 dark-2 —— 实测 DW 的 danger 基色是 #DB0011
+    但 hover 用的 light-3 仍是 EP 的 #f78989，同一个按钮基色与 hover 自相矛盾。
+    修复：只保留 --el-color-primary，删掉 success / warning / danger 三条覆盖。
+    这三个变量在 DW 没有 SCSS 侧消费者（$success-color / $warning-color / $danger-color
+    在 .vue / .scss 里零引用），所有着色都走 --el-color-*，不会出现半旧半新。
+    验证：三端 :root 语义令牌（基色 + light-3 + light-9）逐项相同；
+    DW Deploy 由 #FF6600 → rgb(230,162,60)，Table Design 的 Delete 由 #DB0011 →
+    rgb(245,108,108)，与 admin 的 Delete / Rollback 完全一致。
+    截图：..._btn-unify-semantic-after-dw-{fu-detail,function-units,automation,danger}.png。
+
+- id: "1599"
+  status: fixed
+  fixed_at: "2026-09-07"
   severity: major
   category: bug
   summary: "My Request Advanced Upload showed 1 of N files and could not preview (Meeting Doc)"
@@ -3301,7 +3336,7 @@
     native on-preview。验证：Playwright 2 cards + drawer + preview popup；
     verify-portal-form-upload-multi 三文件卡片。
 
-- id: "1599"
+- id: "1600"
   status: fixed
   fixed_at: "2026-09-07"
   severity: major
@@ -3315,7 +3350,7 @@
     「从发起表单添加高级上传」把 New Request 上缺失的 advancedUpload 规则
     （同一 field）放到当前画布，保存后门户才渲染。
 
-- id: "1600"
+- id: "1601"
   status: fixed
   fixed_at: "2026-09-07"
   severity: major
