@@ -269,7 +269,7 @@ export function createApplicationDetailFormSchema(appCtx: ApplicationDetailCtx):
         applyDesignerHideFlagToFormField(field, item)
         fields.push(field)
       } else if (item.type === 'owner' && item.field) {
-        // Owner field — props.ownerConfig ({"source":"CREATOR"|"CURRENT_ASSIGNEE"})
+        // Owner field — props.ownerConfig ({"source":"CREATOR"|"CASE_HANDLER"})
         const field: any = {
           key: item.field,
           label: item.title || item.field,

@@ -227,7 +227,8 @@ public class ProcessApplicationQueryComponent {
 
     /**
      * 为本页所有实例，按 processDefinitionKey 解析一次 BPMN，建「内层 MI 任务名 → 外层 MI subProcess name」映射。
-     * 引擎不可用/无 BPMN 时该 key 映射为空 map（调用方回退 currentNode）。COMPLETED 实例不需要（列表显 '-'）。
+     * 引擎不可用/无 BPMN 时不放入该 key（调用方把缺 key 当成 unknown，不回落成「不是 MI」）。
+     * COMPLETED 实例不需要（列表显 '-'）。
      */
     Map<String, Map<String, String>> buildMiNodeNameMaps(List<ProcessInstance> pageContent) {
         Map<String, Map<String, String>> byKey = new HashMap<>();
@@ -241,12 +242,20 @@ public class ProcessApplicationQueryComponent {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         for (String key : keys) {
             try {
-                byKey.put(key, miBpmnNameMapCache.getOrLoad(key, () -> workflowEngineClient.getBpmnXml(key)
-                        .map(BpmnMiXmlSupport::buildMiInnerTaskNameToSubProcessName)
-                        .orElseGet(HashMap::new)));
+                Map<String, String> present = miBpmnNameMapCache.getIfPresent(key);
+                if (present != null) {
+                    byKey.put(key, present);
+                    continue;
+                }
+                Optional<String> xml = workflowEngineClient.getBpmnXml(key);
+                if (xml.isEmpty()) {
+                    // Omit the key: callers treat a missing map as unknown, not "not MI".
+                    continue;
+                }
+                byKey.put(key, miBpmnNameMapCache.getOrLoad(key,
+                        () -> BpmnMiXmlSupport.buildMiInnerTaskNameToSubProcessName(xml.get())));
             } catch (Exception e) {
                 log.debug("buildMiNodeNameMaps: BPMN parse failed for processDefKey {}: {}", key, e.getMessage());
-                byKey.put(key, new HashMap<>());
             }
         }
         return byKey;
@@ -266,27 +275,30 @@ public class ProcessApplicationQueryComponent {
      */
     ProcessInstanceInfo toProcessInstanceInfoForList(ProcessInstance instance, Map<String, String> userNameCache,
             Map<String, Map<String, String>> miNameMapByProcessDefKey) {
-        String currentAssigneeName = userDisplayNameResolver.resolveCurrentAssigneeDisplay(
+        String peopleDisplay = userDisplayNameResolver.resolveCurrentAssigneeDisplay(
                 instance.getCurrentAssignee(), instance.getCandidateUsers(), userNameCache);
 
         log.debug("toProcessInstanceInfoForList: processId={}, status={}, assignee={}, candidates={}, display={}",
                 instance.getId(), instance.getStatus(),
-                instance.getCurrentAssignee(), instance.getCandidateUsers(), currentAssigneeName);
+                instance.getCurrentAssignee(), instance.getCandidateUsers(), peopleDisplay);
 
         String currentNode = instance.getCurrentNode();
-        if ("COMPLETED".equals(instance.getStatus())) {
+        if (OwnerCaseHandlerCalculator.isTerminalStatus(instance.getStatus())) {
             currentNode = null;
         }
 
         // 「当前步骤」MI 感知：若 currentNode 是多实例内层任务名，映射成外层多实例 subProcess name（如 "multi"）；
         // 否则 = currentNode（普通节点）。终态 currentNode 为 null → currentStepName 也为 null（前端显 '-'）。
         String currentStepName = currentNode;
+        Map<String, String> miMap = null;
         if (currentNode != null && miNameMapByProcessDefKey != null) {
-            Map<String, String> miMap = miNameMapByProcessDefKey.get(instance.getProcessDefinitionKey());
+            miMap = miNameMapByProcessDefKey.get(instance.getProcessDefinitionKey());
             if (miMap != null) {
                 currentStepName = miMap.getOrDefault(currentNode, currentNode);
             }
         }
+        String currentAssigneeName = OwnerCaseHandlerCalculator.applicationCurrentAssigneeDisplay(
+                instance.getStatus(), currentNode, miMap, peopleDisplay);
 
         return ProcessInstanceInfo.builder()
                 .id(instance.getId())
@@ -324,7 +336,7 @@ public class ProcessApplicationQueryComponent {
                 instance.getCurrentAssignee(), instance.getCandidateUsers(), currentAssigneeName);
 
         String currentNode = instance.getCurrentNode();
-        if ("COMPLETED".equals(instance.getStatus())) {
+        if (OwnerCaseHandlerCalculator.isTerminalStatus(instance.getStatus())) {
             currentNode = null;
         }
 
@@ -536,6 +548,12 @@ public class ProcessApplicationQueryComponent {
         } else {
             info.setCurrentStepName(info.getCurrentNode());
         }
+        Map<String, String> miMap = buildMiNodeNameMaps(List.of(instance))
+                .get(instance.getProcessDefinitionKey());
+        String peopleDisplay = userDisplayNameResolver.resolveCurrentAssigneeDisplay(
+                instance.getCurrentAssignee(), instance.getCandidateUsers(), new HashMap<>());
+        info.setCurrentAssignee(OwnerCaseHandlerCalculator.applicationCurrentAssigneeDisplay(
+                instance.getStatus(), info.getCurrentNode(), miMap, peopleDisplay));
         if (hasSubTables) {
             subTableEnrichmentComponent.enrichSubTablesWithAssignmentData(info, miProgress);
         }

@@ -681,7 +681,13 @@ public class TaskFormComponent {
             updatedVariables.putAll(inbound);
 
             // Owner fields: Creator pins startUserId; Current Assignee follows snapshot.
+            // Overlay THIS task's MI loop variable only for the write, then drop it —
+            // never persist execution-scoped _currentItem on the process-wide blob.
             if (ownerFieldComponent != null) {
+                Object taskCurrentItem = OwnerFieldComponent.taskScopedCurrentItem(formData);
+                if (taskCurrentItem instanceof Map) {
+                    updatedVariables.put("_currentItem", taskCurrentItem);
+                }
                 ownerFieldComponent.applyOnSubmit(
                         processInstance.getFunctionUnitCode(),
                         new OwnerFieldComponent.OwnerWriteContext(
@@ -691,6 +697,7 @@ public class TaskFormComponent {
                                 processInstance.getCandidateUsers(),
                                 currentVariables),
                         updatedVariables);
+                OwnerFieldComponent.stripProcessWideCurrentItem(updatedVariables);
             }
 
             // System audit fields: refresh updated_at/updated_by at real update
@@ -946,6 +953,11 @@ public class TaskFormComponent {
         boolean formResolved = formDefinition != null && !formDefinition.isEmpty();
         Map<String, Object> fieldValues = CompletedTaskSnapshotAssembler.assembleFieldValues(
                 mergedVariables, snapshotKeys, formResolved, fieldMapper(), objectMapper);
+        if (ownerFieldComponent != null) {
+            processInstanceRepository.findById(processInstanceId).ifPresent(instance ->
+                    ownerFieldComponent.copyOwnerValuesIntoSnapshot(
+                            instance.getFunctionUnitCode(), mergedVariables, fieldValues));
+        }
 
         TaskFormSnapshot snapshot = TaskFormSnapshot.builder()
                 .taskId(taskId)

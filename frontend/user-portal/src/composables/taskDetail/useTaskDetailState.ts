@@ -15,6 +15,13 @@ import type { AssignmentConfig } from '@/utils/miAssignmentConfig'
 
 export interface NodeFormInfo {
   formName: string
+  /**
+   * BPMN activity name of this node — matches flow-history `nodeName`, which the
+   * form name often does not (node "assignment" vs form "Assign Task"). Kept so
+   * the completed-node Owner snapshot lookup (§6.6) can fall back on the name
+   * when activityId is missing.
+   */
+  bpmnNodeName: string
   isCurrentTask: boolean
   fields: FormField[]
   tabs: FormTab[]

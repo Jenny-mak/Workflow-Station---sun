@@ -22,14 +22,21 @@ final class MiBpmnNameMapCache {
                 }
             });
 
-    Map<String, String> getOrLoad(String processDefinitionKey, Supplier<Map<String, String>> load) {
+    Map<String, String> getIfPresent(String processDefinitionKey) {
         Cached cached = cache.get(processDefinitionKey);
-        long now = System.currentTimeMillis();
-        if (cached != null && now - cached.cachedAt < TTL_MS) {
-            return cached.map;
+        if (cached == null || System.currentTimeMillis() - cached.cachedAt >= TTL_MS) {
+            return null;
+        }
+        return cached.map;
+    }
+
+    Map<String, String> getOrLoad(String processDefinitionKey, Supplier<Map<String, String>> load) {
+        Map<String, String> present = getIfPresent(processDefinitionKey);
+        if (present != null) {
+            return present;
         }
         Map<String, String> loaded = load.get();
-        cache.put(processDefinitionKey, new Cached(loaded, now));
+        cache.put(processDefinitionKey, new Cached(loaded, System.currentTimeMillis()));
         return loaded;
     }
 

@@ -364,7 +364,7 @@ export default {
     lookupFocus: 'focus — 清掉错误',
     ownerTitle: 'Owner',
     ownerBody:
-      '创建人或当前处理人，来自 Owner 来源。Create 列出 change、blur、focus。value 是 Owner 显示名或 id。示例：写到 Requester。',
+      '只读。来源是创建人（首次保存的操作人）或 Case Handler（进行中写办理人；办完记实际操作人，含委托代办；MI 写外层框名）。先建 VARCHAR 列再改成 Owner，不要靠拖组件自动建列。Create 列出 change、blur、focus。value 是 user:<id>、逗号列表或 step:<name>。',
     ownerChange: 'change — 把 Owner 复制到 help_pr 的 Requester',
     ownerBlur: 'blur — Owner 为空时提示',
     ownerFocus: 'focus — 清掉错误',

@@ -679,7 +679,7 @@
       </div>
     </template>
 
-    <!-- Owner field: readonly Lookup chrome; value is auto-filled from Creator or Current Assignee. -->
+    <!-- Owner field: readonly Lookup chrome; value is auto-filled from Creator or Case Handler. -->
     <template v-else-if="field.type === 'owner'">
       <OwnerField
         :model-value="modelValue"

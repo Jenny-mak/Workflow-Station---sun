@@ -92,7 +92,9 @@ public class TaskProcessComponent {
         TaskInfo task = getTaskOrThrow(taskId);
 
         // Update process instance current assignee (portal stores JWT userId)
-        processInstanceSyncComponent.updateProcessInstanceAssignee(task.getProcessInstanceId(), userId, null, task.getTaskName());
+        processInstanceSyncComponent.updateProcessInstanceAssignee(
+                task.getProcessInstanceId(), userId, null, task.getTaskName(),
+                taskScopedCurrentItem(task));
 
         taskQueryComponent.invalidateMineTaskListCache();
         taskAssignmentHistoryRecorder.record(taskBefore, userId, ChangeType.CLAIM, userId);
@@ -150,7 +152,8 @@ public class TaskProcessComponent {
                 task.getProcessInstanceId(),
                 snapshot.getAssigneeUserId(),
                 snapshot.getCandidateUserIds(),
-                task.getTaskName());
+                task.getTaskName(),
+                taskScopedCurrentItem(task));
 
         taskQueryComponent.invalidateMineTaskListCache();
         boolean force = BuRolePoolTasks.isClaimPoolTask(taskBefore) && !holder;
@@ -314,7 +317,9 @@ public class TaskProcessComponent {
 
         // Update process instance current assignee
         TaskInfo task = getTaskOrThrow(taskId);
-        processInstanceSyncComponent.updateProcessInstanceAssignee(task.getProcessInstanceId(), toUserId, null, task.getTaskName());
+        processInstanceSyncComponent.updateProcessInstanceAssignee(
+                task.getProcessInstanceId(), toUserId, null, task.getTaskName(),
+                taskScopedCurrentItem(task));
 
         // Record audit log
         DelegationAudit audit = DelegationAudit.builder()
@@ -552,5 +557,11 @@ public class TaskProcessComponent {
         // Should invoke messaging service in production
         // Log only for now
         log.info("Sending urge notification: task={}, assignee={}, urger={}, message={}", taskId, assignee, urgerId, message);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> taskScopedCurrentItem(TaskInfo task) {
+        Object item = OwnerFieldComponent.taskScopedCurrentItem(task == null ? null : task.getVariables());
+        return item instanceof Map<?, ?> map ? (Map<String, Object>) map : null;
     }
 }

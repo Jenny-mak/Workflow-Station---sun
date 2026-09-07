@@ -20,6 +20,8 @@ import {
 } from '@/components/formRendererHelpers'
 import { convertFormCreateRule } from './useProcessStartRuleConverter'
 import type { UploadSceneFlagsArg } from '@/utils/applyUploadPropsFromRule'
+import { getUser } from '@/api/auth'
+import { applyCreatorPrefill, ownerConfigSource } from '@/composables/owner/useOwnerFieldModel'
 
 // 递归提取字段。form-create 的 subForm/tableForm/tableFormColumn 为包装节点：不生成字段，
 // 但必须落到下方对 `children` 的递归，否则子表行内字段全部丢失。
@@ -223,15 +225,28 @@ export function createFieldExtractor(deps: {
         applyDesignerHideFlagToFormField(field, item)
         fields.push(field)
       } else if (item.type === 'owner' && item.field) {
-        // Owner field — props.ownerConfig ({"source":"CREATOR"|"CURRENT_ASSIGNEE"})
-        const field: any = {
+        // Owner field — props.ownerConfig ({"source":"CREATOR"|"CASE_HANDLER"})
+        const ownerConfig = typeof item.props?.ownerConfig === 'string'
+          ? item.props.ownerConfig
+          : JSON.stringify(item.props?.ownerConfig || {})
+        const field: FormField = {
           key: item.field,
           label: item.title || item.field,
           type: 'owner',
           span: item.col?.span || 24,
-          _ownerConfig: typeof item.props?.ownerConfig === 'string'
-            ? item.props.ownerConfig
-            : JSON.stringify(item.props?.ownerConfig || {}),
+          _ownerConfig: ownerConfig,
+        }
+        if (ownerConfigSource(ownerConfig) === 'CREATOR') {
+          const prefill: Record<string, unknown> = {}
+          applyCreatorPrefill(prefill, item.field, ownerConfig, getUser())
+          const seeded = prefill[item.field]
+          if (typeof seeded === 'string' && seeded) {
+            field.defaultValue = seeded
+            const display = prefill[`${item.field}__display`]
+            if (typeof display === 'string' && display) {
+              field._ownerPrefillDisplay = display
+            }
+          }
         }
         if (isFormCreateRuleReadonly(item)) {
           field.readonly = true

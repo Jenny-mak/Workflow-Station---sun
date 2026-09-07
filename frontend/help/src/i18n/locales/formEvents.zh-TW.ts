@@ -364,7 +364,7 @@ export default {
     lookupFocus: 'focus — 清掉錯誤',
     ownerTitle: 'Owner',
     ownerBody:
-      '建立人或目前處理人，來自 Owner 來源。Create 列出 change、blur、focus。value 是 Owner 顯示名或 id。範例：寫到 Requester。',
+      '唯讀。來源是建立人（首次儲存的操作人）或 Case Handler（進行中寫辦理人；辦完記實際操作人，含委託代辦；MI 寫外層框名）。先建 VARCHAR 欄再改成 Owner，不要靠拖元件自動建欄。Create 列出 change、blur、focus。value 是 user:<id>、逗號列表或 step:<name>。',
     ownerChange: 'change — 把 Owner 複制到 help_pr 的 Requester',
     ownerBlur: 'blur — Owner 為空時提示',
     ownerFocus: 'focus — 清掉錯誤',

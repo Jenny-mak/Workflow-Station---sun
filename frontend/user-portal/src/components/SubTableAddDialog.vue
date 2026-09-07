@@ -538,7 +538,7 @@
                     />
                   </div>
 
-                  <!-- owner: readonly; backend fills Creator / Current Assignee -->
+                  <!-- owner: readonly; Creator is prefilled on open, Case Handler stays empty -->
                   <OwnerField
                     v-else-if="col.type === 'owner'"
                     :model-value="formData[col.field]"

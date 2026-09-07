@@ -2,9 +2,10 @@ import { type Ref } from 'vue'
 
 export const OWNER_USER_PREFIX = 'user:'
 export const OWNER_GROUP_PREFIX = 'group:'
+export const OWNER_STEP_PREFIX = 'step:'
 
-export type OwnerSource = 'CREATOR' | 'CURRENT_ASSIGNEE'
-export type OwnerChipKind = 'user' | 'group'
+export type OwnerSource = 'CREATOR' | 'CASE_HANDLER'
+export type OwnerChipKind = 'user' | 'group' | 'step'
 
 export type OwnerChipModel = {
   kind: OwnerChipKind
@@ -13,8 +14,33 @@ export type OwnerChipModel = {
 
 /**
  * Parse `ownerConfig` (§4.1). Missing source (including leftover allowGroup-only
- * configs) is CREATOR. Invalid JSON sets configError.
+ * configs) is CREATOR. Legacy CURRENT_ASSIGNEE is CASE_HANDLER. Invalid JSON sets configError.
  */
+export function ownerConfigSource(ownerConfig: string | undefined): OwnerSource {
+  const configError = { value: false }
+  return parseOwnerSource(ownerConfig, configError)
+}
+
+/**
+ * New-row UX (§3.3.1): empty Creator becomes the current user. Does not
+ * overwrite an existing person and never touches Case Handler.
+ */
+export function applyCreatorPrefill(
+  target: Record<string, unknown>,
+  fieldKey: string,
+  ownerConfig: string | undefined,
+  actor: { userId?: string; displayName?: string; username?: string } | null | undefined,
+): boolean {
+  if (!fieldKey || !actor?.userId) return false
+  if (ownerConfigSource(ownerConfig) !== 'CREATOR') return false
+  const current = target[fieldKey]
+  if (current != null && String(current).trim() !== '') return false
+  target[fieldKey] = `${OWNER_USER_PREFIX}${actor.userId}`
+  const label = String(actor.displayName || actor.username || '').trim()
+  if (label) target[`${fieldKey}__display`] = label
+  return true
+}
+
 export function parseOwnerSource(
   ownerConfig: string | undefined,
   configError: Ref<boolean>,
@@ -22,11 +48,23 @@ export function parseOwnerSource(
   try {
     const parsed = JSON.parse(ownerConfig || '{}') as { source?: unknown }
     configError.value = false
-    return parsed?.source === 'CURRENT_ASSIGNEE' ? 'CURRENT_ASSIGNEE' : 'CREATOR'
+    if (parsed?.source === 'CASE_HANDLER'
+      || parsed?.source === 'CURRENT_ASSIGNEE') {
+      return 'CASE_HANDLER'
+    }
+    return 'CREATOR'
   } catch {
     configError.value = true
     return 'CREATOR'
   }
+}
+
+export function parseOwnerStep(value: string): string | null {
+  const trimmed = value.trim()
+  if (trimmed.startsWith(OWNER_STEP_PREFIX) && trimmed.length > OWNER_STEP_PREFIX.length) {
+    return trimmed.slice(OWNER_STEP_PREFIX.length)
+  }
+  return null
 }
 
 /** Parses `user:<id>` or `user:<id1>,user:<id2>` into user ids. */
@@ -41,6 +79,10 @@ export function parseStoredUserIds(value: string): string[] {
 
 export function ownerChips(modelValue: string | null | undefined, display: string | undefined): OwnerChipModel[] {
   const value = (modelValue || '').trim()
+  const step = parseOwnerStep(value)
+  if (step) {
+    return [{ kind: 'step', label: (display || '').trim() || step }]
+  }
   const label = (display || '').trim()
   if (value.startsWith(OWNER_GROUP_PREFIX)) {
     return [{ kind: 'group', label: label || value }]
