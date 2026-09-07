@@ -10,7 +10,9 @@ import java.util.Objects;
 
 /**
  * Sub-table Change History diff: record only user-visible row add/update/delete.
- * A new UUID on the same business payload is identity churn, not a user edit.
+ * Incomplete subset copies in the same snapshot are dropped. Two complete rows
+ * with the same payload stay two rows ({@link com.platform.common.jdbc.SubTableRowIdentity}).
+ * Nested vs top-level extra UUIDs are resolved by the submission filter, not here.
  */
 final class SubTableChangeHistoryDiff {
 
@@ -20,16 +22,49 @@ final class SubTableChangeHistoryDiff {
     static List<SubTableChange> compute(
             List<Map<String, Object>> oldRows,
             List<Map<String, Object>> newRows) {
-        List<HeldRow> oldHeld = hold(oldRows);
-        List<HeldRow> newHeld = hold(newRows);
+        List<HeldRow> oldHeld = hold(collapseShadowCopies(oldRows));
+        List<HeldRow> newHeld = hold(collapseShadowCopies(newRows));
         boolean[] pairedOld = new boolean[oldHeld.size()];
         boolean[] pairedNew = new boolean[newHeld.size()];
         List<SubTableChange> changes = new ArrayList<>();
         pairByStableId(oldHeld, newHeld, pairedOld, pairedNew, changes);
         pairByFingerprint(oldHeld, newHeld, pairedOld, pairedNew, changes);
-        pairSingletonReplacement(oldHeld, newHeld, pairedOld, pairedNew, changes);
+        pairRemainingRowsAsUpdates(oldHeld, newHeld, pairedOld, pairedNew, changes);
         emitUnpaired(oldHeld, newHeld, pairedOld, pairedNew, changes);
         return changes;
+    }
+
+    /**
+     * Drop incomplete subset copies of a richer row in the same snapshot.
+     */
+    static List<Map<String, Object>> collapseShadowCopies(List<Map<String, Object>> rows) {
+        List<Map<String, Object>> kept = new ArrayList<>();
+        if (rows == null) {
+            return kept;
+        }
+        for (Map<String, Object> row : rows) {
+            if (row != null) {
+                absorbShadowCopy(kept, row);
+            }
+        }
+        return kept;
+    }
+
+    static boolean isShadowCopy(Map<String, Object> shadow, Map<String, Object> richer) {
+        if (shadow == null || richer == null) {
+            return false;
+        }
+        int shadowCount = 0;
+        for (Map.Entry<String, Object> field : shadow.entrySet()) {
+            if (!isBusinessAuditField(field.getKey()) || isBlankAuditValue(field.getValue())) {
+                continue;
+            }
+            shadowCount++;
+            if (!lookupValuesEqual(field.getValue(), richer.get(field.getKey()))) {
+                return false;
+            }
+        }
+        return shadowCount < nonEmptyBusinessFieldCount(richer);
     }
 
     private static void pairByStableId(
@@ -67,19 +102,40 @@ final class SubTableChangeHistoryDiff {
         }
     }
 
-    private static void pairSingletonReplacement(
+    /**
+     * Nested link-child copies often get a new UUID while the user edited or added
+     * rows. Pair leftover old rows to leftover new rows as updates so a row-count
+     * increase is ADD+UPDATE, never a phantom DELETE of the previous identity.
+     */
+    private static void pairRemainingRowsAsUpdates(
             List<HeldRow> oldHeld, List<HeldRow> newHeld,
             boolean[] pairedOld, boolean[] pairedNew,
             List<SubTableChange> changes) {
-        int o = indexOfUnpaired(pairedOld);
-        int n = indexOfUnpaired(pairedNew);
-        if (o < 0 || n < 0 || unpairedCount(pairedOld) != 1 || unpairedCount(pairedNew) != 1) {
-            return;
+        while (indexOfUnpaired(pairedOld) >= 0 && indexOfUnpaired(pairedNew) >= 0) {
+            int bestOld = -1;
+            int bestNew = -1;
+            int bestScore = -1;
+            for (int o = 0; o < oldHeld.size(); o++) {
+                if (pairedOld[o]) continue;
+                for (int n = 0; n < newHeld.size(); n++) {
+                    if (pairedNew[n]) continue;
+                    int score = overlapScore(oldHeld.get(o).row, newHeld.get(n).row);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestOld = o;
+                        bestNew = n;
+                    }
+                }
+            }
+            boolean singleton = unpairedCount(pairedOld) == 1 && unpairedCount(pairedNew) == 1;
+            if (bestOld < 0 || (bestScore < 1 && !singleton)) {
+                return;
+            }
+            pairedOld[bestOld] = true;
+            pairedNew[bestNew] = true;
+            addUpdateIfUserChanged(changes, firstId(oldHeld.get(bestOld).id, newHeld.get(bestNew).id),
+                    oldHeld.get(bestOld).row, newHeld.get(bestNew).row);
         }
-        pairedOld[o] = true;
-        pairedNew[n] = true;
-        addUpdateIfUserChanged(changes, firstId(oldHeld.get(o).id, newHeld.get(n).id),
-                oldHeld.get(o).row, newHeld.get(n).row);
     }
 
     private static void emitUnpaired(
@@ -107,7 +163,7 @@ final class SubTableChangeHistoryDiff {
             String key = field.getKey();
             if (ChangeHistoryComponent.isSubTableRowMetadataField(key)) continue;
             Object oldVal = oldRow.get(key);
-            if (Objects.equals(oldVal, field.getValue())) continue;
+            if (Objects.equals(oldVal, field.getValue()) || lookupValuesEqual(oldVal, field.getValue())) continue;
             if (isAssigneeAutofill(key, oldVal)) continue;
             newChanged.put(key, field.getValue());
             oldChanged.put(key, oldVal);
@@ -122,16 +178,84 @@ final class SubTableChangeHistoryDiff {
         return oldVal instanceof String s && s.isBlank();
     }
 
+    private static void absorbShadowCopy(List<Map<String, Object>> kept, Map<String, Object> candidate) {
+        for (int i = 0; i < kept.size(); i++) {
+            Map<String, Object> existing = kept.get(i);
+            if (isShadowCopy(candidate, existing)) {
+                return;
+            }
+            if (isShadowCopy(existing, candidate)) {
+                kept.set(i, candidate);
+                return;
+            }
+        }
+        kept.add(candidate);
+    }
+
     private static Map<String, Object> fingerprint(Map<String, Object> row) {
         Map<String, Object> fp = new LinkedHashMap<>();
         List<String> keys = new ArrayList<>(row.keySet());
         keys.sort(String::compareTo);
         for (String key : keys) {
-            if (ChangeHistoryComponent.isSubTableRowMetadataField(key)) continue;
-            if (ChangeHistoryComponent.isAssigneeValueField(key)) continue;
-            fp.put(key, row.get(key));
+            if (!isBusinessAuditField(key) || isBlankAuditValue(row.get(key))) continue;
+            fp.put(key, fingerprintValue(row.get(key)));
         }
         return fp;
+    }
+
+    private static boolean isBusinessAuditField(String key) {
+        return !ChangeHistoryComponent.isSubTableRowMetadataField(key)
+                && !ChangeHistoryComponent.isAssigneeValueField(key);
+    }
+
+    private static int nonEmptyBusinessFieldCount(Map<String, Object> row) {
+        int count = 0;
+        for (Map.Entry<String, Object> field : row.entrySet()) {
+            if (isBusinessAuditField(field.getKey()) && !isBlankAuditValue(field.getValue())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static boolean isBlankAuditValue(Object value) {
+        if (value == null) {
+            return true;
+        }
+        if (value instanceof String text) {
+            return text.isBlank();
+        }
+        return false;
+    }
+
+    private static int overlapScore(Map<String, Object> oldRow, Map<String, Object> newRow) {
+        int score = 0;
+        for (Map.Entry<String, Object> field : newRow.entrySet()) {
+            String key = field.getKey();
+            if (!isBusinessAuditField(key)) continue;
+            if (!oldRow.containsKey(key)) continue;
+            if (lookupValuesEqual(oldRow.get(key), field.getValue())) {
+                score++;
+            }
+        }
+        return score;
+    }
+
+    private static boolean lookupValuesEqual(Object left, Object right) {
+        if (Objects.equals(left, right)) {
+            return true;
+        }
+        Object leftId = fingerprintValue(left);
+        Object rightId = fingerprintValue(right);
+        return leftId != null && Objects.equals(leftId, rightId);
+    }
+
+    private static Object fingerprintValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Object id = map.get("id");
+            return id != null ? id : value;
+        }
+        return value;
     }
 
     private static List<HeldRow> hold(List<Map<String, Object>> rows) {

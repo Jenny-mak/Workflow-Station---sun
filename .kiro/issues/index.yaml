@@ -3191,3 +3191,97 @@
     2026-09-04_atm-corr-000036-lookup-after.png 可见 Customer Notification / Outbound /
     Email / Draft。
 
+- id: "1593"
+  status: fixed
+  fixed_at: "2026-09-04"
+  severity: major
+  category: bug
+  summary: "Portal Change History empty on My Request / To Do / Completed because nested form fields were omitted from the visibility allow-list"
+  file: "backend/user-portal/src/main/java/com/portal/component/ChangeHistoryComponent.java"
+  note: |
+    反例：process 7d59d4a7-a813-11f1-9349-0e07b434d6a2（atm-20260623-gaevus）库内
+    up_change_history 有 case_stage/case_status/card_number/urge_status，GET
+    /change-history 200 但 UI 无记录。extractFieldLabelsFromConfig 只扫 rule[*].field
+    和 subForms 顶层，不进 elCard/fcRow/col children；ATM 主表字段全在卡片里。
+    DETAIL「test」顶层 merchant_credit 与 PROCESS 控件 id、子表 correspondence_* 把
+    topLevelFields 变成非空白名单，isUserVisible 把真正业务字段全滤掉。三条入口同一 API。
+    修复：与 collectEditableHistoryFields 一样递归 children。未猜列名。
+    验证：ChangeHistoryNestedFormFieldVisibilityTest；user-portal 镜像已重建 Started。
+
+- id: "1594"
+  status: fixed
+  fixed_at: "2026-09-04"
+  severity: major
+  category: bug
+  summary: "Change History wrote only main-table fields because dw:/rt: __subTables__ keys were not aliased"
+  file: "backend/user-portal/src/main/java/com/portal/component/ChangeHistorySubmissionFilter.java"
+  note: |
+    反例：To Do 795db05e（process 612d0fd0 ATM-DC-PW-000039）库内仅 4 条主表 FIELD_UPDATE；
+    variables.__subTables__ 已有 dw:atm_transaction 1 行、dw:atm_correspondence 1 行
+    （Corr-000043）。发起与 Transaction Assignment 保存都提交了 __subTables__，但
+    ChangeHistorySubmissionFilter 只把 binding id / 表名 / 显示名当别名，规范 key
+    dw:atm_transaction 对不上，整表从审计 payload 丢掉。To Do 再按 MI rowId 过滤时
+    会把共享子表（Correspondence 另一套 row_id）一并藏掉。
+    修复：按 binding.relation_table_id 注册 SubTableStoreKeys.storeKey；读路径仅对
+    binding_link_mode=miParticipantRow 的集合表按当前行过滤。
+    验证：ChangeHistorySubmissionFilterTest.canonicalDwStoreKeyIsAuditedAsThePhysicalSubTable
+    + miTaskRowFilterKeepsSharedSubTablesAndHidesOtherCollectionRows。存量单不会回填。
+
+- id: "1595"
+  status: fixed
+  fixed_at: "2026-09-04"
+  severity: major
+  category: bug
+  summary: "Later-stage ATM Correspondence edits were persisted but never written to Change History"
+  file: "backend/user-portal/src/main/java/com/portal/component/ChangeHistorySubmissionFilter.java"
+  note: |
+    反例：My Request 26b27161 ATM-DC-PW 仅 Case Submission（Activity_092hlui）有
+    atm_correspondence ROW_ADD；Assignment 26d5ff70 19:05 保存把 Corr-000044/045
+    写入 variables（transaction 行上嵌套 dw:atm correspondence + 顶层
+    dw:atm_correspondence），后续 stage 库内 0 条 CH。
+    根因：Correspondence 在后续 TASK 表单是 Transaction 的 link-child，提交落在
+    父行 __subTables__；filterSubTables 只扫顶层 key，嵌套子表进不了审计 payload。
+    保存已把数据 flatten/persist，complete 再 diff 已是新基线，看起来像「只记了提交」。
+    修复：递归提升父行嵌套 __subTables__ 到审计 map（按 identity 覆盖，深度 2）。
+    未猜列名。存量单不回填；新单后续 stage 编辑 Correspondence 会记 ROW_ADD/UPDATE。
+    验证：nestedLinkChildSubTablesAreAuditedAsTheirPhysicalTable；user-portal 已重建
+    Started。
+
+- id: "1596"
+  status: fixed
+  fixed_at: "2026-09-04"
+  severity: major
+  category: bug
+  summary: "Link-form Change History stored lookup JSON and phantom ROW_DELETEs from nested row-id churn"
+  file: "backend/user-portal/src/main/java/com/portal/component/ChangeHistorySubmissionFilter.java"
+  note: |
+    反例：To Do 82605843（process 51c89e5c Transaction Approval）。Correspondence
+    Lookup 新旧值是整行 JSON（id/created_by/standardizations…）；Assignment/Investigation
+    出现 SUB_TABLE_ROW_DELETE（0be12ef6 / b2b4269d），用户并未删行。
+    根因：1) 审计 payload 原样保存 Lookup 选中行对象；2) 嵌套 link-child 副本换了
+    UUID，diff 把旧 identity 当删除、新副本当新增。
+    修复：按表单 lookupConfig.selectedDisplayField 记展示值；剩余行按字段重叠配成
+    UPDATE，行数增加时只 ADD 不 DELETE。存量 CH 行不改写。
+    验证：lookupFieldsRecordConfiguredDisplayValueNotRowJson +
+    extraNestedCopyIsUpdateAndAddNotDelete；user-portal 已重建。
+
+- id: "1597"
+  status: fixed
+  fixed_at: "2026-09-04"
+  severity: major
+  category: bug
+  summary: "ATM Correspondence Change History recorded UPDATE+ADD for one nested link-child row"
+  file: "backend/user-portal/src/main/java/com/portal/component/SubTableChangeHistoryDiff.java"
+  note: |
+    反例：To Do cbc7ee10（process 83ba5829 Transaction Approval / Investigation）。
+    同一条 Correspondence 同时出现 SUB_TABLE_ROW_UPDATE（f65cf040 空→Letter）和
+    SUB_TABLE_ROW_ADD（0ef1ffde 同样 Letter）；Assignment 还把 Email 记成清空。
+    根因：嵌套 link-child 与顶层 binding 副本 UUID 不同，审计快照当成两行；
+    pairByStableId 拿薄副本配对旧行，另一份完整副本当 ADD。
+    修复：1) 嵌套提升后再出现的同表新 identity 不再并入审计 snapshot；
+    2) 同一快照内折叠指纹相同/不完整影子行；3) 全空薄覆盖不记字段清空。
+    存量 CH 不回填。读取 Change History 时折叠「空→值的 UPDATE + 同值 ADD」
+    以及整行 new_value 为空的假清空，cbc7ee10 刷新即可看到。未猜列名。
+    验证：identicalNestedCopyIsUpdateNotUpdateAndAdd +
+    ChangeHistoryDisplayCollapserTest；user-portal Started。
+

@@ -302,6 +302,192 @@ class ChangeHistorySubmissionFilterTest {
     }
 
     @Test
+    void canonicalDwStoreKeyIsAuditedAsThePhysicalSubTable() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ChangeHistorySubmissionFilter storeKeyFilter = new ChangeHistorySubmissionFilter(jdbcTemplate,
+                new ObjectMapper());
+        when(jdbcTemplate.queryForList(
+                argThat(sql -> sql != null && sql.contains("WHERE form.id = ?")), eq(320L)))
+                .thenReturn(List.of(bindingRow(
+                        1135L, "SUB", "EDITABLE", "ATM_Transaction", "Transaction", 1135L)));
+        Map<String, Object> form = new java.util.LinkedHashMap<>(formDefinition(List.of(), Map.of(
+                "1135", Map.of("rule", List.of(
+                        rule("card_number", false),
+                        rule("assignee_id", false))))));
+        form.put("formId", "320");
+        Map<String, Object> submitted = Map.of("__subTables__", Map.of(
+                "dw:atm_transaction", List.of(Map.of(
+                        "row_id", "ATM-DC-PW-TRANS-000039",
+                        "card_number", "1",
+                        "assignee_id", "user-1"))));
+        Map<String, Object> actual = storeKeyFilter.retainUserEditableSubmission(
+                submitted, submitted, form);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tables = (Map<String, Object>) actual.get("__subTables__");
+        assertThat(tables).containsOnlyKeys("ATM_Transaction");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) tables.get("ATM_Transaction");
+        assertThat(rows).containsExactly(Map.of(
+                "row_id", "ATM-DC-PW-TRANS-000039",
+                "card_number", "1",
+                "assignee_id", "user-1"));
+    }
+
+    @Test
+    void nestedLinkChildSubTablesAreAuditedAsTheirPhysicalTable() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ChangeHistorySubmissionFilter nestedFilter = new ChangeHistorySubmissionFilter(jdbcTemplate,
+                new ObjectMapper());
+        when(jdbcTemplate.queryForList(
+                argThat(sql -> sql != null && sql.contains("WHERE form.id = ?")), eq(321L)))
+                .thenReturn(List.of(
+                        bindingRow(1144L, "SUB", "EDITABLE", "ATM_Transaction", "Transaction", 1144L),
+                        bindingRow(1149L, "SUB", "EDITABLE", "atm_correspondence", "ATM Correspondence", 1149L)));
+        Map<String, Object> form = new java.util.LinkedHashMap<>(formDefinition(List.of(), Map.of(
+                "1144", Map.of("rule", List.of(rule("card_number", false))),
+                "1149", Map.of("rule", List.of(
+                        rule("correspondence_channel", false),
+                        rule("correspondence_type", false))))));
+        form.put("formId", "321");
+        Map<String, Object> correspondenceRow = new java.util.LinkedHashMap<>();
+        correspondenceRow.put("row_id", "eefe5939-de38-4355-8aee-ca3fdd764278");
+        correspondenceRow.put("correspondence_channel", "Email");
+        correspondenceRow.put("correspondence_type", "Customer Notification");
+        Map<String, Object> nested = new java.util.LinkedHashMap<>();
+        nested.put("dw:atm correspondence", List.of(correspondenceRow));
+        nested.put("dw:atm_correspondence", List.of(correspondenceRow));
+        Map<String, Object> transactionRow = new java.util.LinkedHashMap<>();
+        transactionRow.put("row_id", "ATM-DC-PW-TRANS-000040");
+        transactionRow.put("card_number", "1");
+        transactionRow.put("__subTables__", nested);
+        Map<String, Object> submitted = Map.of("__subTables__", Map.of(
+                "dw:atm_transaction", List.of(transactionRow)));
+        Map<String, Object> actual = nestedFilter.retainUserEditableSubmission(
+                submitted, submitted, form);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tables = (Map<String, Object>) actual.get("__subTables__");
+        assertThat(tables).containsOnlyKeys("ATM_Transaction", "atm_correspondence");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> correspondenceRows =
+                (List<Map<String, Object>>) tables.get("atm_correspondence");
+        assertThat(correspondenceRows).containsExactly(Map.of(
+                "row_id", "eefe5939-de38-4355-8aee-ca3fdd764278",
+                "correspondence_channel", "Email",
+                "correspondence_type", "Customer Notification"));
+    }
+
+    @Test
+    void nestedLinkChildWinsOverTopLevelShadowCopyWithNewUuid() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ChangeHistorySubmissionFilter nestedFilter = new ChangeHistorySubmissionFilter(jdbcTemplate,
+                new ObjectMapper());
+        when(jdbcTemplate.queryForList(
+                argThat(sql -> sql != null && sql.contains("WHERE form.id = ?")), eq(321L)))
+                .thenReturn(List.of(
+                        bindingRow(1144L, "SUB", "EDITABLE", "ATM_Transaction", "Transaction", 1144L),
+                        bindingRow(1149L, "SUB", "EDITABLE", "atm_correspondence", "ATM Correspondence", 1149L)));
+        Map<String, Object> form = new java.util.LinkedHashMap<>(formDefinition(List.of(), Map.of(
+                "1144", Map.of("rule", List.of(rule("card_number", false))),
+                "1149", Map.of("rule", List.of(
+                        rule("correspondence_channel", false),
+                        rule("correspondence_type", false))))));
+        form.put("formId", "321");
+        Map<String, Object> nestedRow = new java.util.LinkedHashMap<>();
+        nestedRow.put("row_id", "nested-live");
+        nestedRow.put("correspondence_channel", "Letter");
+        nestedRow.put("correspondence_type", "Customer Notification");
+        Map<String, Object> transactionRow = new java.util.LinkedHashMap<>();
+        transactionRow.put("row_id", "ATM-DC-PW-TRANS-000041");
+        transactionRow.put("card_number", "1");
+        transactionRow.put("__subTables__", Map.of("dw:atm_correspondence", List.of(nestedRow)));
+        Map<String, Object> topLevelShadow = new java.util.LinkedHashMap<>();
+        topLevelShadow.put("row_id", "top-level-stale");
+        topLevelShadow.put("correspondence_channel", "Email");
+        topLevelShadow.put("correspondence_type", "Customer Notification");
+        Map<String, Object> submitted = Map.of("__subTables__", Map.of(
+                "dw:atm_correspondence", List.of(topLevelShadow),
+                "dw:atm_transaction", List.of(transactionRow)));
+        Map<String, Object> actual = nestedFilter.retainUserEditableSubmission(
+                submitted, submitted, form);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tables = (Map<String, Object>) actual.get("__subTables__");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> correspondenceRows =
+                (List<Map<String, Object>>) tables.get("atm_correspondence");
+        assertThat(correspondenceRows).containsExactly(Map.of(
+                "row_id", "nested-live",
+                "correspondence_channel", "Letter",
+                "correspondence_type", "Customer Notification"));
+    }
+
+    @Test
+    void twoDistinctNestedRowsAreNotCollapsedToOne() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ChangeHistorySubmissionFilter nestedFilter = new ChangeHistorySubmissionFilter(jdbcTemplate,
+                new ObjectMapper());
+        when(jdbcTemplate.queryForList(
+                argThat(sql -> sql != null && sql.contains("WHERE form.id = ?")), eq(321L)))
+                .thenReturn(List.of(
+                        bindingRow(1144L, "SUB", "EDITABLE", "ATM_Transaction", "Transaction", 1144L),
+                        bindingRow(1149L, "SUB", "EDITABLE", "atm_correspondence", "ATM Correspondence", 1149L)));
+        Map<String, Object> form = new java.util.LinkedHashMap<>(formDefinition(List.of(), Map.of(
+                "1144", Map.of("rule", List.of(rule("card_number", false))),
+                "1149", Map.of("rule", List.of(
+                        rule("correspondence_channel", false),
+                        rule("correspondence_type", false))))));
+        form.put("formId", "321");
+        Map<String, Object> first = new java.util.LinkedHashMap<>();
+        first.put("row_id", "corr-1");
+        first.put("correspondence_channel", "Email");
+        first.put("correspondence_type", "Customer Notification");
+        Map<String, Object> second = new java.util.LinkedHashMap<>();
+        second.put("row_id", "corr-2");
+        second.put("correspondence_channel", "Letter");
+        second.put("correspondence_type", "Complaint");
+        Map<String, Object> transactionRow = new java.util.LinkedHashMap<>();
+        transactionRow.put("row_id", "ATM-DC-PW-TRANS-000042");
+        transactionRow.put("card_number", "1");
+        transactionRow.put("__subTables__", Map.of("dw:atm_correspondence", List.of(first, second)));
+        Map<String, Object> submitted = Map.of("__subTables__", Map.of(
+                "dw:atm_transaction", List.of(transactionRow)));
+        Map<String, Object> actual = nestedFilter.retainUserEditableSubmission(
+                submitted, submitted, form);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tables = (Map<String, Object>) actual.get("__subTables__");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> correspondenceRows =
+                (List<Map<String, Object>>) tables.get("atm_correspondence");
+        assertThat(correspondenceRows).containsExactly(
+                Map.of("row_id", "corr-1", "correspondence_channel", "Email",
+                        "correspondence_type", "Customer Notification"),
+                Map.of("row_id", "corr-2", "correspondence_channel", "Letter",
+                        "correspondence_type", "Complaint"));
+    }
+
+    @Test
+    void lookupFieldsRecordConfiguredDisplayValueNotRowJson() {
+        Map<String, Object> lookupRule = new java.util.LinkedHashMap<>();
+        lookupRule.put("field", "correspondence_channel");
+        lookupRule.put("readonly", false);
+        lookupRule.put("lookupConfig", Map.of("selectedDisplayField", "standardizations"));
+        Map<String, Object> form = formDefinition(
+                List.of(),
+                Map.of("participants", Map.of("rule", List.of(lookupRule))));
+        Map<String, Object> submitted = Map.of("__subTables__", Map.of("participants", List.of(Map.of(
+                "row_id", "corr-1",
+                "correspondence_channel", Map.of(
+                        "id", "hmdc-corr-ch-email",
+                        "standardizations", "Email",
+                        "created_by", "system")))));
+        Map<String, Object> actual = filter.retainUserEditableSubmission(submitted, submitted, form);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tables = (Map<String, Object>) actual.get("__subTables__");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) tables.get("participants");
+        assertThat(rows.get(0).get("correspondence_channel")).isEqualTo("Email");
+    }
+
+    @Test
     void textualSiblingAliasesUseOnePhysicalHistoryTableName() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ChangeHistorySubmissionFilter aliasFilter = new ChangeHistorySubmissionFilter(jdbcTemplate, new ObjectMapper());
