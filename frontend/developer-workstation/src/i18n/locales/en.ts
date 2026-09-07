@@ -890,6 +890,8 @@ export default {
     title: 'Action Designer',
     actionName: 'Action Name',
     actionType: 'Action Type',
+    buttonColor: 'Color',
+    buttonColorPlaceholder: 'RRGGBB',
     test: 'Test',
     description: 'Description',
     boundNodes: 'Bound Nodes',

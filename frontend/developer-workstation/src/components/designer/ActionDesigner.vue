@@ -181,6 +181,9 @@
             </el-option-group>
           </el-select>
         </el-form-item>
+        <el-form-item :label="t('action.buttonColor')">
+          <ActionColorField v-model="selectedAction.buttonColor" />
+        </el-form-item>
         <el-form-item :label="t('action.description')">
           <el-input
             v-model="selectedAction.description"
@@ -518,6 +521,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowLeft, Refresh } from '@element-plus/icons-vue'
+import ActionColorField from './action-designer/ActionColorField.vue'
 import ActionCreateDialog from './action-designer/ActionCreateDialog.vue'
 import ActionTestDialog from './action-designer/ActionTestDialog.vue'
 import { useFunctionUnitStore } from '@/stores/functionUnit'

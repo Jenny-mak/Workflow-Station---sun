@@ -243,6 +243,7 @@
               v-for="action in availableActions" 
               :key="action.id"
               :type="action.type || 'default'"
+              :style="actionButtonStyle(action.buttonColor)"
               :disabled="workspaceStartBlocked && isSubmitLikeAction(action)"
               :loading="submitting && currentAction === action.id"
               @click="handleAction(action)"
@@ -283,6 +284,7 @@ import { relationTableApi } from '@/api/relationTable'
 import { isDisabledMessage } from '@/utils/statusMatcher'
 import { getUser } from '@/api/auth'
 import { isProcessStartBlockedByWorkspace } from '@/utils/workspaceProcessGuard'
+import { actionButtonStyle, isCustomButtonColor } from '@/utils/actionButtonColor'
 import {
   resolveSubTablePrimaryKeyFields,
   flattenNestedSubTableRowsIntoPayload,
@@ -718,18 +720,19 @@ const initActionButtons = async (actionIds: string[] | null) => {
       const actions = response.data || response
       if (Array.isArray(actions) && actions.length > 0) {
         availableActions.value = actions.map((action: any) => {
-          // 根据 actionType 设置按钮颜色
+          // 设计器配了颜色就用设计器的（内联 CSS 变量），否则按 actionType 回落到语义配色
           let btnType: 'primary' | 'success' | 'warning' | 'danger' | 'info' | undefined
           switch (action.actionType) {
             case 'PROCESS_SUBMIT': btnType = 'primary'; break
             case 'APPROVE': btnType = 'success'; break
             case 'REJECT': btnType = 'danger'; break
-            default: btnType = action.buttonColor || undefined
+            default: btnType = isCustomButtonColor(action.buttonColor) ? 'primary' : (action.buttonColor || undefined)
           }
           return {
             id: action.id,
             label: action.actionName,
             type: btnType,
+            buttonColor: action.buttonColor || undefined,
             action: action.actionType,
             actionType: action.actionType,
             configJson: action.configJson

@@ -934,6 +934,8 @@ export default {
     title: '動作設計器',
     actionName: '動作名稱',
     actionType: '動作類型',
+    buttonColor: '按鈕顏色',
+    buttonColorPlaceholder: 'RRGGBB',
     test: '測試執行',
     description: '描述',
     boundNodes: '綁定節點',

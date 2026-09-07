@@ -87,6 +87,9 @@
           </el-option-group>
         </el-select>
       </el-form-item>
+      <el-form-item :label="$t('action.buttonColor')">
+        <ActionColorField v-model="createForm.buttonColor" />
+      </el-form-item>
       <el-form-item :label="$t('action.description')">
         <el-input
           v-model="createForm.description"
@@ -109,6 +112,8 @@
 </template>
 
 <script setup lang="ts">
+import ActionColorField from './ActionColorField.vue'
+
 defineProps<{
   modelValue: boolean
   createForm: any
