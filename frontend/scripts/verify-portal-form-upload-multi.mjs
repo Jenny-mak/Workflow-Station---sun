@@ -72,8 +72,8 @@ try {
     tmpPdf('gamma-upload.pdf'),
   ])
   await page.waitForFunction(() => {
-    const names = [...document.querySelectorAll('.el-upload-list__item-name, .el-upload-list__item')]
-    return names.filter((el) => /alpha-upload|beta-upload|gamma-upload/.test(el.textContent || '')).length >= 3
+    const cards = [...document.querySelectorAll('[data-testid="upload-file-card"]')]
+    return cards.filter((el) => /alpha-upload|beta-upload|gamma-upload/.test(el.textContent || '')).length >= 3
   }, null, { timeout: 25000 })
 
   const shot = join(OUT, `${DATE}_portal-form-upload-multi.png`)

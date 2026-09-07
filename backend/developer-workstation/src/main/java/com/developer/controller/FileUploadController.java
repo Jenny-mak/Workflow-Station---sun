@@ -7,12 +7,14 @@ import com.platform.common.exception.ErrorResponse;
 import com.developer.entity.UploadedFile;
 import com.developer.exception.DeveloperBusinessException;
 import com.developer.exception.ResourceNotFoundException;
+import com.platform.security.util.SecurityContextUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,7 +25,7 @@ import java.util.Map;
 
 /**
  * File upload controller.
- * Accepts any file type (max 10MB); only inline-safe types preview in the browser.
+ * Accepts any file type (max 50MB); only inline-safe types preview in the browser.
  */
 @RestController
 @RequestMapping("/upload")
@@ -37,13 +39,17 @@ public class FileUploadController {
     /**
      * Upload a single file. Any authenticated caller may upload — this endpoint backs
      * ordinary form/sub-table Attachment fields used by portal end users, not just the
-     * developer workstation, so it is intentionally NOT gated by a developer permission
-     * (JwtAuthenticationFilter still requires a valid login).
+     * developer workstation, so it is intentionally NOT gated by a developer permission.
+     * Anonymous callers receive 401 (SecurityConfig is permitAll; this check is the gate).
      */
     @PostMapping
-    @Operation(summary = "Upload file", description = "Any file type, max 10MB")
+    @Operation(summary = "Upload file", description = "Any file type, max 50MB; login required")
     public ResponseEntity<ApiResponse<Map<String, Object>>> upload(
             @RequestParam("file") MultipartFile file) {
+        if (!SecurityContextUtils.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(errorResponse("UNAUTHENTICATED", "Authentication required"));
+        }
         try {
             return ResponseEntity.ok(ApiResponse.success(fileUploadComponent.upload(file)));
         } catch (DeveloperBusinessException e) {

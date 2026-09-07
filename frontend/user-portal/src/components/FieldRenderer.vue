@@ -442,40 +442,67 @@
       />
     </template>
 
-    <!-- upload (Task 6.8) -->
-    <template v-else-if="field.type === 'upload'">
-      <FormUploadDropZone
-        v-if="!readonly"
+    <!-- Advanced Upload (Extend) -->
+    <template v-else-if="isUploadControl && isAdvancedUploadControl">
+      <div class="upload-field-wrap">
+        <FormUploadDropZone
+          :action="resolvedUploadUrl"
+          :accept="field.uploadAccept || ''"
+          :limit="uploadLimit"
+          :multiple="uploadMultiple"
+          :disabled="readonly || isDisabled"
+          :file-list="fileList"
+          :http-request="httpRequest"
+          :max-file-size-mb="uploadMaxFileSizeMb"
+          :drag-text="t('upload.dragText')"
+          :click-text="t('upload.clickText')"
+          :tip="t('upload.tip', { types: field.uploadAccept || 'jpg/png/pdf/docx/xlsx', size: uploadMaxFileSizeMb })"
+          :fail-label="t('upload.failed')"
+          :remove-label="t('common.delete')"
+          :handle-success="onUploadSuccess"
+          :handle-change="onUploadChange"
+          :handle-remove="onUploadRemove"
+          :handle-exceed="onUploadExceed"
+          :handle-error="onUploadError"
+          :handle-size-exceed="onSizeExceed"
+          :handle-open-details="openDetails"
+        />
+        <FormUploadDetailsDrawer
+          v-model="detailsOpen"
+          :title="t('upload.fileDetails')"
+          :file="detailsFile"
+          :readonly="readonly || isDisabled"
+          :labels="uploadDetailLabels"
+          :preview-file="previewCurrentFile"
+        />
+      </div>
+    </template>
+
+    <!-- Basic native Upload (form-create stock) -->
+    <template v-else-if="isUploadControl">
+      <el-upload
         :action="resolvedUploadUrl"
         :accept="field.uploadAccept || ''"
-        :limit="uploadLimit"
-        :multiple="uploadMultiple"
-        :disabled="isDisabled"
+        :limit="field.uploadLimit"
+        :multiple="(field.uploadLimit ?? 1) > 1"
+        :disabled="readonly || isDisabled"
         :file-list="fileList"
         :http-request="httpRequest"
-        :drag-text="t('upload.dragText')"
-        :click-text="t('upload.clickText')"
-        :tip="field.uploadAccept || '.jpg/.png/.pdf/.docx/.xlsx'"
-        :handle-success="onUploadSuccess"
-        :handle-change="onUploadChange"
-        :handle-remove="onUploadRemove"
-        :handle-exceed="onUploadExceed"
-        :handle-preview="previewCurrentFile"
-      />
-      <div
-        v-else
-        class="upload-readonly-list"
+        :auto-upload="true"
+        :on-success="onUploadSuccess"
+        :on-change="onUploadChange"
+        :on-remove="onUploadRemove"
+        :on-exceed="onUploadExceed"
+        :on-error="onUploadError"
+        :on-preview="previewCurrentFile"
       >
-        <span
-          v-for="item in fileList"
-          :key="item.url"
-          class="file-preview-link"
-          @click="previewCurrentFile(item)"
+        <el-button
+          type="primary"
+          :disabled="readonly || isDisabled"
         >
-          {{ item.name }}
-        </span>
-        <span v-if="!fileList.length">-</span>
-      </div>
+          {{ t('upload.clickText') }}
+        </el-button>
+      </el-upload>
     </template>
 
     <!-- readonly -->
@@ -659,6 +686,7 @@ import { computed, inject, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import FormUploadDropZone from '@platform-shared/upload/FormUploadDropZone.vue'
+import FormUploadDetailsDrawer from '@platform-shared/upload/FormUploadDetailsDrawer.vue'
 import '@wangeditor/editor/dist/css/style.css'
 import type { FormField } from './formRendererHelpers'
 import LookupField from './lookup/LookupField.vue'
@@ -674,6 +702,7 @@ import { useFieldDepartment } from '@/composables/fieldRenderer/useFieldDepartme
 import { useFieldSensitiveMask } from '@/composables/fieldRenderer/useFieldSensitiveMask'
 import { FORM_RENDERER_FIELDS_CTX } from './formRendererFieldsContext'
 import { INLINE_LOOKUP_CASCADE_CTX } from '@/composables/formRenderer/inlineFormLookupCascadeContext'
+import { isAdvancedUploadType, isAnyUploadType } from '@platform-shared/upload/uploadRuleType'
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -700,6 +729,11 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   visible: true,
 })
+
+const isUploadControl = computed(() => isAnyUploadType(props.field.type))
+const isAdvancedUploadControl = computed(() =>
+  props.field.advancedUpload === true || isAdvancedUploadType(props.field.type),
+)
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: any): void
@@ -797,6 +831,7 @@ function handleLookupClear() {
 const {
   resolvedUploadUrl,
   uploadLimit,
+  uploadMaxFileSizeMb,
   uploadMultiple,
   fileList,
   httpRequest,
@@ -804,8 +839,21 @@ const {
   onUploadChange,
   onUploadRemove,
   onUploadExceed,
+  onUploadError,
+  onSizeExceed,
   previewCurrentFile,
+  detailsOpen,
+  detailsFile,
+  openDetails,
 } = useFieldUpload(props, emit)
+
+const uploadDetailLabels = computed(() => ({
+  description: t('upload.fileDescription'),
+  callbackUrl: t('upload.callbackUrl'),
+  status: t('upload.autoSendToFileNet'),
+  completed: t('upload.statusCompleted'),
+  saveFailed: t('upload.descriptionSaveFailed'),
+}))
 
 // Editor — registers onBeforeUnmount first (matches original order).
 const {

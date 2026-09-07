@@ -19,6 +19,7 @@ import {
   getLayoutLabel,
 } from '@/components/formRendererHelpers'
 import { convertFormCreateRule } from './useProcessStartRuleConverter'
+import type { UploadSceneFlagsArg } from '@/utils/applyUploadPropsFromRule'
 
 // 递归提取字段。form-create 的 subForm/tableForm/tableFormColumn 为包装节点：不生成字段，
 // 但必须落到下方对 `children` 的递归，否则子表行内字段全部丢失。
@@ -31,7 +32,7 @@ const FC_SKIP_TYPES = new Set(['subForm', 'tableForm', 'tableFormColumn'])
 export function createFieldExtractor(deps: {
   lookupDbConfigs: Ref<Record<string, { tableId: number; searchFields: string[]; displayField: string; viewFields: any[] }>>
   relationViewConfigs: Ref<Record<string, { viewFields: any[]; allFields: any[] }>>
-  cannotDownloadFieldKeys?: () => Set<string>
+  cannotDownloadFieldKeys?: () => UploadSceneFlagsArg
 }) {
   const { lookupDbConfigs, relationViewConfigs, cannotDownloadFieldKeys } = deps
 

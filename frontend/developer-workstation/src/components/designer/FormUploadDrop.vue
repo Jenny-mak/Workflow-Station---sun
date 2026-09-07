@@ -1,34 +1,56 @@
 <template>
-  <FormUploadDropZone
-    :action="resolvedAction"
-    :accept="accept || ''"
-    :limit="resolvedLimit"
-    :multiple="resolvedLimit > 1"
-    :disabled="disabled"
-    :file-list="fileList"
-    :http-request="httpRequest || queuedUploadRequest"
-    :drag-text="t('form.uploadDragText')"
-    :click-text="t('form.uploadClickText')"
-    :handle-success="onSuccess"
-    :handle-change="onLiveChange"
-    :handle-remove="onRemove"
-    :handle-exceed="onExceed"
-  />
+  <div class="form-upload-drop-wrap">
+    <FormUploadDropZone
+      :action="resolvedAction"
+      :accept="accept || ''"
+      :limit="resolvedLimit"
+      :multiple="resolvedLimit > 1"
+      :disabled="disabled"
+      :file-list="liveList"
+      :http-request="resolvedRequest"
+      :max-file-size-mb="resolvedMaxSizeMb"
+      :drag-text="t('form.uploadDragText')"
+      :click-text="t('form.uploadClickText')"
+      :tip="t('form.fileUploadTip')"
+      :fail-label="t('form.uploadFailed')"
+      :remove-label="t('common.delete')"
+      :handle-success="onSuccess"
+      :handle-change="onLiveChange"
+      :handle-remove="onRemove"
+      :handle-exceed="onExceed"
+      :handle-error="onError"
+      :handle-size-exceed="onSizeExceed"
+      :handle-open-details="openDetails"
+    />
+    <FormUploadDetailsDrawer
+      v-model="detailsOpen"
+      :title="t('form.fileNet.detailsTitle')"
+      :file="detailsFile"
+      :readonly="disabled"
+      :labels="detailLabels"
+    />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import type { UploadRequestOptions, UploadUserFile } from 'element-plus'
 import FormUploadDropZone from '@platform-shared/upload/FormUploadDropZone.vue'
+import FormUploadDetailsDrawer from '@platform-shared/upload/FormUploadDetailsDrawer.vue'
+import type { UploadDetailFile } from '@platform-shared/upload/FormUploadFileDetails.vue'
 import {
+  resolveUploadMaxFileSizeMb,
   resolveUploadMaxFiles,
   splitUploadFileList,
   toElUploadFileList,
 } from '@platform-shared/upload/uploadFieldValue'
 import { queuedUploadRequest } from '@platform-shared/upload/queuedUploadRequest'
+import { isUploadUnauthorizedError } from '@platform-shared/upload/uploadAuthRefresh'
+import { clearUploadWidgetState, setUploadWidgetState } from '@platform-shared/upload/uploadSubmitGate'
 
-type LiveFile = { url?: string; name?: string; status?: string; response?: unknown }
+type LiveFile = { url?: string; name?: string; status?: string; response?: unknown; percentage?: number }
 
 const props = defineProps<{
   modelValue?: unknown
@@ -36,6 +58,7 @@ const props = defineProps<{
   accept?: string
   limit?: number
   maxFiles?: number
+  maxFileSizeMb?: number
   multiple?: boolean
   disabled?: boolean
   httpRequest?: (options: UploadRequestOptions) => XMLHttpRequest | Promise<unknown> | void
@@ -51,6 +74,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const widgetId = `preview-upload:${props.action || 'default'}:${props.limit ?? ''}`
+const detailsOpen = ref(false)
+const detailsFile = ref<UploadDetailFile | null>(null)
 
 const resolvedAction = computed(() =>
   props.action && props.action !== '/' ? props.action : '/api/v1/upload',
@@ -60,36 +86,80 @@ const resolvedLimit = computed(() => resolveUploadMaxFiles({
   limit: props.limit,
   multiple: props.multiple,
 }))
+const resolvedMaxSizeMb = computed(() => resolveUploadMaxFileSizeMb({
+  maxFileSizeMb: props.maxFileSizeMb,
+}))
 const fileList = computed((): UploadUserFile[] => {
   if (Array.isArray(props.modelValue) && props.modelValue.length) {
     return props.modelValue as UploadUserFile[]
   }
   return toElUploadFileList(props.modelValue)
 })
+const liveList = ref<LiveFile[]>([])
+watch(fileList, (next) => {
+  if (next.some((item) => item.url)) liveList.value = next
+}, { immediate: true })
+watch(liveList, (list) => setUploadWidgetState(widgetId, list), { deep: true, immediate: true })
+onBeforeUnmount(() => clearUploadWidgetState(widgetId))
+
+function resolvedRequest(options: UploadRequestOptions): XMLHttpRequest | Promise<unknown> | void {
+  if (typeof props.httpRequest === 'function') return props.httpRequest(options)
+  return queuedUploadRequest(options)
+}
+const detailLabels = computed(() => ({
+  description: t('form.fileNet.description'),
+  callbackUrl: t('form.fileNet.callbackUrl'),
+  status: t('form.fileNet.status'),
+  completed: t('form.fileNet.statusCompleted'),
+  saveFailed: t('form.fileNet.saveFailed'),
+}))
 
 function publishLiveList(list: LiveFile[]) {
-  const { display } = splitUploadFileList(list, resolvedLimit.value)
-  emit('update:modelValue', display)
-  emit('change', display)
+  const { stored, display } = splitUploadFileList(list, resolvedLimit.value)
+  liveList.value = display
+  emit('update:modelValue', stored)
+  emit('change', stored)
 }
 
 function onLiveChange(_file: unknown, list?: LiveFile[]) {
   if (!list) return
+  liveList.value = list
   publishLiveList(list)
   props.onChange?.(_file, list)
 }
 
 function onSuccess(res: unknown, file?: LiveFile, list?: LiveFile[]) {
-  if (list) publishLiveList(list)
+  if (list) {
+    liveList.value = list
+    publishLiveList(list)
+  }
   props.onSuccess?.(res, file, list)
 }
 
 function onRemove(_file: unknown, list?: LiveFile[]) {
+  liveList.value = list ?? []
   publishLiveList(list ?? [])
   props.onRemove?.(_file, list)
 }
 
 function onExceed() {
   props.onExceed?.()
+}
+
+function onError(error: unknown) {
+  if (isUploadUnauthorizedError(error)) {
+    ElMessage.error(t('form.uploadSessionExpired'))
+    return
+  }
+  ElMessage.error(t('form.uploadFailed'))
+}
+
+function onSizeExceed(maxMb: number) {
+  ElMessage.warning(t('form.uploadSizeExceed', { size: maxMb }))
+}
+
+function openDetails(file: UploadDetailFile) {
+  detailsFile.value = file
+  detailsOpen.value = true
 }
 </script>

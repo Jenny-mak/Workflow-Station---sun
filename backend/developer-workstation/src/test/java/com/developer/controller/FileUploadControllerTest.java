@@ -4,11 +4,14 @@ import com.developer.component.FileUploadComponent;
 import com.developer.entity.UploadedFile;
 import com.developer.exception.DeveloperBusinessException;
 import com.developer.exception.ResourceNotFoundException;
+import com.platform.security.util.SecurityContextUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -23,6 +26,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -42,10 +46,34 @@ class FileUploadControllerTest {
     private FileUploadController controller;
 
     private MockMvc mockMvc;
+    private MockedStatic<SecurityContextUtils> security;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        security = mockStatic(SecurityContextUtils.class);
+        security.when(SecurityContextUtils::isAuthenticated).thenReturn(true);
+    }
+
+    @AfterEach
+    void tearDown() {
+        security.close();
+    }
+
+    @Test
+    void upload_shouldReturnUnauthorizedWhenAnonymous() throws Exception {
+        security.when(SecurityContextUtils::isAuthenticated).thenReturn(false);
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "invoice.pdf",
+                MediaType.APPLICATION_PDF_VALUE,
+                "hello".getBytes()
+        );
+
+        mockMvc.perform(multipart("/upload").file(file))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("UNAUTHENTICATED"));
     }
 
     @Test
@@ -81,7 +109,7 @@ class FileUploadControllerTest {
                 "hello".getBytes()
         );
         when(fileUploadComponent.upload(any()))
-                .thenThrow(new DeveloperBusinessException("FILE_TOO_LARGE", "File size must not exceed 10MB"));
+                .thenThrow(new DeveloperBusinessException("FILE_TOO_LARGE", "File size must not exceed 50MB"));
 
         mockMvc.perform(multipart("/upload").file(file))
                 .andExpect(status().isBadRequest())

@@ -8,6 +8,7 @@ import {
   isSyntheticLookupField,
   isAssigneeLikeLabel,
 } from './useProcessStartSubTableColumns'
+import type { UploadSceneFlagsArg } from '@/utils/applyUploadPropsFromRule'
 
 /**
  * 表单配置解析（form-create 规则 → FormRenderer 字段）以及子表列推导。
@@ -18,7 +19,7 @@ export function createProcessStartFormParsing(deps: {
   lookupDbConfigs: Ref<Record<string, { tableId: number; searchFields: string[]; displayField: string; viewFields: any[] }>>
   relationViewConfigs: Ref<Record<string, { viewFields: any[]; allFields: any[] }>>
   /** Same inheritance set task / My Request already use (REQUEST scene copies omit the switch). */
-  cannotDownloadFieldKeys?: () => Set<string>
+  cannotDownloadFieldKeys?: () => UploadSceneFlagsArg
   // 写：表单布局输出
   formConfigJson: Ref<Record<string, unknown> | null>
   formLabelPosition: Ref<'left' | 'right' | 'top'>

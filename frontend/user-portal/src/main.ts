@@ -7,6 +7,8 @@ import '@fontsource-variable/inter'
 import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
+import { setUploadAuthRefresher } from '@platform-shared/upload/uploadAuthRefresh'
+import { refreshToken } from '@/api/auth'
 import './styles/index.scss'
 
 const app = createApp(App)
@@ -23,5 +25,14 @@ app.use(ElementPlus, {
   zIndex: 3000
 })
 app.use(i18n)
+
+setUploadAuthRefresher(async () => {
+  try {
+    await refreshToken()
+    return true
+  } catch {
+    return false
+  }
+})
 
 app.mount('#app')

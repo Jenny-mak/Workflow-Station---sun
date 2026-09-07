@@ -63,8 +63,39 @@ export function extractFileLinks(value: unknown): FileLink[] {
   if (Array.isArray(value)) {
     return value.map(fileLinkFrom).filter((l): l is FileLink => l !== null)
   }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        return extractFileLinks(JSON.parse(trimmed) as unknown)
+      } catch {
+        // FALLBACK(ux): truncated FILE(255) JSON still yields complete URLs, never one blob URL.
+        return extractUploadUrlsFromText(trimmed)
+      }
+    }
+  }
   const single = fileLinkFrom(value)
   return single ? [single] : []
+}
+
+const UPLOAD_URL_TOKEN_RE = /\/(?:api\/v\d+\/)?upload\/files\/[A-Za-z0-9._-]+(?:\?[^"'\s\\]*)?/g
+
+function isCompleteUploadUrl(url: string): boolean {
+  const qIdx = url.indexOf('?')
+  if (qIdx < 0) return true
+  const query = url.substring(qIdx + 1)
+  return query.includes('=') && !query.endsWith('=')
+}
+
+function extractUploadUrlsFromText(text: string): FileLink[] {
+  const out: FileLink[] = []
+  const seen = new Set<string>()
+  for (const match of text.match(UPLOAD_URL_TOKEN_RE) ?? []) {
+    if (!isCompleteUploadUrl(match) || seen.has(match)) continue
+    seen.add(match)
+    out.push({ url: match, name: fileDisplayText(match) })
+  }
+  return out
 }
 
 export function extractFileNames(value: unknown): string[] {

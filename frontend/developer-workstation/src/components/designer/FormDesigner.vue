@@ -90,6 +90,22 @@
           >
             <el-icon><Connection /></el-icon> {{ t('form.importTableFields') }}
           </el-button>
+          <span
+            v-if="canAddStartFormAdvancedUpload"
+            class="add-start-form-upload"
+          >
+            <el-button
+              data-testid="add-advanced-upload-from-new-request"
+              @click="handleAddStartFormAdvancedUpload"
+            >
+              {{ t('form.addAdvancedUploadFromNewRequest') }}
+            </el-button>
+            <DesignerHelpLink
+              path="/form-upload#scenes"
+              :aria-label="t('form.uploadGuideLinkAria')"
+              test-id="add-advanced-upload-guide-link"
+            />
+          </span>
           <el-button @click="handleBindNode(selectedForm)">
             {{ t('form.bindProcessNode') }}
           </el-button>
@@ -905,6 +921,13 @@ import {
   type PreviewSubTableRowDialogOpen,
 } from './previewSubTableDialog'
 import { cloneFormRules, getRuleChildren, injectUploadButtonLabels, isInlineSubFormDropAllowed, walkFormCreateRules } from '@/utils/formDesigner'
+import {
+  copyStartFormAdvancedUploadAcrossCanvases,
+  findTaskSceneProcessForm,
+  parseFormConfigRules,
+  parseFormConfigSubFormRules,
+} from '@/utils/copyStartFormAdvancedUpload'
+import DesignerHelpLink from '@/components/designer/DesignerHelpLink.vue'
 import { resolveRelationViewEntry } from '@/utils/formConfigBindingResolve'
 import { mapFormCreateRulesReadonlyDeep } from '@/utils/formCreateRuleUtils'
 import { isRequestIdSyntheticField } from '@/utils/formFieldMeta'
@@ -997,6 +1020,13 @@ const selectedFormSceneLabel = computed(() => {
   if (!form) return ''
   if (form.formType === 'DETAIL') return t('form.viewsForm')
   return (form as { scene?: string }).scene === 'REQUEST' ? t('form.sceneRequest') : t('form.sceneTask')
+})
+
+const canAddStartFormAdvancedUpload = computed(() => {
+  const start = findTaskSceneProcessForm(store.forms)
+  const current = selectedForm.value
+  if (!start || !current || current.id === start.id) return false
+  return current.formType === 'PROCESS' || current.formType === 'TASK'
 })
 
 /**
@@ -1304,6 +1334,80 @@ function onDesignerStructureChange() {
 function onSubDesignerStructureChange() {
   miValidationRevision.value++
   scheduleSyncHiddenMarkers()
+}
+
+function collectCurrentSubFormRules(): Record<string, unknown[]> {
+  const out: Record<string, unknown[]> = { ...parseFormConfigSubFormRules(selectedForm.value?.configJson) }
+  designerSubBindings.value.forEach((binding, index) => {
+    const key = String(binding.bindingId)
+    try {
+      const live = subDesignerRefs.value[index]?.getRule?.()
+      if (Array.isArray(live)) {
+        out[key] = live
+        return
+      }
+    } catch {
+      // FALLBACK(ux): live designer may be remounting; use cache/saved rules for copy.
+    }
+    const cached = subFormCache.value[binding.bindingId]?.rule
+    if (Array.isArray(cached)) out[key] = cached
+  })
+  return out
+}
+
+function applyCopiedSubFormRules(bindingId: number, rules: unknown[]) {
+  const cloned = cloneFormRules(rules as any[])
+  const index = designerSubBindings.value.findIndex(b => b.bindingId === bindingId)
+  const subRef = index >= 0 ? subDesignerRefs.value[index] : null
+  if (subRef && typeof subRef.setRule === 'function') {
+    subRef.setRule(cloned)
+  }
+  subFormCache.value = {
+    ...subFormCache.value,
+    [bindingId]: { rule: cloned, options: subFormCache.value[bindingId]?.options || {} },
+  }
+  const form = selectedForm.value
+  if (!form?.configJson) return
+  const cfg = form.configJson
+  const subForms = { ...(cfg.subForms || {}) }
+  const existing = subForms[bindingId] || subForms[String(bindingId)] || {}
+  subForms[bindingId] = { ...existing, rule: cloned }
+  form.configJson = { ...cfg, subForms }
+}
+
+function handleAddStartFormAdvancedUpload() {
+  const start = findTaskSceneProcessForm(store.forms)
+  const current = selectedForm.value
+  if (!start || !current || current.id === start.id) return
+  const designer = designerRef.value as { getRule?: () => unknown[]; setRule?: (r: unknown[]) => void } | null
+  const currentRules = Array.isArray(designer?.getRule?.())
+    ? designer!.getRule!()
+    : parseFormConfigRules(current.configJson)
+  const result = copyStartFormAdvancedUploadAcrossCanvases({
+    startMainRules: parseFormConfigRules(start.configJson),
+    startSubForms: parseFormConfigSubFormRules(start.configJson),
+    startBindings: start.tableBindings || [],
+    currentMainRules: currentRules,
+    currentSubForms: collectCurrentSubFormRules(),
+    currentBindings: current.tableBindings || [],
+    readonly: current.scene === 'REQUEST',
+  })
+  if (result.addedCount === 0) {
+    ElMessage.info(t('form.addAdvancedUploadFromNewRequestNone'))
+    return
+  }
+  if (result.mainChanged) {
+    if (!designer?.setRule) {
+      ElMessage.error(t('form.importTargetNotFound'))
+      return
+    }
+    designer.setRule(result.mainRules)
+  }
+  for (const bindingId of result.changedSubBindingIds) {
+    applyCopiedSubFormRules(bindingId, result.subForms[String(bindingId)] || [])
+  }
+  onDesignerStructureChange()
+  ElMessage.success(t('form.addAdvancedUploadFromNewRequestSuccess', { count: result.addedCount }))
 }
 
 /** Filled by useFormConfigPaste; no-op until then. */
@@ -1930,7 +2034,7 @@ const designerConfig = computed(() => ({
       append: true,
       rule(rule: { type?: string }) {
         // lookup is custom — Readonly lives in lookup drag rule props() (main.ts), not fc built-in Props.
-        const builtInReadonly = new Set(['input', 'textarea', 'password', 'timePicker', 'datePicker', 'lookup'])
+        const builtInReadonly = new Set(['input', 'textarea', 'password', 'timePicker', 'datePicker', 'lookup', 'advancedUpload'])
         if (builtInReadonly.has(String(rule.type ?? ''))) return []
         return [{ type: 'switch', field: 'readonly', title: 'Readonly' }]
       },
@@ -1986,28 +2090,6 @@ const designerConfig = computed(() => ({
         ]
       },
     },
-    // Upload: Can not download (rule.props.cannotDownload). Typed override skips default,
-    // so Readonly is re-appended here to keep the built-in switch.
-    upload: {
-      append: true,
-      rule() {
-        return [
-          {
-            type: 'UploadMaxFilesEditor',
-            field: 'maxFiles',
-            title: t('form.uploadMaxFiles'),
-            value: 10,
-          },
-          {
-            type: 'switch',
-            field: 'cannotDownload',
-            title: t('form.uploadCannotDownload'),
-            value: false,
-          },
-          { type: 'switch', field: 'readonly', title: 'Readonly' },
-        ]
-      },
-    },
     // Input（单行）：敏感信息打码。textarea / password 不展示、运行时也不打码。
     input: {
       append: true,
@@ -2052,7 +2134,6 @@ const designerConfig = computed(() => ({
     transfer: ['disabled', 'hidden'],
     cascader: ['disabled', 'hidden'],
     slider: ['disabled', 'hidden'],
-    upload: ['disabled', 'hidden', 'multiple', 'limit', 'uploadLimit'],
   },
 }))
 
@@ -2360,6 +2441,12 @@ onMounted(() => {
     display: flex;
     gap: 8px;
     align-items: center;
+  }
+
+  .add-start-form-upload {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .paste-config-hint {

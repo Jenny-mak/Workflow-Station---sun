@@ -4,6 +4,10 @@
  */
 
 import type { FormDefinition, FormType } from '@/api/functionUnit'
+import {
+  isAdvancedUploadRule,
+  isAnyUploadType,
+} from '@platform-shared/upload/uploadRuleType'
 
 const FORM_TYPE_SORT_ORDER: Record<FormType, number> = {
   PROCESS: 0,
@@ -146,7 +150,7 @@ export function injectUploadButtonLabels(rules: any[], uploadText: string): void
   const walk = (items: any[]) => {
     for (const r of items) {
       if (!r || typeof r !== 'object') continue
-      if (r.type === 'upload') {
+      if (isAnyUploadType(r.type)) {
         r.props = r.props || {}
         if (r.props.uploadText == null || r.props.uploadText === '') {
           r.props.uploadText = uploadText
@@ -168,6 +172,7 @@ import { ensureEmptyFormOptionsEvents } from '@/utils/formCreateDefaultEvents'
 import { extractFileLinks } from '@platform-shared/list/fileNames'
 import {
   joinTargetFileNames,
+  resolveUploadMaxFileSizeMb,
   resolveUploadMaxFiles,
   splitUploadFileList,
 } from '@platform-shared/upload/uploadFieldValue'
@@ -176,13 +181,13 @@ import { queuedUploadRequest } from '@platform-shared/upload/queuedUploadRequest
 /**
  * Collect upload rules from a form-create rule tree (including nested layout children).
  */
-export function collectUploadRulesFromTree(rules: any[]): Array<{ field: string; type: 'upload'; props?: Record<string, unknown> }> {
-  const out: Array<{ field: string; type: 'upload'; props?: Record<string, unknown> }> = []
+export function collectUploadRulesFromTree(rules: any[]): Array<{ field: string; type: string; props?: Record<string, unknown> }> {
+  const out: Array<{ field: string; type: string; props?: Record<string, unknown> }> = []
   const walk = (items: any[]) => {
     for (const r of items || []) {
       if (!r || typeof r !== 'object') continue
-      if (r.type === 'upload' && r.field) {
-        out.push({ field: String(r.field), type: 'upload', props: r.props })
+      if (isAnyUploadType(r.type) && r.field) {
+        out.push({ field: String(r.field), type: String(r.type), props: r.props })
       }
       const children = getRuleChildren(r)
       if (children.length) walk(children)
@@ -204,7 +209,7 @@ export function injectPreviewUploadHandlers(
   const walk = (items: any[]) => {
     for (const r of items) {
       if (!r || typeof r !== 'object') continue
-      if (r.type === 'upload' && r.field) {
+      if (isAdvancedUploadRule(r) && r.field) {
         stampPreviewUploadRule(r, formData, uploadSession)
       }
       const children = getRuleChildren(r)
@@ -226,6 +231,7 @@ function stampPreviewUploadRule(
   r.props.maxFiles = maxFiles
   r.props.limit = maxFiles
   r.props.multiple = maxFiles > 1
+  r.props.maxFileSizeMb = resolveUploadMaxFileSizeMb(r.props)
   // Preview-only: shared drop zone (canvas stays native fcUpload so field drag still works).
   r.type = 'formUploadDrop'
   r.props.httpRequest = queuedUploadRequest

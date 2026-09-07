@@ -75,4 +75,49 @@ describe('useFormPreviewColumns deriveColumnsFromBinding with Card layout', () =
     // No bogus fieldless column for the Card container itself
     expect(cols.some((c: any) => c.field === undefined)).toBe(false)
   })
+
+  it('copies Advanced Upload maxFiles and maxFileSizeMb onto preview columns', () => {
+    const { deriveColumnsFromBinding } = makeComposable()
+    const cols = deriveColumnsFromBinding({ bindingId: 7 }, {
+      7: {
+        rule: [{
+          type: 'advancedUpload',
+          field: 'scan',
+          title: 'Scan',
+          props: { action: '/api/v1/upload', maxFiles: 1, maxFileSizeMb: 50 },
+        }],
+      },
+    })
+    expect(cols).toHaveLength(1)
+    expect(cols[0].type).toBe('upload')
+    expect(cols[0].props.maxFiles).toBe(1)
+    expect(cols[0].props.maxFileSizeMb).toBe(50)
+  })
+
+  it('copies those limits from list-view columns that resolve a sub-form rule', () => {
+    const selectedForm = ref({ tableBindings: [] } as any)
+    const { toSubTablePreviewColumns } = useFormPreviewColumns({
+      store: { tables: [] },
+      selectedForm,
+      designerSubBindings: computed(() => []),
+      relationViewState: ref({}),
+      subTableViewState: ref({}),
+      getSubTableFormDesign: () => ({ rule: [], options: {} }),
+      resolveDesignerBindingDisplayName: () => '',
+      t: (key: string) => key,
+    })
+    const cols = toSubTablePreviewColumns(7, [{
+      type: 'advancedUpload',
+      field: 'scan',
+      title: 'Scan',
+      props: { action: '/api/v1/upload', maxFiles: 1, maxFileSizeMb: 50 },
+    }], {
+      subListViews: {
+        7: { columns: [{ fieldName: 'scan', displayName: 'Scan', dataType: 'FILE' }] },
+      },
+    })
+    const scan = cols.find((c: any) => c.field === 'scan')
+    expect(scan?.props?.maxFiles).toBe(1)
+    expect(scan?.props?.maxFileSizeMb).toBe(50)
+  })
 })

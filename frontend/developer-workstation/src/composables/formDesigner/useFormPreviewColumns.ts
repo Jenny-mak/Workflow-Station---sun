@@ -9,6 +9,7 @@ import { resolveRuleDefaultValue } from '@/utils/formCreateRuleDefaults'
 import { isFormCreateRuleRequired } from '@/utils/formCreateValidateRules'
 import { mapDesignerValidateForDialog } from '@/utils/mapDesignerValidateForDialog'
 import { assignSensitiveMaskColumnProps } from '@/utils/sensitiveMaskColumnProps'
+import { unionListViewWithSubFormUploadColumns } from '@platform-shared/upload/unionUploadColumns'
 import type { SubTableListColumnDTO } from './useSubTableViews'
 
 interface UseFormPreviewColumnsOptions {
@@ -56,7 +57,7 @@ export function useFormPreviewColumns(options: UseFormPreviewColumnsOptions) {
         else if (r.type === 'treeSelect') type = 'treeselect'
         else if (r.type === 'elTreeSelect') type = 'treeselect'
         else if (r.type === 'tree') type = 'tree'
-        else if (r.type === 'upload') type = 'upload'
+        else if (r.type === 'upload' || r.type === 'advancedUpload') type = 'upload'
         else if (r.type === 'userSelect' || r.type === 'user') type = 'user'
         else if (r.type === 'departmentSelect' || r.type === 'department') type = 'department'
         else if (r.type === 'colorPicker') type = 'colorPicker'
@@ -71,7 +72,8 @@ export function useFormPreviewColumns(options: UseFormPreviewColumnsOptions) {
         const options = rawOptions ? (type === 'cascader' ? rawOptions : rawOptions.map((o: any) => ({ label: o.label ?? o.value, value: o.value }))) : undefined
         const passProps: Record<string, any> = {}
         for (const key of [
-          'action', 'accept', 'multiple', 'precision', 'min', 'max', 'rows', 'maxlength', 'fileNameTargetField', 'cannotDownload',
+          'action', 'accept', 'multiple', 'maxFiles', 'maxFileSizeMb', 'precision', 'min', 'max',
+          'rows', 'maxlength', 'fileNameTargetField', 'cannotDownload',
           'isRange', 'valueFormat', 'startPlaceholder', 'endPlaceholder', 'treeData', 'checkStrictly',
           'showAlpha', 'allowHalf', 'step', 'cascaderProps', 'leftTitle', 'rightTitle',
         ]) {
@@ -237,7 +239,7 @@ export function useFormPreviewColumns(options: UseFormPreviewColumnsOptions) {
     const listColumns = liveColumns?.length ? liveColumns : savedColumns
     if (Array.isArray(listColumns) && listColumns.length) {
       const ruleByField = new Map(flattenRuleLayoutContainers(rule).map((ruleItem: any) => [ruleItem?.field, ruleItem]))
-      return listColumns.map((column: any) => {
+      const mapped = listColumns.map((column: any) => {
         if (column.columnType === 'linkForm') {
           const targetBindingId = column.boundSubTableBindingId || bindingId
           const targetFormDesign = getSubTableFormDesign(targetBindingId)
@@ -318,7 +320,7 @@ export function useFormPreviewColumns(options: UseFormPreviewColumnsOptions) {
             sourceRule: fieldRule as Record<string, unknown>,
           }
         }
-        const colType = fieldRule?.type === 'upload'
+        const colType = (fieldRule?.type === 'upload' || fieldRule?.type === 'advancedUpload')
           ? 'upload'
           : (fieldRule?.type === 'select' || fieldRule?.type === 'radio')
             ? fieldRule.type
@@ -328,6 +330,10 @@ export function useFormPreviewColumns(options: UseFormPreviewColumnsOptions) {
               action: fieldRule?.props?.action || '/api/v1/upload',
               ...(fieldRule?.props?.accept ? { accept: fieldRule.props.accept } : {}),
               ...(fieldRule?.props?.multiple != null ? { multiple: fieldRule.props.multiple } : {}),
+              ...(fieldRule?.props?.maxFiles != null ? { maxFiles: fieldRule.props.maxFiles } : {}),
+              ...(fieldRule?.props?.maxFileSizeMb != null
+                ? { maxFileSizeMb: fieldRule.props.maxFileSizeMb }
+                : {}),
               ...(fieldRule?.props?.fileNameTargetField
                 ? { fileNameTargetField: fieldRule.props.fileNameTargetField }
                 : {}),
@@ -344,7 +350,7 @@ export function useFormPreviewColumns(options: UseFormPreviewColumnsOptions) {
         if (options) passProps.options = options
         if (fieldRule?.props) {
           for (const key of [
-            'precision', 'min', 'max', 'rows', 'maxlength', 'multiple',
+            'precision', 'min', 'max', 'maxFiles', 'maxFileSizeMb', 'rows', 'maxlength', 'multiple',
             'isRange', 'valueFormat', 'startPlaceholder', 'endPlaceholder',
             'treeData', 'checkStrictly', 'showAlpha', 'allowHalf', 'step',
           ]) {
@@ -376,6 +382,10 @@ export function useFormPreviewColumns(options: UseFormPreviewColumnsOptions) {
           ...(fieldRule ? { sourceRule: fieldRule as Record<string, unknown> } : {}),
         }
       })
+      return unionListViewWithSubFormUploadColumns(
+        mapped,
+        deriveColumnsFromBinding({ bindingId }, { [bindingId]: { rule } }),
+      )
     }
 
     const fromSubFormRule = deriveColumnsFromBinding({ bindingId }, { [bindingId]: { rule } })

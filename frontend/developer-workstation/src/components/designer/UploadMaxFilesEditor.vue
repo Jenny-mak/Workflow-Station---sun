@@ -1,21 +1,20 @@
 <template>
   <div class="upload-max-files-editor">
-    <div class="umf-label-row">
-      <span>{{ t('form.uploadMaxFiles') }}</span>
+    <div class="umf-input-row">
+      <el-input-number
+        :model-value="resolved"
+        :min="1"
+        :max="50"
+        controls-position="right"
+        style="width: 100%"
+        @update:model-value="onChange"
+      />
       <DesignerHelpLink
         path="/form-upload#max-files"
         :aria-label="t('form.uploadGuideLinkAria')"
         test-id="upload-max-files-guide-link"
       />
     </div>
-    <el-input-number
-      :model-value="resolved"
-      :min="1"
-      :max="50"
-      controls-position="right"
-      style="width: 100%"
-      @update:model-value="onChange"
-    />
     <div class="umf-hint">{{ t('form.uploadMaxFilesHint') }}</div>
   </div>
 </template>
@@ -38,7 +37,7 @@ const resolved = computed(() => {
 
 function applyToActiveRule(maxFiles: number): void {
   const rule = formControlTypeStore.activeRule
-  if (!rule || rule.type !== 'upload') return
+  if (!rule || rule.type !== 'advancedUpload') return
   const next = (rule.props && typeof rule.props === 'object')
     ? rule.props as Record<string, unknown>
     : {}
@@ -61,7 +60,7 @@ function onChange(next: number | undefined) {
   flex-direction: column;
   gap: 6px;
 }
-.umf-label-row {
+.umf-input-row {
   display: flex;
   align-items: center;
   gap: 6px;

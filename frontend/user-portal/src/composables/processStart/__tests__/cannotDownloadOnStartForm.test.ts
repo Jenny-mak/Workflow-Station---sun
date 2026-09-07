@@ -6,12 +6,38 @@ import { mergeListViewFieldColumn } from '@/components/subTableAddDialogHelpers/
 const emptyLookup = { lookupDbConfigs: {}, relationViewConfigs: {} }
 
 describe('process start cannotDownload (New Request)', () => {
+  it('maps Advanced Upload Meeting Doc to an upload control, not text', () => {
+    const field = convertFormCreateRule({
+      type: 'advancedUpload',
+      field: 'fileupload',
+      title: 'Meeting Doc',
+      props: { action: '/api/v1/upload', limit: 4, multiple: false },
+    })
+    expect(field?.type).toBe('upload')
+    expect(field?.advancedUpload).toBe(true)
+    expect(field?.key).toBe('fileupload')
+    expect(field?.uploadLimit).toBe(4)
+  })
+
+  it('maps a unique Advanced Upload field key to the drop-zone upload type', () => {
+    const field = convertFormCreateRule({
+      type: 'advancedUpload',
+      field: 'F490mtqzn36qahc',
+      title: 'Advanced Upload',
+      props: { action: '/api/v1/upload', maxFiles: 10 },
+    })
+    expect(field?.type).toBe('upload')
+    expect(field?.advancedUpload).toBe(true)
+    expect(field?.key).toBe('F490mtqzn36qahc')
+    expect(field?.type).not.toBe('text')
+  })
   it('inherits the switch from other FU forms onto a start-form upload without the prop', () => {
     const field = convertFormCreateRule(
       { type: 'upload', field: 'fileupload', title: 'Meeting Doc', props: {} },
       new Set(['fileupload']),
     )
     expect(field?.cannotDownload).toBe(true)
+    expect(field?.advancedUpload).toBe(true)
   })
 
   it('copies rule-level cannotDownload onto the start-form upload field', () => {

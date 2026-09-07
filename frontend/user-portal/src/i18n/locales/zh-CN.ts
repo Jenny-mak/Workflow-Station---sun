@@ -1017,7 +1017,16 @@ export default {
     typeError: '文件格式不正确',
     limitExceed: '最多只能上传 {limit} 个文件',
     success: '上传成功',
-    failed: '上传失败'
+    failed: '上传失败',
+    fileDetails: '文件详情',
+    fileDescription: '文件描述',
+    callbackUrl: 'Callback URL',
+    autoSendToFileNet: 'Auto Send to FileNet',
+    statusCompleted: 'Completed',
+    descriptionSaveFailed: '文件描述保存失败',
+    waitUntilComplete: '请等待文件上传完成后再提交。',
+    fixFailedBeforeSubmit: '有文件上传失败。请删除或重新上传后再提交。',
+    sessionExpired: '登录已过期。请重新登录后再上传该文件。',
   },
   filePreview: {
     previewFile: '预览文件',

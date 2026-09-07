@@ -54,6 +54,9 @@ class FormDesignComponentImplTest {
     private FormConfigJsonTableProvisioner formConfigJsonTableProvisioner;
 
     @Mock
+    private OwnerFieldFormReconciler ownerFieldFormReconciler;
+
+    @Mock
     private SubTableViewConfigRepository subTableViewConfigRepository;
 
     @Mock
