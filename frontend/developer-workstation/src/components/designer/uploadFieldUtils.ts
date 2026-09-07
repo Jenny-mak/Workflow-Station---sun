@@ -1,9 +1,12 @@
-import { extractFileLinks } from '@platform-shared/list/fileNames'
+import {
+  extractFileLinks,
+} from '@platform-shared/list/fileNames'
 import {
   extractStoredUploadUrl,
   persistUploadValue,
   resolveUploadMaxFiles,
 } from '@platform-shared/upload/uploadFieldValue'
+import { isAnyUploadType } from '@platform-shared/upload/uploadRuleType'
 
 export { extractStoredUploadUrl as extractUploadUrlFromResponse }
 
@@ -168,7 +171,7 @@ export function alignUploadFieldsToColumns(
 ): void {
   for (const col of columns) {
     if (!col.field) continue
-    if (col.type !== 'upload' && !isLikelyFileStorageFieldName(col.field)) continue
+    if (!isAnyUploadType(col.type) && !isLikelyFileStorageFieldName(col.field)) continue
     if (resolveUploadCellUrl(row[col.field])) continue
 
     for (const ruleField of uploadRuleFields) {
@@ -190,7 +193,7 @@ export function normalizeUploadFieldsInRow(
 ): void {
   for (const col of columns) {
     if (!col.field) continue
-    if (col.type !== 'upload' && !isLikelyFileStorageFieldName(col.field)) continue
+    if (!isAnyUploadType(col.type) && !isLikelyFileStorageFieldName(col.field)) continue
     const links = extractFileLinks(row[col.field])
     row[col.field] = persistUploadValue(links, resolveUploadMaxFiles(col.props))
   }
@@ -202,7 +205,7 @@ export function isUploadColumn(
   col: { type?: string; field: string },
   cellValue?: unknown,
 ): boolean {
-  if (col.type === 'upload') return true
+  if (isAnyUploadType(col.type)) return true
   if (extractFileLinks(cellValue).length > 0) return true
   if (isStoredFileUrl(cellValue)) return true
   return isLikelyFileStorageFieldName(col.field)
@@ -245,7 +248,7 @@ export function normalizeSubTableColumns<T extends { field: string; type?: strin
 ): T[] {
   const row0 = sampleRows?.[0]
   return columns.map((col) => {
-    if (col.type === 'upload') return col
+    if (isAnyUploadType(col.type)) return col
     const sample = row0?.[col.field]
     if (!isUploadColumn(col, sample)) return col
     const props = { ...(col.props || {}), action: '/api/v1/upload' }

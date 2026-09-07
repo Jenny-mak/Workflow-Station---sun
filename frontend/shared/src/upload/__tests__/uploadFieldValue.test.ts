@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_UPLOAD_MAX_FILES,
+  DEFAULT_UPLOAD_MAX_FILE_SIZE_MB,
+  PLATFORM_UPLOAD_MAX_FILE_SIZE_MB,
   extractStoredUploadUrl,
+  fileExceedsUploadSize,
   formatUploadCellText,
   joinTargetFileNames,
   persistFromUploadFileList,
   persistUploadValue,
+  resolveUploadMaxFileSizeMb,
   resolveUploadMaxFiles,
   splitUploadFileList,
   uploadValueFingerprint,
@@ -26,6 +30,28 @@ describe('resolveUploadMaxFiles', () => {
   it('honors multiple:true + limit when maxFiles is absent', () => {
     expect(resolveUploadMaxFiles({ multiple: true, limit: 3 })).toBe(3)
   })
+
+  it('honors an explicit designer limit that is not the legacy limit:1 leftover', () => {
+    expect(resolveUploadMaxFiles({ multiple: false, limit: 4 })).toBe(4)
+    expect(resolveUploadMaxFiles({ limit: 4 })).toBe(4)
+  })
+})
+
+describe('resolveUploadMaxFileSizeMb', () => {
+  it('defaults unconfigured fields to 10MB', () => {
+    expect(resolveUploadMaxFileSizeMb({})).toBe(DEFAULT_UPLOAD_MAX_FILE_SIZE_MB)
+    expect(resolveUploadMaxFileSizeMb(null)).toBe(DEFAULT_UPLOAD_MAX_FILE_SIZE_MB)
+  })
+
+  it('honors an explicit size up to the 50MB platform cap', () => {
+    expect(resolveUploadMaxFileSizeMb({ maxFileSizeMb: 20 })).toBe(20)
+    expect(resolveUploadMaxFileSizeMb({ maxFileSizeMb: 99 })).toBe(PLATFORM_UPLOAD_MAX_FILE_SIZE_MB)
+  })
+
+  it('rejects files over the field cap', () => {
+    expect(fileExceedsUploadSize({ size: 10 * 1024 * 1024 }, 10)).toBe(false)
+    expect(fileExceedsUploadSize({ size: 10 * 1024 * 1024 + 1 }, 10)).toBe(true)
+  })
 })
 
 describe('persistUploadValue', () => {
@@ -34,12 +60,13 @@ describe('persistUploadValue', () => {
     { url: '/api/v1/upload/files/b.pdf?originalName=b.pdf', name: 'b.pdf' },
   ]
 
-  it('writes a single URL string when maxFiles is 1', () => {
+  it('writes a URL string when only one file is kept', () => {
     expect(persistUploadValue(files, 1)).toBe(files[0].url)
+    expect(persistUploadValue([files[0]], 10)).toBe(files[0].url)
   })
 
-  it('writes {url,name}[] when maxFiles is greater than 1', () => {
-    expect(persistUploadValue(files, 10)).toEqual(files)
+  it('writes JSON when more than one file is stored', () => {
+    expect(persistUploadValue(files, 10)).toBe(JSON.stringify(files))
   })
 })
 
@@ -57,10 +84,10 @@ describe('persistFromUploadFileList', () => {
       ],
       10,
     )
-    expect(stored).toEqual([
+    expect(stored).toBe(JSON.stringify([
       { url: '/api/v1/upload/files/a?originalName=a.pdf', name: 'a.pdf' },
       { url: '/api/v1/upload/files/c?originalName=c.pdf', name: 'c.pdf' },
-    ])
+    ]))
   })
 })
 
@@ -70,7 +97,7 @@ describe('splitUploadFileList', () => {
     const b = { status: 'uploading' as const, url: '', name: 'b.pdf', uid: 2 }
     const c = { status: 'ready' as const, url: '', name: 'c.pdf', uid: 3 }
     const { stored, display } = splitUploadFileList([a, b, c], 10)
-    expect(stored).toEqual([{ url: a.url, name: 'a.pdf' }])
+    expect(stored).toBe(a.url)
     expect(display).toEqual([a, b, c])
     expect(display[1]).toBe(b)
   })
@@ -81,8 +108,20 @@ describe('splitUploadFileList', () => {
       { status: 'uploading' as const, name: 'b.pdf', url: '' },
     ]
     const { stored, display } = splitUploadFileList(live, 10)
-    expect(stored).toEqual([])
+    expect(stored).toBe('')
     expect(display).toEqual(live)
+  })
+
+  it('copies the stored URL onto a success row that only has response.data.url', () => {
+    const live = {
+      status: 'success' as const,
+      name: 'c.pdf',
+      url: '',
+      response: { data: { url: '/api/v1/upload/files/c?originalName=c.pdf' } },
+    }
+    const { stored, display } = splitUploadFileList([live], 10)
+    expect(stored).toBe('/api/v1/upload/files/c?originalName=c.pdf')
+    expect(display[0].url).toBe('/api/v1/upload/files/c?originalName=c.pdf')
   })
 })
 

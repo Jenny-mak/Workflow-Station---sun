@@ -1,5 +1,6 @@
 import type { ColumnType, DialogColumn } from './types'
 import { stampCannotDownloadProp } from '@/utils/applyUploadPropsFromRule'
+import { isAnyUploadType } from '@platform-shared/upload/uploadRuleType'
 
 /** Stored upload path/URL from the platform file service. */
 export function isStoredFileUrl(value: unknown): value is string {
@@ -20,7 +21,7 @@ export function isUploadColumn(
   col: Pick<DialogColumn, 'type' | 'field'>,
   cellValue?: unknown,
 ): boolean {
-  if (col.type === 'upload') return true
+  if (isAnyUploadType(col.type)) return true
   if (isStoredFileUrl(cellValue)) return true
   return isLikelyFileStorageFieldName(col.field)
 }
@@ -44,7 +45,7 @@ export function resolveListColumnFieldType(
   baseColumn?: { type?: string } | null,
 ): ColumnType | undefined {
   if (baseColumn?.type && baseColumn.type !== 'text') return baseColumn.type as ColumnType
-  if (fieldRule?.type === 'upload') return 'upload'
+  if (fieldRule?.type === 'upload' || fieldRule?.type === 'advancedUpload') return 'upload'
   const dt = String(column.dataType || column.fieldType || '').toUpperCase()
   if (dt === 'FILE') return 'upload'
   if (column.fieldName && isLikelyFileStorageFieldName(column.fieldName)) return 'upload'
@@ -81,6 +82,9 @@ export function mergeListViewFieldColumn(
     if (props.accept == null) props.accept = fieldRule?.props?.accept ?? DEFAULT_UPLOAD_PROPS.accept
     if (fieldRule?.props?.multiple != null && props.multiple == null) props.multiple = fieldRule.props.multiple
     if (fieldRule?.props?.maxFiles != null && props.maxFiles == null) props.maxFiles = fieldRule.props.maxFiles
+    if (fieldRule?.props?.maxFileSizeMb != null && props.maxFileSizeMb == null) {
+      props.maxFileSizeMb = fieldRule.props.maxFileSizeMb
+    }
     if (fieldRule?.props?.limit != null && props.limit == null) props.limit = fieldRule.props.limit
     if (fieldRule?.props?.fileNameTargetField != null) {
       props.fileNameTargetField = fieldRule.props.fileNameTargetField
@@ -104,7 +108,7 @@ export function normalizeSubTableColumns(
 ): DialogColumn[] {
   const row0 = sampleRows?.[0]
   return columns.map(col => {
-    if (col.type === 'upload') return col
+    if (isAnyUploadType(col.type)) return col
     const sample = row0?.[col.field]
     if (!isUploadColumn(col, sample)) return col
     return mergeListViewFieldColumn(

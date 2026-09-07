@@ -160,8 +160,8 @@ export default {
       summary: 'Hand this one To Do to a person or a BU+Role pair without changing Current Assignee.',
     },
     formUpload: {
-      title: 'Form Design — Upload',
-      summary: 'Upload fields accept multiple files by default. Set Max files to 1 for a single file.',
+      title: 'Form Design — Advanced Upload',
+      summary: 'Extend Advanced Upload: Max files, size cap, FileNet. Basic Upload stays the stock control.',
     },
     formEvents: {
       title: 'Form events',
@@ -581,30 +581,39 @@ export default {
       'Confirm without a user shows Please select user. Confirm without both Business Unit and Role shows Please select both business unit and role. Delegating to yourself is rejected. A completed task cannot be delegated. An unclaimed pool task has no Delegate button.',
   },
   formUploadGuide: {
-    pageTitle: 'Form Design — Upload',
-    crumb: 'Developer Workstation · Function Units · Form Design',
+    pageTitle: 'Form Design — Advanced Upload',
+    crumb: 'Developer Workstation · Function Units · Form Design · Extend',
     intro:
-      'An Upload field on the form can take several files. Default is 10 files, 10MB each. Set Max files to 1 if the field must stay a single file. Saved JSON that still has Multiple off and Limit 1 was a generator default, not a designer choice — those fields also accept up to 10 until you set Max files. The properties panel shows Max files, Can not download, Readonly, and Advance (FileNet).',
+      'Advanced Upload lives in the Extend palette. It can take several files. Default is 10 files and 10MB each. The platform hard cap is 50MB per file; set Max file size on the field if a file must be larger than 10MB. Set Max files to 1 if the field must stay a single file. Saved JSON that still has Multiple off and Limit 1 was a generator default, not a designer choice — those fields also accept up to 10 until you set Max files. The properties panel shows Max files, Max file size, Can not download, Readonly, and Advance (FileNet). Basic palette Upload is the stock form-create control and keeps its native properties.',
     flowTitle: 'Order of work',
-    flow1: 'Open Form Design and select an Upload field',
-    flow2: 'Set Max files (default 10; 1 means a single file)',
+    flow1: 'In Table Design, add a FILE column. In Form Design, Import Table Fields (or set the Advanced Upload Field property to that column name)',
+    flow2: 'Set Max files (default 10; 1 means a single file) and Max file size (default 10MB, up to 50MB)',
     flow3: 'Optionally turn on Advance and fill FileNet header / repository mapping',
-    flow4: 'Save the form, then check Preview or User Portal',
+    flow4: 'If My Request, To Do, or Completed Task must show the same files, open that scene’s form and use Add Advanced Upload from New Request (copies the same Field onto the main canvas and matching sub-tables), then Save',
+    flow5: 'Check Preview or User Portal on that same form',
+    scenesTitle: 'Each scene is its own canvas',
+    scenesBody:
+      'New Request, My Request, and To Do each have a separate form design. Portal only shows Advanced Upload where you placed it, and only if that widget’s Field is a Table Design FILE column (the same name as Basic Upload uses, e.g. fileupload). Create the FILE column in Table Design, then Import Table Fields or type that column name into the widget Field. Dragging from Extend does not add a table column. On My Request or Assign Task, Add Advanced Upload from New Request copies those Field names so files already uploaded on New Request appear. Save that form.',
+    scenesSample: 'Table Design FILE column name in the Advanced Upload Field property',
     maxTitle: 'Max files',
     maxBody:
-      'On the Upload field properties, Max files is the cap. Default 10. Set 1 for a single file. Each file can be up to 10MB. At most 3 uploads run at once. The properties panel does not show Multiple or Maximum number of uploads allowed; Max files is the only cap. The field tip reads: Supported formats: jpg/png/pdf/docx/xlsx. Up to 10 files, 10MB each.',
+      'On the Upload field properties, Max files is the count cap. Default 10. Set 1 for a single file. At most 3 uploads run at once. The properties panel does not show Multiple or Maximum number of uploads allowed; Max files is the only count cap.',
     maxSample: 'the Max files number on the Upload properties panel',
+    maxSizeTitle: 'Max file size',
+    maxSizeBody:
+      'Max file size is the per-file cap in MB. Unconfigured fields stay at 10MB. You may set 1 through 50. 50MB is the platform hard cap (Spring, frontend nginx, and the upload API). Edge nginx is already 50M; Kong allows 100m. A file over the field cap is rejected before upload. Record Note and Admin Center uploads stay at their own 10MB limits.',
+    maxSizeSample: 'the Max file size number next to Max files',
     advanceTitle: 'Advance (FileNet)',
     advanceBody:
-      'Advance is at the bottom of the Upload properties. It is off by default. Turn it on to store Header Info, Repository Detail, and document-property mapping on this field. Search Detail List, Retrieve Request Information, and Order By are shown as placeholders only. Tokens and host URLs do not belong on this panel. Advance does not hide the runtime detail block.',
+      'Advance is at the bottom of the Upload properties. It is off by default. Turn it on to store Header Info, Repository Detail, and document-property mapping on this field. Search Detail List, Retrieve Request Information, and Order By are shown as placeholders only. Tokens and host URLs do not belong on this panel. Advance does not hide the runtime detail drawer.',
     advanceSample: 'the Advance switch under Upload properties',
     runtimeTitle: 'What people see at runtime',
     runtimeBody:
-      'Drop several files onto the dashed box, or click it and select several files in one go (Ctrl or Shift click in the file picker). User Portal and Form Preview keep the whole list. Under the upload control, each stored file shows File Description (editable while the form is writable), Callback URL (the platform file link), and Auto Send to FileNet (Completed until FileNet archive is connected). A sub-table add/edit dialog shows the same three fields. A sub-table list cell still shows the first file name and +N for the rest, for example report.pdf +2. If a companion filename column is configured on the Upload field, the original names are written there, joined with a semicolon and space. Send Email attachments from a FILE field include every stored file.',
+      'Drop several files onto the dashed box, or click it and select several files in one go (Ctrl or Shift click in the file picker). Uploaded files appear as small cards inside the box, sorted by name. Click a card to open a drawer with File Description, Callback URL, and Auto Send to FileNet (Completed until FileNet archive is connected). Left-click Callback URL opens the in-app preview; Ctrl-click or right-click still hits the raw file URL. A sub-table add/edit dialog uses the same cards and drawer. A sub-table list cell still shows the first file name and +N for the rest, for example report.pdf +2. If a companion filename column is configured on the Upload field, the original names are written there, joined with a semicolon and space. Send Email attachments from a FILE field include every stored file.',
     runtimeSample: 'report.pdf +2 on a sub-table cell',
     failTitle: 'When it fails',
     failBody:
-      'Choosing more files than Max files shows Maximum {limit} files allowed. Zip files are not added to the in-form preview playlist. Each file still posts one at a time; a failed file does not remove the ones that already succeeded.',
+      'Choosing more files than Max files shows Maximum {limit} files allowed. A file over Max file size is not added. Submit (or Save in a sub-table dialog) is blocked while any file is still uploading or queued, and while any file failed — wait until uploads finish, or remove/retry the failed file. If the session expired, the upload returns 401 and the form asks you to sign in again, then upload that file again. Zip files are not added to the in-form preview playlist. Each file still posts one at a time; a failed file does not remove the ones that already succeeded.',
   },
   ...formEventMessages,
 }

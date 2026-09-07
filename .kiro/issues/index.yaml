@@ -3285,3 +3285,54 @@
     验证：identicalNestedCopyIsUpdateNotUpdateAndAdd +
     ChangeHistoryDisplayCollapserTest；user-portal Started。
 
+- id: "1598"
+  status: fixed
+  fixed_at: "2026-09-07"
+  severity: major
+  category: bug
+  summary: "My Request Advanced Upload showed 1 of N files and could not preview (Meeting Doc)"
+  file: "frontend/user-portal/src/utils/applyUploadPropsFromRule.ts"
+  note: |
+    反例：applications/a217f0ad（1_Meeting-000034）fileupload 已存 2 个文件 JSON，
+    REQUEST「Main (My Request)」仍是 native upload limit:1，列表只显示 1 个且无预览。
+    根因：1) 场景副本不继承 Advanced Upload / maxFiles；2) 卡片行只有 response.url
+    没有 stamp 到 url，点击不打开抽屉；3) designer limit:4 被当成默认 10。
+    修复：跨表单继承 advanced+maxFiles；stampStoredUploadUrl；honor limit≠1；
+    native on-preview。验证：Playwright 2 cards + drawer + preview popup；
+    verify-portal-form-upload-multi 三文件卡片。
+
+- id: "1599"
+  status: fixed
+  fixed_at: "2026-09-07"
+  severity: major
+  category: bug
+  summary: "Canvas Advanced Upload must be placed per scene; Portal must not invent widgets"
+  file: "frontend/developer-workstation/src/utils/copyStartFormAdvancedUpload.ts"
+  note: |
+    反例：TASK Main 上的额外 Advanced Upload 只在 New Request 可见。错误做法是
+    Portal 运行时把发起表单的控件叠到 My Request / To Do。正确做法：各场景画布
+    各自放置同一 field 的高级上传。已撤回 overlay；Form Design 工具栏
+    「从发起表单添加高级上传」把 New Request 上缺失的 advancedUpload 规则
+    （同一 field）放到当前画布，保存后门户才渲染。
+
+- id: "1600"
+  status: fixed
+  fixed_at: "2026-09-07"
+  severity: major
+  category: bug
+  summary: "Independent Advanced Upload missing on Todo / My Request / Completed (main + attachment)"
+  file: "frontend/developer-workstation/src/main.ts"
+  note: |
+    反例：独立 advancedUpload（非 Basic file/fileupload）发起时已上传，Assign Task /
+    My Request / Completed 主控件与附件列空白。
+    真实根因：Extend 调色板 advancedUpload 用 `field: unique()`，每次拖入得到新
+    F… key。Basic Upload 跨场景可用是因为 Field 就是 Table Design FILE 列名
+    （fileupload / file）。未绑列的 advancedUpload 数据写在 F… 下，其它画布读不到。
+    实例 e3af08f0-aaa9-11f1-85aa-329cd4e431bf：发起存 Fma7mtr45s95abc，To Do /
+    My Request 各用别的 F…；附件同理。
+    错误做法（已撤回）：保存时把未绑列的 field 改成 advanced_upload、后端
+    AdvancedUploadFieldProvisioner 自动往表里加 FILE 列。拖一个控件不该改表结构。
+    正确做法（配置，不自动化）：先在 Table Design 建 FILE 列；Form Design 用
+    「导入表字段」或把控件 Field 改成该列名。其它场景用「从发起表单添加高级上传」
+    复制同一 Field，不要再各拖一遍。旧实例分叉 field 不迁移，需重新绑列后新申请。
+

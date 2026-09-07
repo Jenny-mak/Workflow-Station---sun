@@ -8,7 +8,6 @@
         :model-value="local.enabled"
         @update:model-value="onEnabled"
       />
-      <span class="fn-label">{{ t('form.fileNet.advance') }}</span>
       <DesignerHelpLink
         path="/form-upload#advance"
         :aria-label="t('form.fileNet.guideLinkAria')"
@@ -173,7 +172,7 @@ const local = computed(() => normalizeFileNetConfig(props.modelValue))
 function commit(next: FileNetConfig): void {
   emit('update:modelValue', next)
   const rule = formControlTypeStore.activeRule
-  if (!rule || rule.type !== 'upload') return
+  if (!rule || rule.type !== 'advancedUpload') return
   const nextProps = (rule.props && typeof rule.props === 'object')
     ? rule.props as Record<string, unknown>
     : {}
@@ -237,7 +236,6 @@ function removeDoc(idx: number): void {
   align-items: center;
   gap: 8px;
 }
-.fn-label,
 .fn-section-title {
   font-size: 12px;
   color: #606266;

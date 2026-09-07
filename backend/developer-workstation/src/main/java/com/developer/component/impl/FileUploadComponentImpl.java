@@ -23,7 +23,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class FileUploadComponentImpl implements FileUploadComponent {
 
-    private static final long MAX_FILE_SIZE_BYTES = 10L * 1024 * 1024;
+    private static final long MAX_FILE_SIZE_BYTES = 50L * 1024 * 1024;
 
     private final FileStorageService fileStorageService;
 
@@ -76,7 +76,7 @@ public class FileUploadComponentImpl implements FileUploadComponent {
         }
 
         if (file.getSize() > MAX_FILE_SIZE_BYTES) {
-            throw new DeveloperBusinessException("FILE_TOO_LARGE", "File size must not exceed 10MB");
+            throw new DeveloperBusinessException("FILE_TOO_LARGE", "File size must not exceed 50MB");
         }
 
         String originalFilename = file.getOriginalFilename();

@@ -82,8 +82,8 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 10MB
+      max-file-size: 50MB
+      max-request-size: 50MB
 
 # File Upload Configuration
 file:
@@ -148,6 +148,7 @@ platform:
       # 列表首项是本服务写出 Cookie 的名字；其它项用于读取（兼容老客户端 / 转发场景）。
       cookie-names:
         - dw_access_token
+        - up_access_token
         - access_token
       refresh-cookie-name: dw_refresh_token
       issuer: platform

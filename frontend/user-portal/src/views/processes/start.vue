@@ -270,6 +270,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { warnIfUploadsBlocking } from '@platform-shared/upload/uploadSubmitGate'
 import { ArrowLeft, Document, Clock, FolderOpened, Promotion, Loading } from '@element-plus/icons-vue'
 import { processApi } from '@/api/process'
 import { adoptRecordNoteDrafts } from '@/api/recordNote'
@@ -300,7 +301,7 @@ import {
 } from '@/utils/miAssignmentConfig'
 import { createProcessStartState } from '@/composables/processStart/useProcessStartState'
 import { pickSubFormOptionsFromDesign } from '@/composables/processStart/pickSubFormOptionsFromDesign'
-import { cannotDownloadFieldKeysFromForms } from '@/utils/applyUploadPropsFromRule'
+import { uploadSceneFlagsFromForms } from '@/utils/applyUploadPropsFromRule'
 import { createProcessStartFormParsing } from '@/composables/processStart/useProcessStartFormParsing'
 import { createProcessStartSubTables } from '@/composables/processStart/useProcessStartSubTables'
 import {
@@ -385,7 +386,7 @@ const {
 const { parseFormConfig, deriveColumnsFromBinding, deriveDialogColumnsFromBinding, extractFieldsRecursive } = createProcessStartFormParsing({
   lookupDbConfigs,
   relationViewConfigs,
-  cannotDownloadFieldKeys: () => cannotDownloadFieldKeysFromForms(
+  cannotDownloadFieldKeys: () => uploadSceneFlagsFromForms(
     caches.cachedContentForms as Array<{ data?: unknown; configJson?: unknown }>,
   ),
   formConfigJson,
@@ -859,6 +860,10 @@ const handleSubmit = async () => {
       return
     }
   }
+  if (!warnIfUploadsBlocking({
+    inflight: t('upload.waitUntilComplete'),
+    failed: t('upload.fixFailedBeforeSubmit'),
+  })) return
 
   submitting.value = true
   currentAction.value = 'submit'

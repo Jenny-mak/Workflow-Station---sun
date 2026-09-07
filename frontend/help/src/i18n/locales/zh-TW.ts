@@ -158,8 +158,8 @@ export default {
       summary: '把這一條待辦交給指定使用者或一對 BU+Role，不改目前處理人。',
     },
     formUpload: {
-      title: '表單設計 — 上傳',
-      summary: '上傳欄位預設可多選。把「最多檔案數」設為 1 即單檔。',
+      title: '表單設計 — 進階上傳',
+      summary: 'Extend 裡的進階上傳：最多檔案數、大小上限、FileNet。Basic 的 Upload 保持原生。',
     },
     formEvents: {
       title: '表單事件',
@@ -529,30 +529,39 @@ export default {
       '未選使用者就確認會提示「請選擇使用者」。未同時選業務單元和角色會提示「請同時選擇業務單元和角色」。不能委託給自己。已完成的任務不能委託。未認領的候選池沒有「委託」按鈕。',
   },
   formUploadGuide: {
-    pageTitle: '表單設計 — 上傳',
-    crumb: '開發工作站 · 功能單元 · 表單設計',
+    pageTitle: '表單設計 — 進階上傳',
+    crumb: '開發工作站 · 功能單元 · 表單設計 · Extend',
     intro:
-      '表單上的上傳欄位可以一次選多個檔案。預設最多 10 個，每個 10MB。需要單檔時，把「最多檔案數」設為 1。已儲存 JSON 裡若仍是「多選」關閉且「數量限制」為 1，那是當年產生器寫死的值，不是設計者選擇——在你改「最多檔案數」之前，它們同樣最多 10 個。屬性面板顯示「最多檔案數」、禁止下載、Readonly，以及 Advance（FileNet）。',
+      '進階上傳在 Extend 調色盤。可以一次選多個檔案。預設最多 10 個、每個 10MB。平台單檔硬上限是 50MB；檔案需要超過 10MB 時，在欄位上設定「單檔大小上限」。需要單檔時，把「最多檔案數」設為 1。已儲存 JSON 裡若仍是「多選」關閉且「數量限制」為 1，那是當年產生器寫死的值，不是設計者選擇——在你改「最多檔案數」之前，它們同樣最多 10 個。屬性面板顯示「最多檔案數」、「單檔大小上限」、禁止下載、Readonly，以及 Advance（FileNet）。Basic 裡的 Upload 是 form-create 原生控制項，屬性保持原樣。',
     flowTitle: '操作順序',
-    flow1: '開啟表單設計並選取一個上傳欄位',
-    flow2: '設定「最多檔案數」（預設 10；1 表示單檔）',
+    flow1: '先在 Table Design 新增 FILE 欄；再在表單設計用「匯入表欄位」，或把進階上傳的 Field 改成該欄名',
+    flow2: '設定「最多檔案數」（預設 10；1 表示單檔）和「單檔大小上限」（預設 10MB，最高 50MB）',
     flow3: '需要時打開 Advance，填寫 FileNet 請求頭與倉庫對應',
-    flow4: '儲存表單，再在預覽或使用者入口核對',
+    flow4: '若 My Request、待辦或已辦也要顯示同一批檔案，開啟對應場景表單，點「從發起表單新增進階上傳」（把同一 Field 複製到主畫布和相同實體表的子表），再儲存',
+    flow5: '在該表單的預覽或使用者入口核對',
+    scenesTitle: '每個場景是各自的畫布',
+    scenesBody:
+      '發起、My Request、待辦各有一份表單設計。入口只渲染該畫布上放了的進階上傳，且元件的 Field 必須是 Table Design 裡的 FILE 欄名（和一般上傳一樣，例如 fileupload）。先在 Table Design 建 FILE 欄，再用匯入表欄位，或把元件 Field 改成該欄名。從 Extend 拖入不會往表裡加欄。在 My Request 或 Assign Task 上點「從發起表單新增進階上傳」，會複製這些 Field，發起時已上傳的檔案才能顯示。儲存該表單。',
+    scenesSample: '進階上傳 Field 屬性裡填寫 Table Design 的 FILE 欄名',
     maxTitle: '最多檔案數',
     maxBody:
-      '在上傳欄位屬性裡，「最多檔案數」就是上限。預設 10。設為 1 即單檔。每個檔案最大 10MB。同時最多 3 個上傳請求。屬性面板不再顯示「多選」和元件自帶的數量限制，只認「最多檔案數」。欄位提示為：支援格式：jpg/png/pdf/docx/xlsx。最多 10 個檔案，每個 10MB。',
+      '在上傳欄位屬性裡，「最多檔案數」就是個數上限。預設 10。設為 1 即單檔。同時最多 3 個上傳請求。屬性面板不再顯示「多選」和元件自帶的數量限制，只認「最多檔案數」。',
     maxSample: '上傳屬性面板上的「最多檔案數」',
+    maxSizeTitle: '單檔大小上限',
+    maxSizeBody:
+      '「單檔大小上限」是每個檔案的 MB 上限。未設定的欄位仍是 10MB。可設 1 到 50。50MB 是平台硬上限（Spring、前端 nginx、上傳 API）。邊緣 nginx 已是 50M；Kong 允許 100m。超過欄位上限的檔案在上傳前就會被拒絕。Record Note 和管理中心上傳仍走各自的 10MB 限制。',
+    maxSizeSample: '「最多檔案數」旁邊的「單檔大小上限」',
     advanceTitle: 'Advance（FileNet）',
     advanceBody:
-      'Advance 在上傳屬性最下方，預設關閉。打開後可保存 Header Info、Repository Detail 和文件屬性對應。Search Detail List、Retrieve Request Information、Order By 只是占位。權杖和主機位址不要寫在這個面板。Advance 不會隱藏執行時明細。',
+      'Advance 在上傳屬性最下方，預設關閉。打開後可保存 Header Info、Repository Detail 和文件屬性對應。Search Detail List、Retrieve Request Information、Order By 只是占位。權杖和主機位址不要寫在這個面板。Advance 不會隱藏執行時詳情抽屜。',
     advanceSample: '上傳屬性裡的 Advance 開關',
     runtimeTitle: '執行時別人看到什麼',
     runtimeBody:
-      '可以把多個檔案拖進虛線框，也可以點擊虛線框，在檔案總管裡一次選多個檔案（Ctrl 或 Shift 連選）。使用者入口和表單預覽會保留整份清單。上傳控制項下方每個已存檔案顯示 File Description（表單可寫時可填）、Callback URL（平台檔案連結）、Auto Send to FileNet（接上 FileNet 歸檔前顯示 Completed）。子表新增/編輯對話框同樣顯示這三項。子表列表格仍顯示第一個檔案名，其餘用 +N，例如 report.pdf +2。如果上傳欄位設定了配套檔名欄，會把原始檔名寫進去，多個檔案用分號加空白拼接。傳送郵件從 FILE 欄位取附件時會帶上每一個已存檔案。',
+      '可以把多個檔案拖進虛線框，也可以點擊虛線框，在檔案總管裡一次選多個檔案（Ctrl 或 Shift 連選）。已上傳檔案以小卡片顯示在框內，按檔名排序。點擊卡片打開抽屜，裡面是 File Description、Callback URL、Auto Send to FileNet（接上 FileNet 歸檔前顯示 Completed）。左鍵 Callback URL 打開站內預覽；Ctrl 點擊或右鍵仍走原始檔案位址。子表新增/編輯對話框同樣用卡片和抽屜。子表列表格仍顯示第一個檔案名，其餘用 +N，例如 report.pdf +2。如果上傳欄位設定了配套檔名欄，會把原始檔名寫進去，多個檔案用分號加空白拼接。傳送郵件從 FILE 欄位取附件時會帶上每一個已存檔案。',
     runtimeSample: '子表儲存格上的 report.pdf +2',
     failTitle: '失敗時',
     failBody:
-      '選的檔案超過「最多檔案數」會提示「最多允許 {limit} 個檔案」。zip 不會進入表單內預覽播放清單。每個檔案仍是單獨提交；失敗的那個不會清掉已經成功的檔案。',
+      '選的檔案超過「最多檔案數」會提示「最多允許 {limit} 個檔案」。超過「單檔大小上限」的檔案不會加入清單。提交（或子表對話框儲存）時，若仍有檔案在上傳/排隊，或有檔案失敗，都會被攔住——等上傳完成，或刪除/重試失敗檔案。工作階段過期時上傳返回 401，表單會提示重新登入後再上傳該檔案。zip 不會進入表單內預覽播放清單。每個檔案仍是單獨提交；失敗的那個不會清掉已經成功的檔案。',
   },
   ...formEventMessages,
 }

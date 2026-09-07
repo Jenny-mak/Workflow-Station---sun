@@ -31,6 +31,7 @@
           :href="row.url"
           target="_blank"
           rel="noopener noreferrer"
+          @click="onCallbackClick($event, row)"
         >{{ row.url }}</a>
       </div>
       <div class="upload-file-details__field">
@@ -74,7 +75,18 @@ const props = defineProps<{
   files: UploadDetailFile[]
   readonly?: boolean
   labels: UploadDetailLabels
+  previewFile?: (file: UploadDetailFile) => void
 }>()
+
+function onCallbackClick(event: MouseEvent, row: DetailRow): void {
+  if (!props.previewFile) return
+  if (event.defaultPrevented) return
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return
+  }
+  event.preventDefault()
+  props.previewFile({ url: row.url, name: row.name })
+}
 
 const rows = ref<DetailRow[]>([])
 let loadSeq = 0

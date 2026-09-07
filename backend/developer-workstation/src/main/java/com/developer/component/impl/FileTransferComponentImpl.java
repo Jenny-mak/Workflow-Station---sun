@@ -9,6 +9,7 @@ import com.developer.exception.ResourceNotFoundException;
 import com.developer.repository.UploadedFileRepository;
 import com.developer.repository.UploadedFileTransferRepository;
 import com.developer.util.StoredFileNameGuard;
+import com.platform.common.dto.UserPrincipal;
 import com.platform.security.util.SecurityContextUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -62,13 +64,29 @@ public class FileTransferComponentImpl implements FileTransferComponent {
 
     private void assertCanUpdate(UploadedFile file) {
         String owner = file.getCreatedBy();
-        if (owner == null || owner.isBlank()) {
+        Optional<UserPrincipal> current = SecurityContextUtils.getCurrentUser();
+        if (isUnknownOwner(owner)) {
+            // FALLBACK(migration): AuditorAware writes "system" when DW does not see a portal JWT
+            if (current.isEmpty()) {
+                throw forbidden();
+            }
             return;
         }
-        String current = SecurityContextUtils.getCurrentUsername().orElse("");
-        if (!owner.equals(current)) {
-            throw new DeveloperBusinessException("FILE_TRANSFER_FORBIDDEN", "Not allowed to update this file description");
+        if (current.isEmpty() || !isSameActor(owner, current.get())) {
+            throw forbidden();
         }
+    }
+
+    private static boolean isUnknownOwner(String owner) {
+        return owner == null || owner.isBlank() || "system".equalsIgnoreCase(owner);
+    }
+
+    private static boolean isSameActor(String owner, UserPrincipal user) {
+        return owner.equals(user.getUsername()) || owner.equals(user.getUserId());
+    }
+
+    private static DeveloperBusinessException forbidden() {
+        return new DeveloperBusinessException("FILE_TRANSFER_FORBIDDEN", "Not allowed to update this file description");
     }
 
     private static FileTransferResponse toResponse(String storedName, String description) {

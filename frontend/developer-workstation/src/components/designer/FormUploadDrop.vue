@@ -8,15 +8,24 @@
       :disabled="disabled"
       :file-list="liveList"
       :http-request="resolvedRequest"
+      :max-file-size-mb="resolvedMaxSizeMb"
       :drag-text="t('form.uploadDragText')"
       :click-text="t('form.uploadClickText')"
+      :tip="t('form.fileUploadTip')"
+      :fail-label="t('form.uploadFailed')"
+      :remove-label="t('common.delete')"
       :handle-success="onSuccess"
       :handle-change="onLiveChange"
       :handle-remove="onRemove"
       :handle-exceed="onExceed"
+      :handle-error="onError"
+      :handle-size-exceed="onSizeExceed"
+      :handle-open-details="openDetails"
     />
-    <FormUploadFileDetails
-      :files="detailFiles"
+    <FormUploadDetailsDrawer
+      v-model="detailsOpen"
+      :title="t('form.fileNet.detailsTitle')"
+      :file="detailsFile"
       :readonly="disabled"
       :labels="detailLabels"
     />
@@ -24,19 +33,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import type { UploadRequestOptions, UploadUserFile } from 'element-plus'
 import FormUploadDropZone from '@platform-shared/upload/FormUploadDropZone.vue'
-import FormUploadFileDetails from '@platform-shared/upload/FormUploadFileDetails.vue'
+import FormUploadDetailsDrawer from '@platform-shared/upload/FormUploadDetailsDrawer.vue'
+import type { UploadDetailFile } from '@platform-shared/upload/FormUploadFileDetails.vue'
 import {
+  resolveUploadMaxFileSizeMb,
   resolveUploadMaxFiles,
   splitUploadFileList,
   toElUploadFileList,
 } from '@platform-shared/upload/uploadFieldValue'
 import { queuedUploadRequest } from '@platform-shared/upload/queuedUploadRequest'
+import { isUploadUnauthorizedError } from '@platform-shared/upload/uploadAuthRefresh'
+import { clearUploadWidgetState, setUploadWidgetState } from '@platform-shared/upload/uploadSubmitGate'
 
-type LiveFile = { url?: string; name?: string; status?: string; response?: unknown }
+type LiveFile = { url?: string; name?: string; status?: string; response?: unknown; percentage?: number }
 
 const props = defineProps<{
   modelValue?: unknown
@@ -44,6 +58,7 @@ const props = defineProps<{
   accept?: string
   limit?: number
   maxFiles?: number
+  maxFileSizeMb?: number
   multiple?: boolean
   disabled?: boolean
   httpRequest?: (options: UploadRequestOptions) => XMLHttpRequest | Promise<unknown> | void
@@ -59,6 +74,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const widgetId = `preview-upload:${props.action || 'default'}:${props.limit ?? ''}`
+const detailsOpen = ref(false)
+const detailsFile = ref<UploadDetailFile | null>(null)
 
 const resolvedAction = computed(() =>
   props.action && props.action !== '/' ? props.action : '/api/v1/upload',
@@ -67,6 +85,9 @@ const resolvedLimit = computed(() => resolveUploadMaxFiles({
   maxFiles: props.maxFiles,
   limit: props.limit,
   multiple: props.multiple,
+}))
+const resolvedMaxSizeMb = computed(() => resolveUploadMaxFileSizeMb({
+  maxFileSizeMb: props.maxFileSizeMb,
 }))
 const fileList = computed((): UploadUserFile[] => {
   if (Array.isArray(props.modelValue) && props.modelValue.length) {
@@ -78,9 +99,9 @@ const liveList = ref<LiveFile[]>([])
 watch(fileList, (next) => {
   if (next.some((item) => item.url)) liveList.value = next
 }, { immediate: true })
-const detailFiles = computed(() => liveList.value
-  .filter((item) => item.url)
-  .map((item) => ({ url: String(item.url), name: String(item.name || item.url) })))
+watch(liveList, (list) => setUploadWidgetState(widgetId, list), { deep: true, immediate: true })
+onBeforeUnmount(() => clearUploadWidgetState(widgetId))
+
 function resolvedRequest(options: UploadRequestOptions): XMLHttpRequest | Promise<unknown> | void {
   if (typeof props.httpRequest === 'function') return props.httpRequest(options)
   return queuedUploadRequest(options)
@@ -123,5 +144,22 @@ function onRemove(_file: unknown, list?: LiveFile[]) {
 
 function onExceed() {
   props.onExceed?.()
+}
+
+function onError(error: unknown) {
+  if (isUploadUnauthorizedError(error)) {
+    ElMessage.error(t('form.uploadSessionExpired'))
+    return
+  }
+  ElMessage.error(t('form.uploadFailed'))
+}
+
+function onSizeExceed(maxMb: number) {
+  ElMessage.warning(t('form.uploadSizeExceed', { size: maxMb }))
+}
+
+function openDetails(file: UploadDetailFile) {
+  detailsFile.value = file
+  detailsOpen.value = true
 }
 </script>

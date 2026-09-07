@@ -1,4 +1,5 @@
 import { MAX_UPLOAD_CONCURRENCY, sharedUploadQueue } from './uploadQueue'
+import { refreshUploadAuth, UPLOAD_HTTP_UNAUTHORIZED } from './uploadAuthRefresh'
 
 /** Subset of Element Plus {@code UploadRequestOptions} used by the shared XHR. */
 export interface QueuedUploadRequestOptions {
@@ -105,6 +106,12 @@ function finishXhr(
   options: QueuedUploadRequestOptions,
   session: { notified: boolean },
 ): void {
+  if (xhr.status === 401) {
+    void refreshUploadAuth().finally(() => {
+      notifyError(options, session, new Error(UPLOAD_HTTP_UNAUTHORIZED))
+    })
+    return
+  }
   if (xhr.status < 200 || xhr.status >= 300) {
     notifyError(options, session, new Error(`UPLOAD_HTTP_${xhr.status}`))
     return

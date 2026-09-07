@@ -48,7 +48,7 @@ async function findUploadForm(page) {
     const list = Array.isArray(forms) ? forms : []
     for (const form of list) {
       const blob = JSON.stringify(form.configJson ?? form.data ?? form)
-      if (blob.includes('"type":"upload"')) {
+      if (blob.includes('"type":"advancedUpload"') || blob.includes('"type":"upload"')) {
         return { fuId: String(fu.id), formName: String(form.formName || '') }
       }
     }
@@ -159,8 +159,12 @@ try {
     await drop.locator('input[type="file"]').first().setInputFiles([tmpPdf(`detail-upload-${i}.pdf`)])
     const res = await posted
     console.log(`[preview upload ${i}] status=${res ? res.status() : 'none'} url=${res?.url() ?? ''}`)
-    const details = dialog.getByTestId('upload-file-details').first()
-    if (await details.isVisible().catch(() => false)) {
+    const card = drop.getByTestId('upload-file-card').first()
+    if (await card.isVisible().catch(() => false)) {
+      await card.click()
+    }
+    const details = page.getByTestId('upload-file-details').first()
+    if (await details.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false)) {
       previewDetailsOk = true
       await details.scrollIntoViewIfNeeded()
       const previewShot = resolve(DW_SHOTS, `${DATE}_dw-form-preview-upload-details.png`)
@@ -237,6 +241,14 @@ try {
   await portalInput.setInputFiles([tmpPdf('portal-detail-upload.pdf')])
   const portalRes = await portalPosted
   console.log(`[portal upload] status=${portalRes ? portalRes.status() : 'none'}`)
+  const portalCard = portalPage.getByTestId('upload-file-card').first()
+  const cardVisible = await portalCard.waitFor({ state: 'visible', timeout: 25000 })
+    .then(() => true)
+    .catch(() => false)
+  rec('Portal start form shows a file card after upload', cardVisible)
+  if (cardVisible) {
+    await portalCard.click()
+  }
   const portalDetails = portalPage.getByTestId('upload-file-details').first()
   const portalVisible = await portalDetails.waitFor({ state: 'visible', timeout: 25000 })
     .then(() => true)

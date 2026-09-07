@@ -40,6 +40,9 @@ export interface FormField {
   uploadUrl?: string
   uploadAccept?: string
   uploadLimit?: number
+  uploadMaxFileSizeMb?: number
+  /** true = Extend Advanced Upload (cards / FileNet). false/omit = Basic native Upload. */
+  advancedUpload?: boolean
   fileNameTargetField?: string
   /** Designer upload prop: hide Portal download when true. Missing/false = download allowed. */
   cannotDownload?: boolean

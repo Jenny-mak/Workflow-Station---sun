@@ -21,6 +21,18 @@ describe('extractFileNames', () => {
     ])).toEqual(['a.pdf', 'b.pdf'])
   })
 
+  it('parses a JSON array stored as a string (Flowable string variable)', () => {
+    expect(extractFileNames(JSON.stringify([
+      { url: '/api/v1/upload/files/a?originalName=a.pdf', name: 'a.pdf' },
+      { url: '/api/v1/upload/files/b?originalName=b.pdf', name: 'b.pdf' },
+    ]))).toEqual(['a.pdf', 'b.pdf'])
+  })
+
+  it('does not treat a truncated JSON array as a single file URL', () => {
+    const truncated = '[{"url":"/api/v1/upload/files/a.png?originalName=a.png","name":"a.png"},{"url":"/api/v1/upload/files/b.webp?orig'
+    expect(extractFileNames(truncated)).toEqual(['a.png'])
+  })
+
   it('treats a non-upload string as no file', () => {
     expect(extractFileNames('https://example.com/abc123')).toEqual([])
   })

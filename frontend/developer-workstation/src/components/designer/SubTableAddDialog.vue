@@ -187,7 +187,7 @@
 
         <!-- upload -->
         <div
-          v-else-if="col.type === 'upload'"
+          v-else-if="col.type === 'upload' || col.type === 'advancedUpload'"
           style="display: flex; flex-direction: column; gap: 4px;"
         >
           <FormUploadDropZone
@@ -198,18 +198,19 @@
             :multiple="maxFilesOf(col) > 1"
             :file-list="uploadFileLists[col.field] || []"
             :http-request="httpRequest"
+            :max-file-size-mb="maxFileSizeMbOf(col)"
+            :disabled="isColReadonly(col)"
             :drag-text="t('form.uploadDragText')"
             :click-text="t('form.uploadClickText')"
+            :fail-label="t('form.uploadFailed')"
+            :remove-label="t('common.delete')"
             :handle-success="(res: unknown, file: { name?: string; url?: string }, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadSuccess(res, file, col, list)"
             :handle-change="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadChange(col, list)"
             :handle-remove="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadRemove(col, list)"
             :handle-exceed="() => handleUploadExceed(col)"
-            :handle-error="() => handleUploadError(col)"
-          />
-          <FormUploadFileDetails
-            :files="detailFilesOf(col.field)"
-            :readonly="isColReadonly(col)"
-            :labels="uploadDetailLabels"
+            :handle-error="(error: unknown) => handleUploadError(col, error)"
+            :handle-size-exceed="() => handleSizeExceed(col)"
+            :handle-open-details="(file) => openDetails(col, file)"
           />
         </div>
 
@@ -352,19 +353,27 @@
       </el-button>
       <el-button
         type="primary"
-        @click="handleSave"
+        @click="saveRow"
       >
         Save
       </el-button>
     </template>
   </SubTableNestedModalShell>
+  <FormUploadDetailsDrawer
+    v-model="detailsOpen"
+    :title="t('form.fileNet.detailsTitle')"
+    :file="detailsFile"
+    :readonly="detailsReadonly"
+    :labels="uploadDetailLabels"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FormUploadDropZone from '@platform-shared/upload/FormUploadDropZone.vue'
-import FormUploadFileDetails from '@platform-shared/upload/FormUploadFileDetails.vue'
+import FormUploadDetailsDrawer from '@platform-shared/upload/FormUploadDetailsDrawer.vue'
+import type { UploadDetailFile } from '@platform-shared/upload/FormUploadFileDetails.vue'
 import type { FormInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { buildInitialRow, buildRules, isColReadonly as designerColReadonly, mergeFormRowWithSeed } from './subTableAddDialogHelpers'
@@ -376,11 +385,14 @@ import { normalizeUploadFieldsInRow } from './uploadFieldUtils'
 import { extractFileLinks } from '@platform-shared/list/fileNames'
 import {
   joinTargetFileNames,
+  resolveUploadMaxFileSizeMb,
   resolveUploadMaxFiles,
   splitUploadFileList,
   toElUploadFileList,
 } from '@platform-shared/upload/uploadFieldValue'
 import { queuedUploadRequest } from '@platform-shared/upload/queuedUploadRequest'
+import { isUploadUnauthorizedError } from '@platform-shared/upload/uploadAuthRefresh'
+import { clearUploadWidgetState, setUploadWidgetState, warnIfUploadsBlocking } from '@platform-shared/upload/uploadSubmitGate'
 import { useSubTableDialogComponentEvents } from '@/composables/designerSubTableField/useSubTableDialogComponentEvents'
 
 const { t } = useI18n()
@@ -425,6 +437,41 @@ function maxFilesOf(col: DialogColumn): number {
   return resolveUploadMaxFiles(col.props)
 }
 
+function maxFileSizeMbOf(col: DialogColumn): number {
+  return resolveUploadMaxFileSizeMb(col.props)
+}
+
+watch(
+  uploadFileLists,
+  (lists) => {
+    for (const [field, list] of Object.entries(lists)) {
+      setUploadWidgetState(`dw-dialog-upload:${field}`, list)
+    }
+  },
+  { deep: true },
+)
+onBeforeUnmount(() => {
+  for (const field of Object.keys(uploadFileLists.value)) {
+    clearUploadWidgetState(`dw-dialog-upload:${field}`)
+  }
+})
+
+const detailsOpen = ref(false)
+const detailsFile = ref<UploadDetailFile | null>(null)
+const detailsCol = ref<DialogColumn | null>(null)
+
+function isColReadonly(col: DialogColumn): boolean {
+  return isDialogFieldDisabled(col.field, designerColReadonly(col) || isTableAuditField(col.field))
+}
+
+const detailsReadonly = computed(() => !detailsCol.value || isColReadonly(detailsCol.value))
+
+function openDetails(col: DialogColumn, file: UploadDetailFile) {
+  detailsCol.value = col
+  detailsFile.value = file
+  detailsOpen.value = true
+}
+
 function writeUploadColumn(
   col: DialogColumn,
   list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>,
@@ -438,10 +485,6 @@ function writeUploadColumn(
   }
 }
 
-function isColReadonly(col: DialogColumn): boolean {
-  return isDialogFieldDisabled(col.field, designerColReadonly(col) || isTableAuditField(col.field))
-}
-
 const uploadDetailLabels = computed(() => ({
   description: t('form.fileNet.description'),
   callbackUrl: t('form.fileNet.callbackUrl'),
@@ -450,11 +493,6 @@ const uploadDetailLabels = computed(() => ({
   saveFailed: t('form.fileNet.saveFailed'),
 }))
 
-function detailFilesOf(field: string): Array<{ url: string; name: string }> {
-  return (uploadFileLists.value[field] || [])
-    .filter((item) => item.url)
-    .map((item) => ({ url: String(item.url), name: String(item.name || item.url) }))
-}
 
 const signatureCanvasRefs = ref<Record<string, HTMLCanvasElement>>({})
 const signingField = ref<string | null>(null)
@@ -530,7 +568,7 @@ watch(
     if (props.mode === 'edit' && props.initialData) {
       const next: Record<string, Array<{ name: string; url: string; status?: string }>> = {}
       for (const col of props.columns) {
-        if (col.type === 'upload') next[col.field] = toElUploadFileList(formData.value[col.field])
+        if (col.type === 'upload' || col.type === 'advancedUpload') next[col.field] = toElUploadFileList(formData.value[col.field])
       }
       uploadFileLists.value = next
     }
@@ -547,6 +585,14 @@ function onShellClosed() {
 function requestClose() {
   formRef.value?.resetFields()
   visibleModel.value = false
+}
+
+function saveRow() {
+  if (!warnIfUploadsBlocking({
+    inflight: t('form.uploadWaitUntilComplete'),
+    failed: t('form.uploadFixFailedBeforeSubmit'),
+  })) return
+  return handleSave()
 }
 
 async function handleSave() {
@@ -589,8 +635,16 @@ function handleUploadExceed(col: DialogColumn) {
   ElMessage.warning(t('form.uploadLimitExceed', { limit: maxFilesOf(col) }))
 }
 
-function handleUploadError(col: DialogColumn) {
+function handleUploadError(col: DialogColumn, error?: unknown) {
+  if (isUploadUnauthorizedError(error)) {
+    ElMessage.error(t('form.uploadSessionExpired'))
+    return
+  }
   ElMessage.error(t('form.uploadFailedForField', { field: col.label }))
+}
+
+function handleSizeExceed(col: DialogColumn) {
+  ElMessage.warning(t('form.uploadSizeExceed', { size: maxFileSizeMbOf(col) }))
 }
 </script>
 

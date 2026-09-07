@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // FieldRenderer — upload URL resolution + file list (Task 6.8, Req 24)
 // ---------------------------------------------------------------------------
-import { computed, inject, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import type { FieldRendererProps, FieldRendererEmit } from './types'
@@ -10,6 +10,7 @@ import { isCannotDownload } from '@/utils/filePreview'
 import { extractFileLinks } from '@platform-shared/list/fileNames'
 import {
   DEFAULT_UPLOAD_MAX_FILES,
+  DEFAULT_UPLOAD_MAX_FILE_SIZE_MB,
   isInflightUploadStatus,
   joinTargetFileNames,
   splitUploadFileList,
@@ -17,12 +18,17 @@ import {
   uploadValueFingerprint,
 } from '@platform-shared/upload/uploadFieldValue'
 import { queuedUploadRequest } from '@platform-shared/upload/queuedUploadRequest'
+import { isUploadUnauthorizedError } from '@platform-shared/upload/uploadAuthRefresh'
+import { isAnyUploadType } from '@platform-shared/upload/uploadRuleType'
+import { clearUploadWidgetState, setUploadWidgetState } from '@platform-shared/upload/uploadSubmitGate'
+import type { UploadDetailFile } from '@platform-shared/upload/FormUploadFileDetails.vue'
 
 const DEFAULT_UPLOAD_URL = '/api/v1/upload'
 
 export function useFieldUpload(props: FieldRendererProps, emit: FieldRendererEmit) {
   const { t } = useI18n()
   const playlist = inject(FILE_PREVIEW_PLAYLIST_KEY, null)
+  const widgetId = `field-upload:${props.field.key}`
   const resolvedUploadUrl = computed(() => {
     if (props.uploadUrl) return props.uploadUrl
     if (props.field.uploadUrl && props.field.uploadUrl !== '/') return props.field.uploadUrl
@@ -30,13 +36,18 @@ export function useFieldUpload(props: FieldRendererProps, emit: FieldRendererEmi
   })
 
   const uploadLimit = computed(() => props.field.uploadLimit ?? DEFAULT_UPLOAD_MAX_FILES)
+  const uploadMaxFileSizeMb = computed(
+    () => props.field.uploadMaxFileSizeMb ?? DEFAULT_UPLOAD_MAX_FILE_SIZE_MB,
+  )
   const uploadMultiple = computed(() => uploadLimit.value > 1)
-  const fileList = ref<Array<{ name: string; url: string; status?: string }>>([])
+  const fileList = ref<Array<{ name: string; url: string; status?: string; percentage?: number }>>([])
+  const detailsOpen = ref(false)
+  const detailsFile = ref<UploadDetailFile | null>(null)
 
   watch(
     () => props.modelValue,
     (val) => {
-      if (props.field.type !== 'upload') return
+      if (!isAnyUploadType(props.field.type)) return
       if (fileList.value.some((item) => isInflightUploadStatus(item.status))) return
       const next = toElUploadFileList(val)
       if (uploadValueFingerprint(fileList.value) === uploadValueFingerprint(next)) return
@@ -44,6 +55,13 @@ export function useFieldUpload(props: FieldRendererProps, emit: FieldRendererEmi
     },
     { immediate: true },
   )
+
+  watch(
+    fileList,
+    (list) => setUploadWidgetState(widgetId, list),
+    { immediate: true, deep: true },
+  )
+  onBeforeUnmount(() => clearUploadWidgetState(widgetId))
 
   function persistFromList(list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) {
     const { stored, display } = splitUploadFileList(list, uploadLimit.value)
@@ -89,6 +107,18 @@ export function useFieldUpload(props: FieldRendererProps, emit: FieldRendererEmi
     ElMessage.warning(t('upload.limitExceed', { limit: uploadLimit.value }))
   }
 
+  function onUploadError(error: unknown) {
+    if (isUploadUnauthorizedError(error)) {
+      ElMessage.error(t('upload.sessionExpired'))
+      return
+    }
+    ElMessage.error(t('upload.failed'))
+  }
+
+  function onSizeExceed(maxMb: number) {
+    ElMessage.warning(t('upload.sizeExceed', { size: maxMb }))
+  }
+
   function previewCurrentFile(file?: { name?: string; url?: string }) {
     const links = extractFileLinks(props.modelValue)
     const url = file?.url || links[0]?.url || ''
@@ -100,9 +130,15 @@ export function useFieldUpload(props: FieldRendererProps, emit: FieldRendererEmi
     )
   }
 
+  function openDetails(file: UploadDetailFile): void {
+    detailsFile.value = file
+    detailsOpen.value = true
+  }
+
   return {
     resolvedUploadUrl,
     uploadLimit,
+    uploadMaxFileSizeMb,
     uploadMultiple,
     fileList,
     httpRequest: queuedUploadRequest,
@@ -110,6 +146,11 @@ export function useFieldUpload(props: FieldRendererProps, emit: FieldRendererEmi
     onUploadChange,
     onUploadRemove,
     onUploadExceed,
+    onUploadError,
+    onSizeExceed,
     previewCurrentFile,
+    detailsOpen,
+    detailsFile,
+    openDetails,
   }
 }

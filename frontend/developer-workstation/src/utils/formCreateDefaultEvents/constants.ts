@@ -77,6 +77,7 @@ export const TYPE_ON_EVENTS: Record<string, string[]> = {
   timeRange: ['change'],
   cascader: ['change', 'expandChange', 'removeTag'],
   upload: ['remove', 'preview', 'error', 'progress', 'exceed'],
+  advancedUpload: ['remove', 'preview', 'error', 'progress', 'exceed'],
   elTreeSelect: ['change', 'removeTag'],
   tree: ['nodeClick', 'checkChange', 'nodeExpand', 'nodeCollapse'],
   elTabs: ['tabClick', 'tabChange', 'tabAdd', 'tabRemove'],

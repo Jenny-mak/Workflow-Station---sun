@@ -7,6 +7,7 @@ import com.developer.exception.DeveloperBusinessException;
 import com.developer.exception.ResourceNotFoundException;
 import com.developer.repository.UploadedFileRepository;
 import com.developer.repository.UploadedFileTransferRepository;
+import com.platform.common.dto.UserPrincipal;
 import com.platform.security.util.SecurityContextUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +44,8 @@ class FileTransferComponentImplTest {
     void setUp() {
         component = new FileTransferComponentImpl(uploadedFileRepository, transferRepository);
         security = mockStatic(SecurityContextUtils.class);
+        security.when(SecurityContextUtils::getCurrentUser).thenReturn(Optional.of(
+                UserPrincipal.builder().userId("u-alice").username("alice").build()));
         security.when(SecurityContextUtils::getCurrentUsername).thenReturn(Optional.of("alice"));
     }
 
@@ -115,5 +118,42 @@ class FileTransferComponentImplTest {
 
         assertThatThrownBy(() -> component.updateDescription("missing.pdf", "x"))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void updateDescription_shouldAllowAuditorFallbackSystemOwner_whenCallerAuthenticated() {
+        when(uploadedFileRepository.findByStoredName("a.pdf"))
+                .thenReturn(Optional.of(UploadedFile.builder().storedName("a.pdf").createdBy("system").build()));
+        when(transferRepository.findByStoredName("a.pdf")).thenReturn(Optional.empty());
+        when(transferRepository.save(any(UploadedFileTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        FileTransferResponse result = component.updateDescription("a.pdf", "portal note");
+
+        assertThat(result.getFileDescription()).isEqualTo("portal note");
+    }
+
+    @Test
+    void updateDescription_shouldAllowWhenOwnerMatchesUserId() {
+        when(uploadedFileRepository.findByStoredName("a.pdf"))
+                .thenReturn(Optional.of(UploadedFile.builder().storedName("a.pdf").createdBy("u-alice").build()));
+        when(transferRepository.findByStoredName("a.pdf")).thenReturn(Optional.empty());
+        when(transferRepository.save(any(UploadedFileTransfer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        FileTransferResponse result = component.updateDescription("a.pdf", "by id");
+
+        assertThat(result.getFileDescription()).isEqualTo("by id");
+    }
+
+    @Test
+    void updateDescription_shouldRejectSystemOwnerWhenUnauthenticated() {
+        security.when(SecurityContextUtils::getCurrentUser).thenReturn(Optional.empty());
+        when(uploadedFileRepository.findByStoredName("a.pdf"))
+                .thenReturn(Optional.of(UploadedFile.builder().storedName("a.pdf").createdBy("system").build()));
+
+        assertThatThrownBy(() -> component.updateDescription("a.pdf", "x"))
+                .isInstanceOf(DeveloperBusinessException.class)
+                .hasMessage("Not allowed to update this file description");
     }
 }

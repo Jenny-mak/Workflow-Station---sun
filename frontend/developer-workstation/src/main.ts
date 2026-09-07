@@ -16,6 +16,8 @@ import enLocale from '@form-create/designer/locale/en.js'
 import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
+import { setUploadAuthRefresher } from '@platform-shared/upload/uploadAuthRefresh'
+import { refreshToken } from '@/api/auth'
 import './styles/index.scss'
 import './styles/designer-validate-panel.scss'
 import './styles/form-readonly.scss'
@@ -35,8 +37,11 @@ import FormControlTypeSelect from './components/designer/FormControlTypeSelect.v
 import RecordNoteScopeSelect from './components/designer/RecordNoteScopeSelect.vue'
 import SensitiveMaskPropsEditor from './components/designer/SensitiveMaskPropsEditor.vue'
 import UploadMaxFilesEditor from './components/designer/UploadMaxFilesEditor.vue'
+import UploadMaxFileSizeEditor from './components/designer/UploadMaxFileSizeEditor.vue'
 import FileNetAdvancedEditor from './components/designer/FileNetAdvancedEditor.vue'
 import FormUploadDrop from './components/designer/FormUploadDrop.vue'
+import unique from '@form-create/utils/lib/unique'
+import { DEFAULT_FILE_NET_CONFIG } from '@platform-shared/upload/fileNetConfig'
 import SensitiveMaskedInput from './components/designer/SensitiveMaskedInput.vue'
 import MiAssignmentPlaceholderWidget from './components/designer/MiAssignmentPlaceholderWidget.vue'
 import HermesValidate from './components/designer/HermesValidate.vue'
@@ -57,6 +62,14 @@ app.use(createPinia())
 app.use(router)
 app.use(ElementPlus)
 app.use(i18n)
+setUploadAuthRefresher(async () => {
+  try {
+    await refreshToken()
+    return true
+  } catch {
+    return false
+  }
+})
 // Set form-create designer to English locale
 FcDesigner.useLocale(enLocale)
 app.use(FcDesigner)
@@ -137,8 +150,10 @@ FcDesigner.addMenu({
 // Sensitive mask: props panel editor + Input display wrapper (Preview / canvas).
 FcDesigner.component('SensitiveMaskPropsEditor', SensitiveMaskPropsEditor)
 FcDesigner.component('UploadMaxFilesEditor', UploadMaxFilesEditor)
+FcDesigner.component('UploadMaxFileSizeEditor', UploadMaxFileSizeEditor)
 FcDesigner.component('FileNetAdvancedEditor', FileNetAdvancedEditor)
 FcDesigner.component('formUploadDrop', FormUploadDrop)
+FcDesigner.component('advancedUpload', FormUploadDrop)
 FcDesigner.component('input', SensitiveMaskedInput)
 
 // Register the subTable drag rule so it appears in the designer left menu
@@ -496,6 +511,72 @@ FcDesigner.addDragRule({
       { type: 'inputNumber', field: 'step', title: 'Step' }
     ]
   }
+})
+
+FcDesigner.addDragRule({
+  name: 'advancedUpload',
+  label: String(i18n.global.t('form.advancedUpload')),
+  icon: 'icon-upload',
+  menu: 'extend',
+  mask: true,
+  input: true,
+  drag: false,
+  dragBtn: true,
+  inside: false,
+  only: false,
+  handleBtn: true,
+  languageKey: [],
+  rule() {
+    return {
+      type: 'advancedUpload',
+      field: unique(),
+      title: String(i18n.global.t('form.advancedUpload')),
+      props: {
+        action: '/api/v1/upload',
+        maxFiles: 10,
+        maxFileSizeMb: 10,
+        limit: 10,
+        multiple: true,
+        cannotDownload: false,
+        fileNet: {
+          ...DEFAULT_FILE_NET_CONFIG,
+          repositoryDetail: { ...DEFAULT_FILE_NET_CONFIG.repositoryDetail },
+        },
+      },
+    }
+  },
+  props() {
+    return [
+      {
+        type: 'UploadMaxFilesEditor',
+        field: 'maxFiles',
+        title: String(i18n.global.t('form.uploadMaxFiles')),
+        value: 10,
+      },
+      {
+        type: 'UploadMaxFileSizeEditor',
+        field: 'maxFileSizeMb',
+        title: String(i18n.global.t('form.uploadMaxFileSize')),
+        value: 10,
+      },
+      {
+        type: 'switch',
+        field: 'cannotDownload',
+        title: String(i18n.global.t('form.uploadCannotDownload')),
+        value: false,
+      },
+      { type: 'switch', field: 'readonly', title: 'Readonly' },
+      {
+        type: 'FileNetAdvancedEditor',
+        field: 'fileNet',
+        title: String(i18n.global.t('form.fileNet.advance')),
+        value: {
+          ...DEFAULT_FILE_NET_CONFIG,
+          repositoryDetail: { ...DEFAULT_FILE_NET_CONFIG.repositoryDetail },
+        },
+      },
+    ]
+  },
 })
 
 FcDesigner.addDragRule({

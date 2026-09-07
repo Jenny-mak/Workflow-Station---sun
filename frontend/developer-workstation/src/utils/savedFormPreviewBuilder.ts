@@ -19,6 +19,7 @@ import {
   resolveActionFormCanvasRule,
   selectPreviewCanvasTableBinding,
 } from '@/utils/actionFormCanvasRule'
+import { unionListViewWithSubFormUploadColumns } from '@platform-shared/upload/unionUploadColumns'
 
 const FC_SKIP_PREVIEW = new Set(['subForm', 'tableForm', 'tableFormColumn', 'group', 'el-row', 'el-col'])
 
@@ -94,7 +95,7 @@ function deriveColumnsFromSubFormRule(rawRule: any[]): any[] {
     else if (r.type === 'select') type = 'select'
     else if (r.type === 'switch') type = 'switch'
     else if (r.type === 'datePicker') type = rProps.type === 'datetime' ? 'datetime' : 'date'
-    else if (r.type === 'upload') type = 'upload'
+    else if (r.type === 'upload' || r.type === 'advancedUpload') type = 'upload'
     else type = r.type
     return {
       field: r.field,
@@ -166,7 +167,7 @@ function toSubTablePreviewColumns(
   const savedColumns = (config.subListViews || {})[bindingId]?.columns
   if (Array.isArray(savedColumns) && savedColumns.length) {
     const ruleByField = new Map(flattenRuleLayoutContainers(rule).map(r => [r?.field, r]))
-    return savedColumns.map((column: any) => {
+    const mapped = savedColumns.map((column: any) => {
       if (column.columnType === 'linkForm') {
         const targetBindingId = column.boundSubTableBindingId || bindingId
         const targetDesign = getSubFormDesign(Number(targetBindingId))
@@ -186,7 +187,7 @@ function toSubTablePreviewColumns(
       }
       const fieldRule = ruleByField.get(column.fieldName)
       const colType =
-        fieldRule?.type === 'upload'
+        fieldRule?.type === 'upload' || fieldRule?.type === 'advancedUpload'
           ? 'upload'
           : mapDataTypeToPreviewColumnType(String(column.dataType ?? column.fieldType ?? ''))
       return {
@@ -196,6 +197,7 @@ function toSubTablePreviewColumns(
         minWidth: colType === 'upload' ? 180 : 100,
       }
     })
+    return unionListViewWithSubFormUploadColumns(mapped, deriveColumnsFromSubFormRule(rule))
   }
 
   const fromRule = deriveColumnsFromSubFormRule(rule)

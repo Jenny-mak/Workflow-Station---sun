@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mergeListViewFieldColumn, isStoredFileUrl, normalizeSubTableColumns } from '../subTableAddDialogHelpers'
+import { mergeListViewFieldColumn, isStoredFileUrl, isUploadColumn, normalizeSubTableColumns } from '../subTableAddDialogHelpers'
 
 // Unit tests for SubTableField file upload filename auto-fill logic
 // Validates: Requirements 11.2, 11.3, 11.4
@@ -135,6 +135,11 @@ describe('SubTableField fileNameTargetField', () => {
 })
 
 describe('subListViews FILE column typing', () => {
+  it('treats type advancedUpload as an upload column', () => {
+    expect(isUploadColumn({ field: 'Fzwomtqznizdakc', type: 'advancedUpload' as never })).toBe(true)
+    expect(isUploadColumn({ field: 'notes', type: 'text' })).toBe(false)
+  })
+
   it('maps dataType FILE to upload when subForm rule is absent', () => {
     const col = mergeListViewFieldColumn(
       { fieldName: 'file', comment: 'file', dataType: 'FILE' },
