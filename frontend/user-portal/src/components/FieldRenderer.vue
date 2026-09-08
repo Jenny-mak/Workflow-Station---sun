@@ -459,12 +459,15 @@
           :tip="t('upload.tip', { types: field.uploadAccept || 'jpg/png/pdf/docx/xlsx', size: uploadMaxFileSizeMb })"
           :fail-label="t('upload.failed')"
           :remove-label="t('common.delete')"
+          :success-status-label="t('upload.statusUploaded')"
+          :uploading-status-label="t('upload.statusUploading')"
           :handle-success="onUploadSuccess"
           :handle-change="onUploadChange"
           :handle-remove="onUploadRemove"
           :handle-exceed="onUploadExceed"
           :handle-error="onUploadError"
           :handle-size-exceed="onSizeExceed"
+          :handle-duplicate="onDuplicate"
           :handle-open-details="openDetails"
         />
         <FormUploadDetailsDrawer
@@ -478,31 +481,59 @@
       </div>
     </template>
 
-    <!-- Basic native Upload (form-create stock) -->
+    <!-- Basic native Upload (form-create stock picker + shared file cards) -->
     <template v-else-if="isUploadControl">
-      <el-upload
-        :action="resolvedUploadUrl"
-        :accept="field.uploadAccept || ''"
-        :limit="field.uploadLimit"
-        :multiple="(field.uploadLimit ?? 1) > 1"
-        :disabled="readonly || isDisabled"
-        :file-list="fileList"
-        :http-request="httpRequest"
-        :auto-upload="true"
-        :on-success="onUploadSuccess"
-        :on-change="onUploadChange"
-        :on-remove="onUploadRemove"
-        :on-exceed="onUploadExceed"
-        :on-error="onUploadError"
-        :on-preview="previewCurrentFile"
-      >
-        <el-button
-          type="primary"
-          :disabled="readonly || isDisabled"
+      <div class="upload-field-wrap">
+        <el-upload
+          v-if="!(readonly || isDisabled)"
+          :action="resolvedUploadUrl"
+          :accept="field.uploadAccept || ''"
+          :limit="field.uploadLimit"
+          :multiple="(field.uploadLimit ?? 1) > 1"
+          :file-list="fileList"
+          :http-request="httpRequest"
+          :auto-upload="true"
+          :show-file-list="false"
+          :before-upload="beforeUpload"
+          :on-success="onUploadSuccess"
+          :on-change="onUploadChange"
+          :on-remove="onUploadRemove"
+          :on-exceed="onUploadExceed"
+          :on-error="onUploadError"
         >
-          {{ t('upload.clickText') }}
-        </el-button>
-      </el-upload>
+          <el-button type="primary">
+            {{ t('upload.clickText') }}
+          </el-button>
+        </el-upload>
+        <div
+          v-if="fileList.length"
+          class="upload-field-cards"
+        >
+          <FormUploadFileCard
+            v-for="file in fileList"
+            :key="String(file.url || file.name)"
+            :name="file.name || file.url || ''"
+            :url="file.url"
+            :status="file.status"
+            :percent="file.percentage"
+            :disabled="readonly || isDisabled"
+            :fail-label="t('upload.failed')"
+            :remove-label="t('common.delete')"
+            :success-status-label="t('upload.statusUploaded')"
+            :uploading-status-label="t('upload.statusUploading')"
+            @open="openDetails({ url: String(file.url || ''), name: file.name || String(file.url || '') })"
+            @remove="onUploadRemove(file, fileList.filter((item) => item !== file))"
+          />
+        </div>
+        <FormUploadDetailsDrawer
+          v-model="detailsOpen"
+          :title="t('upload.fileDetails')"
+          :file="detailsFile"
+          :readonly="readonly || isDisabled"
+          :labels="uploadDetailLabels"
+          :preview-file="previewCurrentFile"
+        />
+      </div>
     </template>
 
     <!-- readonly -->
@@ -687,6 +718,7 @@ import { useI18n } from 'vue-i18n'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import FormUploadDropZone from '@platform-shared/upload/FormUploadDropZone.vue'
 import FormUploadDetailsDrawer from '@platform-shared/upload/FormUploadDetailsDrawer.vue'
+import FormUploadFileCard from '@platform-shared/upload/FormUploadFileCard.vue'
 import '@wangeditor/editor/dist/css/style.css'
 import type { FormField } from './formRendererHelpers'
 import LookupField from './lookup/LookupField.vue'
@@ -841,6 +873,8 @@ const {
   onUploadExceed,
   onUploadError,
   onSizeExceed,
+  onDuplicate,
+  beforeUpload,
   previewCurrentFile,
   detailsOpen,
   detailsFile,
@@ -1023,5 +1057,16 @@ onMounted(() => {
 .lookup-field-wrapper {
   width: 100%;
   min-width: 0;
+}
+
+.upload-field-wrap {
+  width: 100%;
+}
+
+.upload-field-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
 }
 </style>

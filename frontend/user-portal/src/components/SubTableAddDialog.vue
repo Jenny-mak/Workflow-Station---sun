@@ -332,10 +332,9 @@
                     @change="(v: unknown) => onDialogFieldChange(col.field, v)"
                   />
 
-                  <!-- upload (readonly) -->
+                  <!-- upload (readonly): keep cards clickable so file details can open -->
                   <div
                     v-else-if="isUploadColumn(col, formData[col.field]) && isColDisabled(col)"
-                    class="ro-value"
                   >
                     <FormUploadDropZone
                       compact
@@ -350,6 +349,8 @@
                       :click-text="t('upload.clickText')"
                       :fail-label="t('upload.failed')"
                       :remove-label="t('common.delete')"
+                      :success-status-label="t('upload.statusUploaded')"
+                      :uploading-status-label="t('upload.statusUploading')"
                       :handle-open-details="(file) => openDialogDetails(col, file)"
                     />
                   </div>
@@ -372,12 +373,15 @@
                       :tip="t('upload.tip', { types: col.props?.accept || 'jpg/png/pdf/docx/xlsx', size: maxFileSizeMbOf(col) })"
                       :fail-label="t('upload.failed')"
                       :remove-label="t('common.delete')"
+                      :success-status-label="t('upload.statusUploaded')"
+                      :uploading-status-label="t('upload.statusUploading')"
                       :handle-success="(res: unknown, file: { name?: string; url?: string }, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadSuccess(res, file, col, list)"
                       :handle-change="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadChange(col, list)"
                       :handle-remove="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadRemove(col, list)"
                       :handle-exceed="() => handleUploadExceed(col)"
                       :handle-error="(error: unknown) => handleUploadError(col, error)"
                       :handle-size-exceed="() => handleSizeExceed(col)"
+                      :handle-duplicate="(name: string) => handleDuplicate(col, name)"
                       :handle-open-details="(file) => openDialogDetails(col, file)"
                     />
                   </div>
@@ -1070,6 +1074,7 @@ const {
   handleUploadError,
   handleSizeExceed,
   handleUploadExceed,
+  handleDuplicate,
 } = useSubTableDialogUpload(formData, () => props.columns, t)
 
 const uploadDetailLabels = computed(() => ({

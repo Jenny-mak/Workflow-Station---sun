@@ -3371,3 +3371,20 @@
     「导入表字段」或把控件 Field 改成该列名。其它场景用「从发起表单添加高级上传」
     复制同一 Field，不要再各拖一遍。旧实例分叉 field 不迁移，需重新绑列后新申请。
 
+- id: "1602"
+  status: fixed
+  fixed_at: "2026-09-08"
+  severity: major
+  category: bug
+  summary: "Upload file cards: status badge, readonly details, drawer z-index, duplicate reject"
+  file: "frontend/shared/src/upload/FormUploadFileCard.vue"
+  note: |
+    1) 成功/上传中/失败卡片右上角绿/黄/红状态点。
+    2) 子表只读弹窗 .ro-value { pointer-events:none } 挡住卡片点击，无法打开详情。
+    3) 详情抽屉写死 z-index:4100，会被子表弹窗 nextZIndex 盖在灰层下面。
+    4) 同名文件会再次上传成功。
+    修复：状态角标；只读不再包 ro-value；resolveUploadDrawerZIndex(nextZIndex + overlay CSS var)；
+    beforeUpload 按文件名去重并 toast。
+    验证：vitest uploadFieldValue + uploadOverlayZIndex；
+    frontend/scripts/verify-upload-card-status.mjs（绿标、重复拦截、详情抽屉）。
+

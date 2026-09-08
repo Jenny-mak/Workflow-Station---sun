@@ -16,6 +16,7 @@ import {
   splitUploadFileList,
   toElUploadFileList,
   uploadValueFingerprint,
+  rejectUploadFileReason,
 } from '@platform-shared/upload/uploadFieldValue'
 import { queuedUploadRequest } from '@platform-shared/upload/queuedUploadRequest'
 import { isUploadUnauthorizedError } from '@platform-shared/upload/uploadAuthRefresh'
@@ -119,6 +120,23 @@ export function useFieldUpload(props: FieldRendererProps, emit: FieldRendererEmi
     ElMessage.warning(t('upload.sizeExceed', { size: maxMb }))
   }
 
+  function onDuplicate(name: string) {
+    ElMessage.warning(t('upload.duplicate', { name }))
+  }
+
+  function beforeUpload(file: File): boolean {
+    const reason = rejectUploadFileReason(file, fileList.value, uploadMaxFileSizeMb.value)
+    if (reason === 'size') {
+      onSizeExceed(uploadMaxFileSizeMb.value)
+      return false
+    }
+    if (reason === 'duplicate') {
+      onDuplicate(file.name)
+      return false
+    }
+    return true
+  }
+
   function previewCurrentFile(file?: { name?: string; url?: string }) {
     const links = extractFileLinks(props.modelValue)
     const url = file?.url || links[0]?.url || ''
@@ -148,6 +166,8 @@ export function useFieldUpload(props: FieldRendererProps, emit: FieldRendererEmi
     onUploadExceed,
     onUploadError,
     onSizeExceed,
+    onDuplicate,
+    beforeUpload,
     previewCurrentFile,
     detailsOpen,
     detailsFile,

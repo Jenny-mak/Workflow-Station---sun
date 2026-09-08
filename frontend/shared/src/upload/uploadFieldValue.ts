@@ -51,6 +51,39 @@ export function fileExceedsUploadSize(file: { size: number }, maxFileSizeMb: num
   return file.size > mb * 1024 * 1024
 }
 
+export function normalizeUploadFileName(name: string): string {
+  return name.trim().toLowerCase()
+}
+
+export function uploadFileDisplayName(file: { name?: string; url?: string }): string {
+  if (typeof file.name === 'string' && file.name.trim()) return file.name.trim()
+  if (typeof file.url === 'string' && file.url.trim()) return fileDisplayText(file.url)
+  return ''
+}
+
+/** Same original name already in the list (failed rows may be retried). */
+export function isDuplicateUploadFile(
+  incomingName: string,
+  existing: Array<{ name?: string; url?: string; status?: string }>,
+): boolean {
+  const key = normalizeUploadFileName(incomingName)
+  if (!key) return false
+  return existing.some((item) => {
+    if (item.status === 'fail') return false
+    return normalizeUploadFileName(uploadFileDisplayName(item)) === key
+  })
+}
+
+export function rejectUploadFileReason(
+  file: { name: string; size: number },
+  existing: Array<{ name?: string; url?: string; status?: string }>,
+  maxFileSizeMb?: number,
+): 'size' | 'duplicate' | null {
+  if (maxFileSizeMb != null && fileExceedsUploadSize(file, maxFileSizeMb)) return 'size'
+  if (isDuplicateUploadFile(file.name, existing)) return 'duplicate'
+  return null
+}
+
 /**
  * Persist uploaded files as a Flowable-safe string: one URL, or JSON of {url,name}[].
  * Returning a JS array makes Flowable store Java serializable bytes that My Request cannot show.

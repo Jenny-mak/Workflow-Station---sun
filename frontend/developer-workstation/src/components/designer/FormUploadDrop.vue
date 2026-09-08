@@ -14,12 +14,15 @@
       :tip="t('form.fileUploadTip')"
       :fail-label="t('form.uploadFailed')"
       :remove-label="t('common.delete')"
+      :success-status-label="t('form.uploadStatusUploaded')"
+      :uploading-status-label="t('form.uploadStatusUploading')"
       :handle-success="onSuccess"
       :handle-change="onLiveChange"
       :handle-remove="onRemove"
       :handle-exceed="onExceed"
       :handle-error="onError"
       :handle-size-exceed="onSizeExceed"
+      :handle-duplicate="onDuplicate"
       :handle-open-details="openDetails"
     />
     <FormUploadDetailsDrawer
@@ -156,6 +159,10 @@ function onError(error: unknown) {
 
 function onSizeExceed(maxMb: number) {
   ElMessage.warning(t('form.uploadSizeExceed', { size: maxMb }))
+}
+
+function onDuplicate(name: string) {
+  ElMessage.warning(t('form.uploadDuplicate', { name }))
 }
 
 function openDetails(file: UploadDetailFile) {

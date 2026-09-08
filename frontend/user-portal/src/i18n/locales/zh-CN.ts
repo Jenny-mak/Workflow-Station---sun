@@ -1027,6 +1027,9 @@ export default {
     waitUntilComplete: '请等待文件上传完成后再提交。',
     fixFailedBeforeSubmit: '有文件上传失败。请删除或重新上传后再提交。',
     sessionExpired: '登录已过期。请重新登录后再上传该文件。',
+    duplicate: '文件「{name}」已存在，请勿重复上传',
+    statusUploaded: '已上传',
+    statusUploading: '正在上传',
   },
   filePreview: {
     previewFile: '预览文件',

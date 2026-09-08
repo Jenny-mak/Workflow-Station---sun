@@ -5,7 +5,8 @@
     size="420px"
     :title="title"
     destroy-on-close
-    :z-index="4100"
+    append-to-body
+    :z-index="drawerZ"
     data-testid="upload-file-details-drawer"
     @close="emit('update:modelValue', false)"
   >
@@ -20,12 +21,15 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue'
+import { useZIndex } from 'element-plus'
 import FormUploadFileDetails, {
   type UploadDetailFile,
   type UploadDetailLabels,
 } from './FormUploadFileDetails.vue'
+import { resolveUploadDrawerZIndex } from './uploadOverlayZIndex'
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean
   title: string
   file: UploadDetailFile | null
@@ -37,4 +41,16 @@ defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
+
+const { nextZIndex } = useZIndex()
+const drawerZ = ref(2000)
+
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (!open) return
+    drawerZ.value = resolveUploadDrawerZIndex(nextZIndex)
+  },
+  { immediate: true },
+)
 </script>

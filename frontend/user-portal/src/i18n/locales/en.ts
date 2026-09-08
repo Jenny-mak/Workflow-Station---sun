@@ -1055,6 +1055,9 @@ export default {
     waitUntilComplete: 'Please wait until the file upload finishes.',
     fixFailedBeforeSubmit: 'A file failed to upload. Remove or retry it before submitting.',
     sessionExpired: 'Your session expired. Please sign in again, then upload the file again.',
+    duplicate: '"{name}" is already uploaded. Choose a different file.',
+    statusUploaded: 'Uploaded',
+    statusUploading: 'Uploading',
   },
   filePreview: {
     previewFile: 'Preview file',

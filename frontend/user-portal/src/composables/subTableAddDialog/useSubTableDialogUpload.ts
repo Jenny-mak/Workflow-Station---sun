@@ -112,6 +112,10 @@ export function useSubTableDialogUpload(
     ElMessage.warning(t('upload.limitExceed', { limit: maxFilesOf(col) }))
   }
 
+  function handleDuplicate(_col: DialogColumn, name: string) {
+    ElMessage.warning(t('upload.duplicate', { name }))
+  }
+
   function clearUpload(col: DialogColumn) {
     writeLiveList(col, [])
   }
@@ -130,6 +134,7 @@ export function useSubTableDialogUpload(
     handleUploadError,
     handleSizeExceed,
     handleUploadExceed,
+    handleDuplicate,
     clearUpload,
   }
 }
