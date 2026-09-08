@@ -145,7 +145,6 @@ public final class ExportImportTestComponents {
                 actionDefinitionRepository,
                 decisionDefinitionRepository,
                 Mockito.mock(EmailConnectionRepository.class),
-                Mockito.mock(EmailMonitorRuleRepository.class),
                 Mockito.mock(EmailTemplateRepository.class),
                 formTableBindingRepository,
                 Mockito.mock(LinkFormComponentRepository.class),
@@ -167,6 +166,8 @@ public final class ExportImportTestComponents {
                 sequenceSynchronizer,
                 packageParser,
                 importWriter,
+                new EmailMonitorRulePortability(
+                        Mockito.mock(EmailMonitorRuleRepository.class), objectMapper),
                 staleIdFixer,
                 Mockito.mock(com.developer.component.VersionComponent.class),
                 Mockito.mock(RelationTableStructurePortability.class),

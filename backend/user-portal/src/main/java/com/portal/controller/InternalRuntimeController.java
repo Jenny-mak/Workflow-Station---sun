@@ -1,10 +1,14 @@
 package com.portal.controller;
 
+import com.portal.component.InternalEmailProcessStartComponent;
 import com.portal.component.ProcessInstanceHydrationComponent;
 import com.portal.component.ProcessRuntimePurgeComponent;
 import com.portal.config.PortalInternalApiProperties;
+import com.portal.dto.InternalEmailProcessStartRequest;
+import com.portal.dto.ProcessInstanceInfo;
 import com.platform.common.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Hidden;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
@@ -25,6 +29,7 @@ public class InternalRuntimeController {
     private final PortalInternalApiProperties portalInternalApiProperties;
     private final ProcessRuntimePurgeComponent processRuntimePurgeComponent;
     private final ProcessInstanceHydrationComponent processInstanceHydrationComponent;
+    private final InternalEmailProcessStartComponent internalEmailProcessStartComponent;
 
     @PostMapping("/hydrate-process-instance")
     public ApiResponse<Map<String, Object>> hydrateProcessInstance(
@@ -51,6 +56,14 @@ public class InternalRuntimeController {
         }
         processInstanceHydrationComponent.requireProcessInstance(processInstanceId, snapshot);
         return ApiResponse.success(Map.of("processInstanceId", processInstanceId, "hydrated", true));
+    }
+
+    @PostMapping("/start-process")
+    public ApiResponse<ProcessInstanceInfo> startProcessFromEmail(
+            @RequestHeader(value = "X-Internal-Token", required = false) String token,
+            @RequestBody @Valid InternalEmailProcessStartRequest body) {
+        portalInternalApiProperties.requireValidToken(token);
+        return ApiResponse.success(internalEmailProcessStartComponent.start(body));
     }
 
     @PostMapping("/purge-by-catalog")

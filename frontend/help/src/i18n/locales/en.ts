@@ -361,7 +361,7 @@ export default {
     flowTitle: 'Order of work',
     flow1: 'Create an Inbound connection',
     flow2: 'Create a monitor template',
-    flow3: 'Bind sample text to main-table fields',
+    flow3: 'Map sample text and email attributes to main-table fields',
     flow4: 'Turn on Inbound Email Trigger on the Start event',
     flow5: 'Save the Start Event binding, then Deploy',
     inboundFigure: 'Edit Connection: Direction Inbound (monitor). Mailbox and IMAP login; host comes from System Config.',
@@ -414,29 +414,83 @@ export default {
     fSubjectNotHere:
       'Not on this form. Set Subject Filter on the Start Event only.',
     extractSample: 'Main-table field filled from the email subject (Purchase Request demo).',
+    extractSampleTitle: 'Sample Email tab',
+    extractSampleBody:
+      'Paste a real sample message on the first tab. Subject, From, To, Cc, Reply-To, Sent date, and Message-ID drive preview for email-attribute mappings. Plain text is for Bind selection and body parsing; optional HTML is for sub-table mapping only.',
+    extractSampleFigure:
+      'Sample Email tab with subject, sender/recipient headers, sent date, Message-ID, and plain-text body (emails and account names redacted in screenshots).',
+    extractSampleCatalogLead: 'Field catalog — Sample Email tab on the monitor dialog.',
+    extractFieldMappingTitle: 'Field Mapping — email attributes and body',
+    extractFieldMappingBody:
+      'On Field Mapping, pick a Target Field (main table), then Source. Email attributes (From, To, Subject, …) map the whole header value into the column using Method Direct (whole value). Body sources still use LABEL, BETWEEN, or REGEX. Formula, audit, and platform-filled Owner columns are not offered as targets.',
+    extractFieldMappingFigure:
+      'Field Mapping tab: Target Field, Source grouped as Email attributes vs Body, Method Direct for From, Preview column (personal emails redacted).',
+    extractFieldCatalogLead: 'Field catalog — Field Mapping tab on the monitor dialog.',
+    extractAttributeSample:
+      'Example: map Source From (sender) → main-table sender_email; runtime stores the raw From header (display name + address).',
+    extractSubTableTitle: 'Sub-table (HTML table) tab',
+    extractSubTableBody:
+      'Optional third tab. Map one HTML <table> in the email to a form Sub-Table (one email row per record). Add a Sub-Table on the main process form first if the binding list is empty.',
+    extractSubTableCatalogLead: 'Field catalog — Sub-table (HTML table) tab.',
     extractTitle: 'Field extraction (no code)',
     extractBody:
       'Paste a real sample subject and plain-text body. Select a value, then Bind selection to a main-table field. Mark Required as needed. Optional HTML body is for tables: map one HTML table to a sub-table (one email row per record). Add a Sub-Table on the main process form first if the binding list is empty.',
     extractCatalogLead: 'Field catalog — Field Extraction (no code) on the monitor dialog.',
     fSampleTab: 'First tab. Holds the sample message you bind from. Not sent anywhere.',
-    fSampleSubject: 'Paste a real sample subject, then select text to bind. Blank: subject mappings have no preview.',
-    fSampleFrom: 'Optional sample From line for Header mappings. Blank: From-based rules preview empty.',
+    fSampleSubject:
+      'Sample subject line. Used to preview Subject mappings (Direct or LABEL/BETWEEN/REGEX on subject). Blank: subject mappings show empty Preview.',
+    fSampleFrom:
+      'Sample From header (sender). Used to preview From attribute mappings and legacy Header/From rules. Blank: From-based preview is empty. Runtime stores the provider From string as received.',
+    fSampleTo:
+      'Sample To header (primary recipients). Comma-separated if multiple. Preview for To attribute mapping. Blank: To preview empty.',
+    fSampleCc:
+      'Sample Cc header. Comma-separated copy recipients. Preview for Cc attribute mapping. Blank: Cc preview empty.',
+    fSampleReplyTo:
+      'Sample Reply-To when the email defines one. Preview for Reply-To attribute mapping. Blank: Reply-To preview empty; runtime leaves the field empty when the header is absent.',
+    fSampleDate:
+      'Sample sent date/time (ISO-8601 when copied from runtime logs). Preview for Sent date mapping. Blank: date preview empty.',
+    fSampleMessageId:
+      'Sample Message-ID header (or imap-uid fallback). Preview for Message-ID mapping. Useful for idempotency / correlation columns. Blank: Message-ID preview empty.',
     fSampleText:
       'Paste the plain-text body, then select a value and Bind selection. Blank: text mappings have no preview.',
     fSampleHtml:
       'Optional HTML for table mapping. Blank: Sub-table (HTML table) has nothing to map.',
-    fFieldMapping: 'Second tab. Rows that copy values from the sample into main-table fields.',
-    fAddField: 'Adds an empty mapping row. Then set Target Field, Source, Method, and Rule.',
+    fFieldMapping: 'Second tab. Rows that copy values from the sample or runtime email into main-table fields.',
+    fAddField: 'Adds an empty mapping row. Then set Target Field, Source, and (for body) Method + Rule.',
     fBindSelection:
       'Writes the highlighted sample text into the selected mapping (before/after or label). Does nothing if nothing is selected.',
     fTargetField:
-      'Required per row. Main-table column to fill. Empty list: the main table has no mappable fields.',
+      'Required per row. Main-table column to fill at process start (field name must match the process form). Empty list: the main table has no mappable fields (computed/audit columns are hidden).',
+    fSourceGroupAttributes:
+      'Source dropdown group — read a whole email header/attribute. Choose Direct (whole value) automatically for From, To, Cc, Reply-To, Sent date, Message-ID.',
+    fSourceGroupBody:
+      'Source dropdown group — read body text or a fixed constant. Use LABEL, BETWEEN, REGEX, CONST, or advanced Header.',
+    fSourceSubject:
+      'Email attribute — full subject line (Method Direct) or parse with LABEL/BETWEEN/REGEX on the subject text.',
+    fSourceFrom:
+      'Email attribute — raw From header (sender display name and address as returned by IMAP). Method locked to Direct (whole value). Maps into any text main-table field such as sender_email.',
+    fSourceTo:
+      'Email attribute — raw To header (all primary recipients, comma-separated). Method Direct. Empty when the provider omits To.',
+    fSourceCc:
+      'Email attribute — raw Cc header. Method Direct. Empty when no Cc recipients.',
+    fSourceReplyTo:
+      'Email attribute — Reply-To header when present. Method Direct. Empty when the message has no Reply-To.',
+    fSourceDate:
+      'Email attribute — sent date/time from the mail provider (ISO-8601 instant when available). Method Direct. Map into text or date columns depending on your field type.',
+    fSourceMessageId:
+      'Email attribute — Message-ID header, or imap-uid:{uid} when the header is missing. Method Direct. Use for trace/id columns; also stored on the process as business metadata.',
+    fSourceTextAndHtml:
+      'Body source — plain text plus HTML-derived text (recommended for forwarded/HTML-only mail). Use with LABEL, BETWEEN, or REGEX.',
     fSource:
-      'Where to read. Choices: Subject; Text + HTML (recommended); Text + HTML; HTML only; Header; Constant.',
+      'Where to read. Email attributes group: Subject, From, To, Cc, Reply-To, Sent date, Message-ID. Body group: Text + HTML, HTML only, Header (advanced), Constant.',
+    fMethodDirect:
+      'Method — Direct (whole value). Used automatically for From, To, Cc, Reply-To, Sent date, Message-ID. Also available for Subject when you want the entire subject line without parsing. No Rule column needed.',
+    fMethodParse:
+      'Method — LABEL (text after a label on the same line), BETWEEN (text between anchors), REGEX (pattern), CONST (fixed value), HEADER (legacy header name). Used with body sources or when parsing Subject.',
     fMethod:
-      'How to cut the value. Choices: LABEL, BETWEEN, REGEX, CONST, HEADER (shown as those codes).',
+      'How to cut the value. Email attributes use Direct (whole value). Body uses LABEL, BETWEEN, REGEX, CONST, or HEADER.',
     fRule:
-      'Depends on Method: LABEL uses a label such as Case No; BETWEEN uses before text and after text; REGEX uses a pattern; CONST uses a fixed value; HEADER uses a header name such as From. Blank: preview stays empty.',
+      'Depends on Method: Direct needs no rule; LABEL uses a label such as Case No; BETWEEN uses before/after text; REGEX uses a pattern; CONST uses a fixed value; HEADER uses a header name such as From (legacy — prefer Email attributes). Blank with Direct: preview shows the whole attribute.',
     fRequired:
       'On: missing value follows the manual-review checkbox. Off: the field may stay empty and the process can still start.',
     fPreview: 'Read-only. Shows what the rule extracts from the sample. Empty means the rule does not match yet.',

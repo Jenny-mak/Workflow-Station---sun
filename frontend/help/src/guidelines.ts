@@ -409,3 +409,23 @@ export function navGroupIdsForArticle(
   walk(nodes, [])
   return [...new Set(exact.length ? exact : fallback)]
 }
+
+/** Screenshot paths under /help/guides — keep in sync with public/llms.txt ## Figures */
+export const HELP_GUIDE_FIGURE_PATHS: readonly string[] = [
+  '/help/guides/dw-table-design.png',
+  '/help/guides/dw-connections.png',
+  '/help/guides/dw-connections-inbound.png',
+  '/help/guides/dw-email-templates.png',
+  '/help/guides/dw-email-body.png',
+  '/help/guides/dw-email-monitors.png',
+  '/help/guides/dw-email-extraction-sample.png',
+  '/help/guides/dw-email-field-mapping.png',
+  '/help/guides/dw-send-task.png',
+  '/help/guides/dw-start-event.png',
+  '/help/guides/dw-form-events.png',
+  '/help/guides/dw-form-events-canvas.png',
+  '/help/guides/dw-form-events-form-tab.png',
+  '/help/guides/dw-form-events-preview-notify.png',
+  '/help/guides/dw-form-events-preview-errors.png',
+  '/help/guides/dw-form-events-preview-disabled.png',
+] as const

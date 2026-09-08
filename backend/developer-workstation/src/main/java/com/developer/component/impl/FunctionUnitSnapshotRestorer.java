@@ -44,6 +44,7 @@ import java.util.stream.Collectors;
 public class FunctionUnitSnapshotRestorer {
 
     private final FunctionUnitImportWriter importWriter;
+    private final EmailMonitorRulePortability emailMonitorRulePortability;
     private final FormDefinitionRepository formDefinitionRepository;
     private final ProcessDefinitionRepository processDefinitionRepository;
     private final ProcessBpmnStaleIdFixer staleIdFixer;
@@ -184,9 +185,11 @@ public class FunctionUnitSnapshotRestorer {
 
         if (snapshot.containsKey("emailMonitors")) {
             List<Map<String, Object>> monitors = (List<Map<String, Object>>) snapshot.get("emailMonitors");
-            for (Map<String, Object> monitorData : monitors) {
-                importWriter.importEmailMonitorRule(functionUnit, monitorData, formIdMapping, bindingIdMapping);
-            }
+            emailMonitorRulePortability.importAll(
+                    functionUnit,
+                    monitors,
+                    EmailMonitorRulePortability.MonitorImportMaps.of(
+                            formIdMapping, bindingIdMapping, connectionUidMapping));
         }
 
         restoreProcess(functionUnit, snapshot, tableIdMapping, formIdMapping, actionIdMapping,

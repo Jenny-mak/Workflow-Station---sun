@@ -1,0 +1,16 @@
+=== 测试邮件（发到 user@example.com 的 INBOX）===
+
+主题 / Subject: MCY Debit Card — 校验码测试 20260908
+收件人 / To: user@example.com
+发件人 / From: user@example.com（自发自收即可）
+
+正文 / Body:
+您好，本次操作校验码为8844221。请处理借记卡案例。
+
+字段映射预期:
+  case_number ← REGEX 正文「校验码为8844221」→ 8844221
+  request_id  ← DIRECT Subject
+  calc        ← DIRECT From
+
+注意: Monitor 使用 Connections 里 direction=INBOUND 的那条，不是 OUTBOUND。
+Monitor 只轮询 INBOX；请在收件箱发信，不要只放在「已发送」。

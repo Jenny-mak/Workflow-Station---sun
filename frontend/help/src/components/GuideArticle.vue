@@ -153,7 +153,7 @@ withDefaults(
 const { t } = useI18n()
 
 /** Bump when replacing `public/guides/*.png` so browsers do not keep the old file. */
-const GUIDE_FIGURE_REV = '20260827-4'
+const GUIDE_FIGURE_REV = '20260908-1'
 
 function assetUrl(src: string): string {
   const base = import.meta.env.BASE_URL

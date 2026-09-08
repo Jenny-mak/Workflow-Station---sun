@@ -1,5 +1,6 @@
 import { ref, watch, type Ref } from 'vue'
 import { functionUnitApi, type FormDefinition, type TableBinding, type TableDefinition } from '@/api/functionUnit'
+import { isTableAuditField } from '@/utils/tableAuditFields'
 
 /** SUB binding option — same shape as {@link SubTableBindingSelect}. */
 export interface ProcessSubBindingOption {
@@ -25,10 +26,12 @@ const RUNTIME_MI_FIELD_NAMES = new Set([
 /**
  * Build selectable field options for email extraction mapping.
  *
- * Sub-table bindings exclude the primary key (auto-allocated UUID, never mapped from email).
+ * Sub-table bindings exclude the primary key (auto-allocated on start, never mapped from email).
  * The main table keeps its primary key selectable: business keys such as {@code case_number}
  * are exactly what inbound email extraction needs to populate, so {@code includePrimaryKey}
  * must be set when resolving main-form fields.
+ * Computed and platform audit columns are filled by Portal start, not by email extraction.
+ * Owner columns (form {@code type:"owner"}) are also platform-filled at start (Creator ≈ initiator).
  */
 export function extractMappableFields(
   table?: TableDefinition,
@@ -38,12 +41,28 @@ export function extractMappableFields(
     return []
   }
   return table.fieldDefinitions
-    .filter((f) => (includePrimaryKey || !f.isPrimaryKey) && !RUNTIME_MI_FIELD_NAMES.has(f.fieldName))
+    .filter((f) => mappableFromEmail(f, includePrimaryKey))
     .map((f) => ({
       fieldName: f.fieldName,
       displayName: f.displayName?.trim() || f.fieldName,
     }))
     .sort((a, b) => a.displayName.localeCompare(b.displayName))
+}
+
+function mappableFromEmail(
+  field: TableDefinition['fieldDefinitions'][number],
+  includePrimaryKey: boolean,
+): boolean {
+  if (!includePrimaryKey && field.isPrimaryKey) {
+    return false
+  }
+  if (RUNTIME_MI_FIELD_NAMES.has(field.fieldName)) {
+    return false
+  }
+  if (field.isComputed) {
+    return false
+  }
+  return !isTableAuditField(field.fieldName)
 }
 
 function toSubBindingOption(binding: TableBinding, table?: TableDefinition): ProcessSubBindingOption | null {

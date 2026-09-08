@@ -137,13 +137,13 @@
 | Import | FunctionUnitImporter 新导入/同名覆盖、顺序、稳定键与 ID remap、显式失败 |
 | Clone | FunctionUnitCloner 深拷贝、引用重写、状态和访问规则 |
 | Version | VersionComponentImpl / FunctionUnitSnapshotRestorer v2 + legacy、clear/flush/session 安全 |
-| Admin JSON import | `/function-units/import` → FunctionUnitPackageParser 包含同一能力 |
-| Admin deploy import | `/function-units-import/import` → FunctionUnitImportController 包含同一能力 |
-| Deploy/Activate | Admin catalog、engine payload、状态和兼容正确 |
+| Admin JSON import | `/function-units/import` → FunctionUnitPackageParser + FunctionUnitImportComponent 包含同一 ZIP 能力 |
+| Admin deploy import | `/function-units-import/import` → 同一 ImportComponent（禁止第二条解析逻辑） |
+| Deploy/Activate | DW `DeploymentComponentImpl` 导出的 ZIP 与 Admin 解析字段对齐；catalog / `sys_*` / engine payload 正确 |
 | Portal backend | FU 内容、Form、View、Access 和数据语义同步 |
 | Portal frontend | renderer、task detail、application detail 和 Designer parity 同步 |
 
-不得只更新 Admin 两条导入链中的一条。
+不得只更新 Admin 两条导入链中的一条。不得只改 DW export/import/clone 而不扫 Admin parser/`*SyncComponent`/Engine（或反过来）。Admin catalog ≠ DW `dw_*` 设计器：runtime sync 与设计器还原是两条契约，见 skill `function-unit-portability` 消费者矩阵。
 
 ### Round-trip 证据
 

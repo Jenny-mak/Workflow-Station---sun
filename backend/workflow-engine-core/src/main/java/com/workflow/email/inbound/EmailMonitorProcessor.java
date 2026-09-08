@@ -2,8 +2,6 @@ package com.workflow.email.inbound;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.client.AdminCenterClient;
-import com.workflow.component.ProcessEngineComponent;
-import com.workflow.dto.request.StartProcessRequest;
 import com.workflow.dto.response.ProcessInstanceResult;
 import com.workflow.email.extract.EmailExtractionSpec;
 import com.workflow.email.extract.EmailFieldExtractor;
@@ -16,19 +14,24 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Processes a single inbound email against a monitor rule: runs the no-code extraction,
  * applies the missing-required review gate, and either starts a process (writing main fields +
  * sub-table rows as variables) or records the email for manual review. Idempotent per
  * {@code (ruleUid, messageId)}.
+ *
+ * <p>Portal start runs outside a DB transaction so engine JDBC connections are not held
+ * across the cross-service Flowable round-trip; only {@code processedRepository.save} is transactional.
  */
 @Slf4j
 @Component
@@ -37,14 +40,24 @@ public class EmailMonitorProcessor {
 
     private static final String ACTION_START_PROCESS = "START_PROCESS";
 
-    private final ProcessEngineComponent processEngineComponent;
     private final ProcessedEmailMessageRepository processedRepository;
     private final EmailMonitorPortalSyncComponent portalSyncComponent;
     private final AdminCenterClient adminCenterClient;
     private final ObjectMapper objectMapper;
+    private final PlatformTransactionManager transactionManager;
+
+    private volatile TransactionTemplate txTemplate;
+
+    private TransactionTemplate tx() {
+        TransactionTemplate template = txTemplate;
+        if (template == null) {
+            template = new TransactionTemplate(transactionManager);
+            txTemplate = template;
+        }
+        return template;
+    }
 
     /** Returns the recorded status, or {@code null} when the email was skipped as already processed. */
-    @Transactional
     public String process(SysEmailMonitorRule rule, EmailMessage email) {
         if (!StringUtils.hasText(email.messageId())) {
             log.warn("Inbound email without messageId for rule {}; skipping", rule.getId());
@@ -82,35 +95,58 @@ public class EmailMonitorProcessor {
                     "Unsupported action or missing process key");
         }
 
-        Map<String, Object> startVariables = buildStartVariables(rule, email, extraction);
-        ProcessInstanceResult result = startProcess(rule, email, startVariables);
+        Optional<String> functionUnitCode = resolveFunctionUnitCode(rule);
+        if (functionUnitCode.isEmpty()) {
+            return record(rule, email, ProcessedEmailMessage.STATUS_FAILED, null,
+                    "functionUnitCode could not be resolved for rule " + rule.getId());
+        }
+
+        Map<String, Object> startVariables = buildStartVariables(rule, email, extraction, functionUnitCode.get());
+        ProcessInstanceResult result = portalSyncComponent.startPortalProcess(
+                rule.getProcessDefinitionKey(),
+                functionUnitCode.get(),
+                rule.getSystemInitiatorUserId(),
+                "email:" + email.messageId(),
+                startVariables);
         if (result == null || !result.isSuccess()) {
-            String msg = result != null ? result.getMessage() : "startProcess returned null";
+            String msg = result != null ? result.getMessage() : "portal startProcess returned null";
             return record(rule, email, ProcessedEmailMessage.STATUS_FAILED, null, msg);
         }
-        portalSyncComponent.hydratePortalProcessInstanceAsync(
-                result.getProcessInstanceId(),
-                buildHydrateSnapshot(rule, email, result, startVariables));
         return record(rule, email, ProcessedEmailMessage.STATUS_STARTED, result.getProcessInstanceId(), null);
     }
 
+    /**
+     * Catalog id on the rule must resolve to a DW function unit code when present; otherwise
+     * fall back to the BPMN process definition key (same as internal Portal start).
+     */
+    private Optional<String> resolveFunctionUnitCode(SysEmailMonitorRule rule) {
+        if (!StringUtils.hasText(rule.getFunctionUnitId())) {
+            if (StringUtils.hasText(rule.getProcessDefinitionKey())) {
+                return Optional.of(rule.getProcessDefinitionKey().trim());
+            }
+            return Optional.empty();
+        }
+        Optional<String> code = adminCenterClient.resolveFunctionUnitCodeById(rule.getFunctionUnitId());
+        if (code.isEmpty()) {
+            log.warn("Email monitor rule {} could not resolve functionUnitCode for functionUnitId={}",
+                    rule.getId(), rule.getFunctionUnitId());
+        }
+        return code;
+    }
+
     private Map<String, Object> buildStartVariables(
-            SysEmailMonitorRule rule, EmailMessage email, ExtractionResult extraction) {
+            SysEmailMonitorRule rule,
+            EmailMessage email,
+            ExtractionResult extraction,
+            String functionUnitCode) {
         Map<String, Object> variables = new HashMap<>(extraction.getFields());
         if (StringUtils.hasText(rule.getSystemInitiatorUserId())) {
             variables.put("initiator", rule.getSystemInitiatorUserId());
         }
         if (StringUtils.hasText(rule.getFunctionUnitId())) {
             variables.put("functionUnitId", rule.getFunctionUnitId());
-            // Mirror portal ProcessStartComponent.applyCatalogContextToVariables: Send Email needs
-            // DW functionUnitCode (or numeric DW id); admin UUID alone is not a valid DW template ref.
-            adminCenterClient.resolveFunctionUnitCodeById(rule.getFunctionUnitId())
-                    .ifPresentOrElse(
-                            code -> variables.put("functionUnitCode", code),
-                            () -> log.warn(
-                                    "Email monitor rule {} could not resolve functionUnitCode for functionUnitId={}",
-                                    rule.getId(), rule.getFunctionUnitId()));
         }
+        variables.put("functionUnitCode", functionUnitCode);
         if (StringUtils.hasText(rule.getProcessDefinitionKey())) {
             variables.put("processDefinitionKey", rule.getProcessDefinitionKey());
         }
@@ -121,49 +157,31 @@ public class EmailMonitorProcessor {
         return variables;
     }
 
-    private Map<String, Object> buildHydrateSnapshot(
-            SysEmailMonitorRule rule,
-            EmailMessage email,
-            ProcessInstanceResult result,
-            Map<String, Object> startVariables) {
-        Map<String, Object> snapshot = new LinkedHashMap<>();
-        snapshot.put("processInstanceId", result.getProcessInstanceId());
-        snapshot.put("processDefinitionId", result.getProcessDefinitionId());
-        snapshot.put("processDefinitionKey",
-                StringUtils.hasText(result.getProcessDefinitionKey())
-                        ? result.getProcessDefinitionKey() : rule.getProcessDefinitionKey());
-        snapshot.put("processDefinitionName", result.getName());
-        snapshot.put("businessKey",
-                StringUtils.hasText(result.getBusinessKey())
-                        ? result.getBusinessKey() : ("email:" + email.messageId()));
-        snapshot.put("startUserId",
-                StringUtils.hasText(result.getStartUserId())
-                        ? result.getStartUserId() : rule.getSystemInitiatorUserId());
-        snapshot.put("status", "RUNNING");
-        snapshot.put("variables", startVariables);
-        return snapshot;
-    }
-
-    private ProcessInstanceResult startProcess(
-            SysEmailMonitorRule rule, EmailMessage email, Map<String, Object> variables) {
-        StartProcessRequest request = new StartProcessRequest();
-        request.setProcessDefinitionKey(rule.getProcessDefinitionKey());
-        request.setBusinessKey("email:" + email.messageId());
-        request.setStartUserId(rule.getSystemInitiatorUserId());
-        request.setVariables(variables);
-        return processEngineComponent.startProcess(request);
-    }
-
     private Map<String, Object> inboundEmailSnapshot(EmailMessage email) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("messageId", email.messageId());
         snapshot.put("subject", email.subject());
         snapshot.put("from", email.from());
+        putHeaderIfPresent(snapshot, email, "to");
+        putHeaderIfPresent(snapshot, email, "cc");
+        putHeaderIfPresent(snapshot, email, "reply-to");
+        putHeaderIfPresent(snapshot, email, "date");
         snapshot.put("text", email.text());
         if (StringUtils.hasText(email.html())) {
             snapshot.put("html", email.html());
         }
         return snapshot;
+    }
+
+    private static void putHeaderIfPresent(
+            Map<String, Object> snapshot, EmailMessage email, String headerKey) {
+        if (email.headers() == null) {
+            return;
+        }
+        String value = email.headers().get(headerKey);
+        if (StringUtils.hasText(value)) {
+            snapshot.put(headerKey, value);
+        }
     }
 
     private EmailExtractionSpec parseSpec(SysEmailMonitorRule rule) {
@@ -181,15 +199,17 @@ public class EmailMonitorProcessor {
 
     private String record(SysEmailMonitorRule rule, EmailMessage email,
                           String status, String processInstanceId, String error) {
-        ProcessedEmailMessage row = new ProcessedEmailMessage();
-        row.setRuleUid(rule.getId());
-        row.setMessageId(email.messageId());
-        row.setProcessInstanceId(processInstanceId);
-        row.setStatus(status);
-        row.setErrorMessage(truncate(error));
-        row.setProcessedAt(Instant.now());
-        processedRepository.save(row);
-        return status;
+        return tx().execute(txStatus -> {
+            ProcessedEmailMessage row = new ProcessedEmailMessage();
+            row.setRuleUid(rule.getId());
+            row.setMessageId(email.messageId());
+            row.setProcessInstanceId(processInstanceId);
+            row.setStatus(status);
+            row.setErrorMessage(truncate(error));
+            row.setProcessedAt(Instant.now());
+            processedRepository.save(row);
+            return status;
+        });
     }
 
     private String truncate(String value) {

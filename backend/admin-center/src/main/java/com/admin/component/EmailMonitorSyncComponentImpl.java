@@ -10,9 +10,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -28,17 +31,44 @@ public class EmailMonitorSyncComponentImpl implements EmailMonitorSyncComponent 
         FunctionUnit functionUnit = functionUnitRepository.findById(functionUnitId)
                 .orElseThrow(() -> new IllegalArgumentException("Function unit not found: " + functionUnitId));
 
-        emailMonitorRuleRepository.deleteByFunctionUnitId(functionUnitId);
+        Map<String, EmailMonitorRule> existingById = emailMonitorRuleRepository.findByFunctionUnitId(functionUnitId)
+                .stream()
+                .collect(Collectors.toMap(EmailMonitorRule::getId, rule -> rule, (left, right) -> left));
 
         if (monitorRules == null || monitorRules.isEmpty()) {
+            emailMonitorRuleRepository.deleteByFunctionUnitId(functionUnitId);
             log.info("No email monitor rules to sync for function unit {}", functionUnitId);
             return;
         }
 
+        Set<String> syncedIds = new HashSet<>();
+        int synced = 0;
         for (Map<String, Object> rule : monitorRules) {
-            emailMonitorRuleRepository.save(toEntity(functionUnit, rule));
+            if (!hasStartEvent(rule)) {
+                continue;
+            }
+            EmailMonitorRule entity = toEntity(functionUnit, rule);
+            EmailMonitorRule previous = existingById.get(entity.getId());
+            if (previous != null) {
+                entity.setLastSyncCursor(previous.getLastSyncCursor());
+                entity.setLastSyncedAt(previous.getLastSyncedAt());
+            }
+            emailMonitorRuleRepository.save(entity);
+            syncedIds.add(entity.getId());
+            synced++;
         }
-        log.info("Synced {} email monitor rules for function unit {}", monitorRules.size(), functionUnitId);
+
+        for (EmailMonitorRule stale : existingById.values()) {
+            if (!syncedIds.contains(stale.getId())) {
+                emailMonitorRuleRepository.delete(stale);
+            }
+        }
+        log.info("Synced {} email monitor runtime bindings for function unit {}", synced, functionUnitId);
+    }
+
+    private static boolean hasStartEvent(Map<String, Object> rule) {
+        Object startEventId = rule.get("startEventId");
+        return startEventId instanceof String text && !text.isBlank();
     }
 
     private EmailMonitorRule toEntity(FunctionUnit functionUnit, Map<String, Object> rule) {

@@ -67,6 +67,7 @@ public final class EmailFieldExtractor {
             return null;
         }
         return switch (rule.getType()) {
+            case DIRECT -> directValue(email, rule.getSource());
             case CONST -> rule.getValue();
             case HEADER -> readHeader(email, rule.getHeader());
             case LABEL -> extractByLabel(sourceText(email, rule.getSource()), rule.getLabel());
@@ -76,12 +77,46 @@ public final class EmailFieldExtractor {
         };
     }
 
+    /** Returns the full email attribute or source text for {@link EmailExtractionSpec.RuleType#DIRECT}. */
+    private static String directValue(EmailMessage email, EmailExtractionSpec.Source source) {
+        String attribute = emailAttributeValue(email, source);
+        if (StringUtils.hasText(attribute)) {
+            return attribute;
+        }
+        if (source == EmailExtractionSpec.Source.SUBJECT) {
+            return email.subject();
+        }
+        if (source == EmailExtractionSpec.Source.TEXT
+                || source == EmailExtractionSpec.Source.TEXT_AND_HTML
+                || source == EmailExtractionSpec.Source.HTML) {
+            return sourceText(email, source);
+        }
+        return null;
+    }
+
+    private static String emailAttributeValue(EmailMessage email, EmailExtractionSpec.Source source) {
+        if (source == null) {
+            return null;
+        }
+        return switch (source) {
+            case FROM -> email.from();
+            case TO -> readHeader(email, "to");
+            case CC -> readHeader(email, "cc");
+            case REPLY_TO -> readHeader(email, "reply-to");
+            case DATE -> readHeader(email, "date");
+            case MESSAGE_ID -> email.messageId();
+            case SUBJECT -> email.subject();
+            default -> null;
+        };
+    }
+
     private static String sourceText(EmailMessage email, EmailExtractionSpec.Source source) {
         if (source == null) {
             return combinedTextAndHtml(email);
         }
         return switch (source) {
             case SUBJECT -> email.subject();
+            case FROM, TO, CC, REPLY_TO, DATE, MESSAGE_ID -> emailAttributeValue(email, source);
             case HTML -> htmlToText(email.html());
             case TEXT, TEXT_AND_HTML -> combinedTextAndHtml(email);
             case HEADER, CONST -> truncate(email.text());
@@ -112,13 +147,17 @@ public final class EmailFieldExtractor {
         if (!StringUtils.hasText(header)) {
             return null;
         }
-        if ("from".equalsIgnoreCase(header) && email.from() != null) {
+        String normalized = header.toLowerCase();
+        if ("from".equals(normalized)) {
             return email.from();
+        }
+        if ("message-id".equals(normalized) && StringUtils.hasText(email.messageId())) {
+            return email.messageId();
         }
         if (email.headers() == null) {
             return null;
         }
-        return email.headers().get(header.toLowerCase());
+        return email.headers().get(normalized);
     }
 
     /** Returns the text after {@code label} on the same line, trimmed. */

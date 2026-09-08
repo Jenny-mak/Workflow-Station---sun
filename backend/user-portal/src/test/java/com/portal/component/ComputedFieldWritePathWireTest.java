@@ -32,15 +32,18 @@ class ComputedFieldWritePathWireTest {
     private static final String FU_CODE = "purchase-request";
 
     @Mock
+    private ProcessStartFormEnricherComponent processStartFormEnricherComponent;
+
+    @Mock
     private ComputedFieldRecalculator computedFieldRecalculator;
 
     @InjectMocks
     private ProcessStartComponent processStartComponent;
 
     @Test
-    @DisplayName("ProcessStartComponent declares recalculator for Spring constructor wiring")
-    void processStartComponentHasRecalculatorDependency() {
-        verifyNoInteractions(computedFieldRecalculator);
+    @DisplayName("ProcessStartComponent declares start enricher for Spring constructor wiring")
+    void processStartComponentHasEnricherDependency() {
+        verifyNoInteractions(processStartFormEnricherComponent);
     }
 
     @Test

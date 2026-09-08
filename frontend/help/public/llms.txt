@@ -30,6 +30,8 @@ Emails in figures are redacted to user@example.com.
 - /help/guides/dw-email-templates.png
 - /help/guides/dw-email-body.png
 - /help/guides/dw-email-monitors.png
+- /help/guides/dw-email-extraction-sample.png
+- /help/guides/dw-email-field-mapping.png
 - /help/guides/dw-send-task.png
 - /help/guides/dw-start-event.png
 - /help/guides/dw-form-events.png

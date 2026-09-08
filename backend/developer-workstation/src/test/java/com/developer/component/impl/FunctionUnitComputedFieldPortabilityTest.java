@@ -77,7 +77,6 @@ class FunctionUnitComputedFieldPortabilityTest {
                 actionDefinitionRepository,
                 decisionDefinitionRepository,
                 mock(com.developer.repository.EmailConnectionRepository.class),
-                mock(com.developer.repository.EmailMonitorRuleRepository.class),
                 mock(com.developer.repository.EmailTemplateRepository.class),
                 mock(com.developer.repository.FormTableBindingRepository.class),
                 mock(com.developer.repository.LinkFormComponentRepository.class),

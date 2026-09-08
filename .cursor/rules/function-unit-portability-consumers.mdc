@@ -1,0 +1,31 @@
+---
+description: >-
+  Function Unit export/import/clone must update every consumer: Developer
+  Workstation, Admin Center (both import HTTP paths), Deploy ZIP, and runtime
+  sync. Do not only change DW.
+globs: backend/developer-workstation/**/{FunctionUnitExporter,FunctionUnitImporter,FunctionUnitCloner,FunctionUnitImportWriter,FunctionUnitSnapshotRestorer,EmailMonitorRulePortability,ExportImportPackageParser,ExportManifest,VersionComponentImpl,DeploymentComponentImpl}.java,backend/admin-center/**/{FunctionUnitImportComponent,FunctionUnitPackageParser,FunctionUnitImportController,FunctionUnitController,EmailMonitorSyncComponent,EmailMonitorSyncComponentImpl,EmailConnectionSyncComponent,EmailConnectionSyncComponentImpl}.java
+alwaysApply: false
+---
+
+# FU 导入导出 / Clone — 全消费者
+
+改 ZIP、snapshot、clone 或任一导入路径时，**MUST 同时核对 Developer Workstation 与 Admin Center（以及 Deploy / Engine）**。禁止只改 DW。
+
+完整清单与 Email 特例：skill **`function-unit-portability`**。
+
+## 必扫
+
+| 侧 | 至少检查 |
+|----|----------|
+| DW | Exporter、Importer、Cloner、Version snapshot/rollback、`ExportManifest` |
+| Admin | `FunctionUnitPackageParser`、`FunctionUnitImportComponent`、对应 `*SyncComponent` |
+| HTTP | `/function-units/import` **与** `/function-units-import/import` 走同一套 import（不得只改一条） |
+| Deploy | `DeploymentComponentImpl` 导出的 ZIP 字段与 Admin 解析对齐 |
+| Engine | `sys_*` 是否应写入；设计器专用数据（如无 `startEventId` 的 Email Monitor 模板）不得进运行时表 |
+
+## 两条契约
+
+- **DW Import / Clone / Rollback** → 还原 `dw_*` 设计器（含未绑定的 Email Monitor 模板）。
+- **Admin Import** → catalog + 引擎需要的 `sys_*`。**不会**回写 `dw_*`。跨环境要设计器完整，须再做 DW Import。
+
+失败须显式业务异常，禁止 `log.warn` 静默丢目录或丢字段。

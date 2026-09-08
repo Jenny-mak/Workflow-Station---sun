@@ -4,7 +4,6 @@ import com.developer.dto.RequestIdConfig;
 import com.developer.entity.ActionDefinition;
 import com.developer.entity.DecisionDefinition;
 import com.developer.entity.EmailConnection;
-import com.developer.entity.EmailMonitorRule;
 import com.developer.entity.EmailTemplate;
 import com.developer.entity.FieldDefinition;
 import com.developer.entity.ForeignKey;
@@ -23,7 +22,6 @@ import com.developer.exception.ResourceNotFoundException;
 import com.developer.repository.ActionDefinitionRepository;
 import com.developer.repository.DecisionDefinitionRepository;
 import com.developer.repository.EmailConnectionRepository;
-import com.developer.repository.EmailMonitorRuleRepository;
 import com.developer.repository.EmailTemplateRepository;
 import com.developer.repository.FormDefinitionRepository;
 import com.developer.repository.FormStageBindingRepository;
@@ -75,8 +73,8 @@ class FunctionUnitCloner {
     private final TableRelationRepository tableRelationRepository;
     private final SubTableViewConfigRepository subTableViewConfigRepository;
     private final EmailConnectionRepository emailConnectionRepository;
-    private final EmailMonitorRuleRepository emailMonitorRuleRepository;
     private final EmailTemplateRepository emailTemplateRepository;
+    private final EmailMonitorRulePortability emailMonitorRulePortability;
     private final ObjectMapper objectMapper;
     private final FunctionUnitWorkspaceAccessService functionUnitWorkspaceAccessService;
     private final DeveloperWorkstationSequenceSynchronizer sequenceSynchronizer;
@@ -196,7 +194,8 @@ class FunctionUnitCloner {
         Map<String, String> connectionUidMapping = new HashMap<>();
         cloneEmailConnections(id, cloned, connectionIdMapping, connectionUidMapping);
         Map<Long, Long> emailTemplateIdMapping = cloneEmailTemplates(id, cloned);
-        cloneEmailMonitors(id, cloned, formIdMapping, bindingIdMapping, connectionUidMapping);
+        emailMonitorRulePortability.cloneAll(
+                id, cloned, formIdMapping, bindingIdMapping, connectionUidMapping);
 
         // Clone process definition last; rewrite BPMN ID references
         if (source.getProcessDefinition() != null) {
@@ -518,43 +517,6 @@ class FunctionUnitCloner {
         return templateIdMapping;
     }
 
-    private void cloneEmailMonitors(Long sourceFunctionUnitId,
-                                    FunctionUnit target,
-                                    Map<Long, Long> formIdMapping,
-                                    Map<Long, Long> bindingIdMapping,
-                                    Map<String, String> connectionUidMapping) {
-        for (EmailMonitorRule source : emailMonitorRuleRepository
-                .findByFunctionUnitIdOrderByNameAsc(sourceFunctionUnitId)) {
-            String mappedUid = remapRequiredConnectionUid(
-                    source.getConnectionUid(), connectionUidMapping, source.getName());
-            Long targetFormId = remapOptionalFormId(
-                    source.getTargetFormId(), formIdMapping, source.getName());
-            String targetBindingId = remapOptionalBindingId(
-                    source.getTargetBindingId(), bindingIdMapping, source.getName());
-            EmailMonitorRule cloned = EmailMonitorRule.builder()
-                    .ruleUid(UUID.randomUUID().toString())
-                    .functionUnit(target)
-                    .name(source.getName())
-                    .enabled(source.getEnabled())
-                    .connectionUid(mappedUid)
-                    .processDefinitionKey(target.getCode())
-                    .startEventId(source.getStartEventId())
-                    .folderLabel(source.getFolderLabel())
-                    .filterFrom(source.getFilterFrom())
-                    .filterSubject(source.getFilterSubject())
-                    .actionType(source.getActionType())
-                    .targetFormId(targetFormId)
-                    .targetBindingId(targetBindingId)
-                    .systemInitiatorUserId(source.getSystemInitiatorUserId())
-                    .extractionRules(deepCopyMap(source.getExtractionRules()))
-                    .correlation(deepCopyMap(source.getCorrelation()))
-                    .pollIntervalSeconds(source.getPollIntervalSeconds())
-                    .reviewOnMissing(source.getReviewOnMissing())
-                    .build();
-            emailMonitorRuleRepository.save(cloned);
-        }
-    }
-
     private void cloneSubTableViewConfigIfPresent(FormTableBinding sourceBinding, FormTableBinding savedBinding) {
         subTableViewConfigRepository.findByBindingId(sourceBinding.getId()).ifPresent(sourceConfig -> {
             List<SubTableViewField> copiedFields = new ArrayList<>();
@@ -640,56 +602,5 @@ class FunctionUnitCloner {
                 .description(source.getDescription())
                 .build();
         decisionDefinitionRepository.save(cloned);
-    }
-
-    private static String remapRequiredConnectionUid(String sourceUid,
-                                                     Map<String, String> connectionUidMapping,
-                                                     String monitorName) {
-        if (sourceUid == null) {
-            return null;
-        }
-        String mapped = connectionUidMapping.get(sourceUid);
-        if (mapped == null) {
-            throw new DeveloperBusinessException("CLONE_EMAIL_MONITOR_UNMAPPED",
-                    "Email monitor '" + monitorName
-                            + "' references connectionUid that was not cloned: " + sourceUid);
-        }
-        return mapped;
-    }
-
-    private static Long remapOptionalFormId(Long sourceFormId,
-                                            Map<Long, Long> formIdMapping,
-                                            String monitorName) {
-        if (sourceFormId == null) {
-            return null;
-        }
-        Long mapped = formIdMapping.get(sourceFormId);
-        if (mapped == null) {
-            throw new DeveloperBusinessException("CLONE_EMAIL_MONITOR_UNMAPPED",
-                    "Email monitor '" + monitorName
-                            + "' references targetFormId that was not cloned: " + sourceFormId);
-        }
-        return mapped;
-    }
-
-    private static String remapOptionalBindingId(String targetBindingId,
-                                                 Map<Long, Long> bindingIdMapping,
-                                                 String monitorName) {
-        if (targetBindingId == null) {
-            return null;
-        }
-        try {
-            long oldBindingId = Long.parseLong(targetBindingId);
-            Long mappedBindingId = bindingIdMapping.get(oldBindingId);
-            if (mappedBindingId == null) {
-                throw new DeveloperBusinessException("CLONE_EMAIL_MONITOR_UNMAPPED",
-                        "Email monitor '" + monitorName
-                                + "' references targetBindingId that was not cloned: " + targetBindingId);
-            }
-            return String.valueOf(mappedBindingId);
-        } catch (NumberFormatException e) {
-            // Non-numeric binding ids are kept as-is (not remapped by Long maps).
-            return targetBindingId;
-        }
     }
 }

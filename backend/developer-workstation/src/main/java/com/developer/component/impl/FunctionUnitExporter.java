@@ -208,12 +208,12 @@ public class FunctionUnitExporter {
         }
 
         List<Map<String, Object>> monitors = emailMonitorRuleRepository
-                .findByFunctionUnitIdAndStartEventIdIsNotNull(functionUnitId).stream()
+                .findByFunctionUnitIdOrderByNameAsc(functionUnitId).stream()
                 .map(this::serializeMonitorRule)
                 .toList();
-        if (!monitors.isEmpty()) {
-            payload.put("emailMonitors", monitors);
-        }
+        // Always write the key (even []) so rollback can distinguish "explicitly empty"
+        // from legacy snapshots that omit the field entirely.
+        payload.put("emailMonitors", monitors);
 
         // Always write the key (even []) so rollback can distinguish "explicitly empty"
         // from legacy snapshots that omit the field entirely.
@@ -378,10 +378,10 @@ public class FunctionUnitExporter {
                 connectionIndex++;
             }
 
-            // Export runtime email monitor bindings only (Start Event triggers; templates stay in DW).
+            // Export all email monitor rules (templates + Start Event bindings).
             int monitorIndex = 0;
             for (EmailMonitorRule rule : emailMonitorRuleRepository
-                    .findByFunctionUnitIdAndStartEventIdIsNotNull(functionUnitId)) {
+                    .findByFunctionUnitIdOrderByNameAsc(functionUnitId)) {
                 String fileName = "email-monitors/monitor_" + monitorIndex + ".json";
                 byte[] data = objectMapper.writeValueAsBytes(serializeMonitorRule(rule));
                 fileContents.put(fileName, data);
@@ -731,6 +731,7 @@ public class FunctionUnitExporter {
 
     private Map<String, Object> serializeMonitorRule(EmailMonitorRule rule) {
         Map<String, Object> map = new HashMap<>();
+        map.put("ruleId", rule.getId());
         map.put("ruleUid", rule.getRuleUid());
         map.put("name", rule.getName());
         map.put("enabled", rule.getEnabled());

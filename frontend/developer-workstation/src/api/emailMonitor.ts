@@ -3,8 +3,20 @@ import { functionUnitAxios } from './functionUnit'
 /** One main-table field extraction rule (mirrors backend EmailExtractionSpec.FieldRule). */
 export interface ExtractionFieldRule {
   target: string
-  source: 'SUBJECT' | 'TEXT' | 'HTML' | 'TEXT_AND_HTML' | 'HEADER' | 'CONST'
-  type: 'CONST' | 'LABEL' | 'BETWEEN' | 'REGEX' | 'HEADER'
+  source:
+    | 'SUBJECT'
+    | 'FROM'
+    | 'TO'
+    | 'CC'
+    | 'REPLY_TO'
+    | 'DATE'
+    | 'MESSAGE_ID'
+    | 'TEXT'
+    | 'HTML'
+    | 'TEXT_AND_HTML'
+    | 'HEADER'
+    | 'CONST'
+  type: 'DIRECT' | 'CONST' | 'LABEL' | 'BETWEEN' | 'REGEX' | 'HEADER'
   value?: string
   label?: string
   before?: string
@@ -36,6 +48,11 @@ export interface ExtractionSubTableRule {
 export interface ExtractionSampleEmail {
   subject?: string
   from?: string
+  to?: string
+  cc?: string
+  replyTo?: string
+  date?: string
+  messageId?: string
   text?: string
   html?: string
 }

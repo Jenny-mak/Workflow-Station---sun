@@ -2,16 +2,7 @@ package com.developer.component.impl;
 
 import com.developer.entity.EmailMonitorRule;
 import com.developer.entity.FunctionUnit;
-import com.developer.repository.ActionDefinitionRepository;
-import com.developer.repository.DecisionDefinitionRepository;
 import com.developer.repository.EmailMonitorRuleRepository;
-import com.developer.repository.FormDefinitionRepository;
-import com.developer.repository.FormTableBindingRepository;
-import com.developer.repository.LinkFormComponentRepository;
-import com.developer.repository.SubTableViewConfigRepository;
-import com.developer.repository.TableDefinitionRepository;
-import com.developer.repository.TableRelationRepository;
-import com.developer.validation.DmnXmlParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,7 +17,6 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,24 +29,11 @@ class VersionRollbackParityTest {
     @Mock
     private EmailMonitorRuleRepository emailMonitorRuleRepository;
 
-    private FunctionUnitImportWriter importWriter;
+    private EmailMonitorRulePortability monitorPortability;
 
     @BeforeEach
     void setUp() {
-        importWriter = new FunctionUnitImportWriter(
-                mock(TableDefinitionRepository.class),
-                mock(FormDefinitionRepository.class),
-                mock(ActionDefinitionRepository.class),
-                mock(DecisionDefinitionRepository.class),
-                mock(com.developer.repository.EmailConnectionRepository.class),
-                emailMonitorRuleRepository,
-                mock(com.developer.repository.EmailTemplateRepository.class),
-                mock(FormTableBindingRepository.class),
-                mock(LinkFormComponentRepository.class),
-                mock(TableRelationRepository.class),
-                mock(SubTableViewConfigRepository.class),
-                mock(DmnXmlParser.class),
-                new ObjectMapper());
+        monitorPortability = new EmailMonitorRulePortability(emailMonitorRuleRepository, new ObjectMapper());
     }
 
     @Test
@@ -89,7 +66,11 @@ class VersionRollbackParityTest {
         when(emailMonitorRuleRepository.save(any(EmailMonitorRule.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        importWriter.importEmailMonitorRule(functionUnit, ruleData, formIdMapping, bindingIdMapping);
+        monitorPortability.importRule(
+                functionUnit,
+                ruleData,
+                new EmailMonitorRulePortability.MonitorImportMaps(
+                        formIdMapping, bindingIdMapping, Map.of("conn-uid-1", "conn-uid-1"), Map.of()));
 
         ArgumentCaptor<EmailMonitorRule> captor = ArgumentCaptor.forClass(EmailMonitorRule.class);
         verify(emailMonitorRuleRepository).save(captor.capture());

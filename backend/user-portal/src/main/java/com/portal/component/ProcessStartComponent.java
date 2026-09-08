@@ -14,7 +14,6 @@ import com.portal.repository.ProcessInstanceRepository;
 import com.portal.service.PortalWorkspaceAuthService;
 import com.portal.service.ProcessAssigneeSnapshot;
 import com.portal.util.BpmnInitiatorTaskDetection;
-import com.portal.util.SystemAuditFieldFiller;
 import com.portal.service.UserDisplayNameResolver;
 import com.platform.common.i18n.I18nService;
 import com.platform.common.util.ApiResponseBodyUnwrap;
@@ -68,8 +67,7 @@ public class ProcessStartComponent {
     private final RestTemplate restTemplate;
     private final JdbcTemplate jdbcTemplate;
     private final MeetingParticipantVariablesPersistence meetingParticipantVariablesPersistence;
-    private final ProcessSubTablePrimaryKeyEnricherComponent processSubTablePrimaryKeyEnricherComponent;
-    private final ComputedFieldRecalculator computedFieldRecalculator;
+    private final ProcessStartFormEnricherComponent processStartFormEnricherComponent;
     private final OwnerFieldComponent ownerFieldComponent;
     private final TaskFormComponent taskFormComponent;
     private final UserDisplayNameResolver userDisplayNameResolver;
@@ -87,28 +85,6 @@ public class ProcessStartComponent {
             changeHistorySubmissionFilter = filter;
         }
         return filter;
-    }
-
-    /** Lazy: stamps the derived Request ID; field-injected to keep ctor arity stable for tests. */
-    @Lazy
-    @Autowired
-    private RequestIdEnricher requestIdEnricher;
-
-    private RequestIdEnricher requestIdEnricher() {
-        RequestIdEnricher r = requestIdEnricher;
-        if (r == null) {
-            r = new RequestIdEnricher(jdbcTemplate, new ObjectMapper(), processInstanceRepository);
-            requestIdEnricher = r;
-        }
-        return r;
-    }
-
-    /**
-     * Recompute the derived Request ID server-side, overwriting whatever the client sent.
-     * See {@link RequestIdEnricher#stampRequestId(String, Map)} for why the server owns the value.
-     */
-    private void stampRequestId(String functionUnitCode, Map<String, Object> variables) {
-        requestIdEnricher().stampRequestId(functionUnitCode, variables);
     }
 
     /**
@@ -191,6 +167,20 @@ public class ProcessStartComponent {
     // confined to the
     // short tx() blocks; all HTTP runs connection-free. See txTemplate javadoc.
     public ProcessInstanceInfo startProcess(String userId, String processKey, ProcessStartRequest request) {
+        return startProcess(userId, processKey, request, false);
+    }
+
+    /**
+     * Service-to-service start (email monitor). Same enrich / first-task / history path as Portal
+     * start, without JWT workspace or per-user Function Unit access checks.
+     */
+    public ProcessInstanceInfo startProcessFromInternal(
+            String userId, String processKey, ProcessStartRequest request) {
+        return startProcess(userId, processKey, request, true);
+    }
+
+    private ProcessInstanceInfo startProcess(
+            String userId, String processKey, ProcessStartRequest request, boolean internal) {
         if (processKey == null || processKey.isEmpty()) {
             throw new IllegalArgumentException("Process key cannot be empty");
         }
@@ -198,7 +188,7 @@ public class ProcessStartComponent {
             throw new IllegalArgumentException("User ID cannot be empty");
         }
 
-        ActiveCatalogPin pin = resolveActiveCatalogPin(userId, processKey);
+        ActiveCatalogPin pin = resolveActiveCatalogPin(userId, processKey, internal);
 
         LoadedStartDefinition def = loadProcessDefinitionForStart(pin, processKey);
 
@@ -217,18 +207,13 @@ public class ProcessStartComponent {
         if ("fu-20260403-a1b2c5".equals(pin.code())) {
             variables.put("participant_assigner_user_id", userId);
         }
-        applyWorkspaceContextVariables(userId, variables);
-        processSubTablePrimaryKeyEnricherComponent.allocateMissingPrimaryKeysInVariables(pin.code(), variables);
-        // Owner fields: Creator uses startUserId; Current Assignee waits for the
-        // first-task snapshot written after persist.
-        ownerFieldComponent.applyOnSubmit(pin.code(),
-                new OwnerFieldComponent.OwnerWriteContext(userId, userId, null, null, null), variables);
-        // System audit fields are platform-managed: written at real insert regardless of
-        // Form Design canvas (audit widgets are stripped from the designer by design).
+        if (internal) {
+            applyWorkspaceContextForInternalStart(userId, variables);
+        } else {
+            applyWorkspaceContextVariables(userId, variables);
+        }
+        processStartFormEnricherComponent.enrichOnInsert(pin.code(), userId, variables);
         String startUserDisplayName = userDisplayNameResolver.resolve(userId);
-        SystemAuditFieldFiller.fillOnInsert(variables, startUserDisplayName);
-        computedFieldRecalculator.recalculate(pin.code(), variables);
-        stampRequestId(pin.code(), variables);
         Map<String, Object> userChanges = changeHistorySubmissionFilter().filterProcessSubmission(
                 pin.code(), submittedSnapshot, variables);
         Map<String, Object> data;
@@ -317,7 +302,7 @@ public class ProcessStartComponent {
         variables.put("functionUnitCode", catalogCode);
     }
 
-    private ActiveCatalogPin resolveActiveCatalogPin(String userId, String processKey) {
+    private ActiveCatalogPin resolveActiveCatalogPin(String userId, String processKey, boolean internal) {
         Optional<ActiveCatalogPin> activePinOpt = fetchActiveCatalogForStart(processKey);
         if (activePinOpt.isEmpty()) {
             throw new IllegalStateException(
@@ -332,7 +317,9 @@ public class ProcessStartComponent {
                     "Portal startable version mismatch. Please refresh the process list and try again");
         }
 
-        functionUnitAccessComponent.checkFunctionUnitAccess(userId, pin.catalogId());
+        if (!internal) {
+            functionUnitAccessComponent.checkFunctionUnitAccess(userId, pin.catalogId());
+        }
         return pin;
     }
 
@@ -461,6 +448,26 @@ public class ProcessStartComponent {
             // SHA-256 is always present on a JRE; fall back to identity hash rather than
             // fail the start.
             return Integer.toHexString(java.util.Objects.hashCode(s));
+        }
+    }
+
+    /**
+     * Email / internal starts have no JWT. Apply BU only when the initiator has exactly one
+     * workspace; multiple memberships are left unset rather than guessed.
+     */
+    private void applyWorkspaceContextForInternalStart(String userId, Map<String, Object> variables) {
+        List<PortalWorkspaceAuthService.WorkspaceContextRow> wctx = portalWorkspaceAuthService
+                .listWorkspaceContexts(userId);
+        if (wctx.size() == 1) {
+            String bu = wctx.get(0).getBusinessUnitId();
+            if (bu != null && !bu.isBlank()) {
+                variables.put("activeBusinessUnitId", bu.trim());
+            }
+            return;
+        }
+        if (wctx.size() > 1) {
+            log.warn("Internal process start: initiator has {} workspaces; leaving activeBusinessUnitId unset",
+                    wctx.size());
         }
     }
 

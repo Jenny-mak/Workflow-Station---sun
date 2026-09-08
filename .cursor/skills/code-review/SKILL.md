@@ -79,7 +79,7 @@ IDE 无红线或「理论上能编译」不能代替命令输出。
 | 可部署代码/配置 | `debug-mode-docker-workflow`；配置同步相关再加 `docker-k8s-config-sync` |
 | 可见 UI | skill `verify-ui-fix-with-screenshot` + `frontend-screenshot-verification` · `portal-design-parity`（Portal↔DW） · `form-preview-fk-pk-runtime`（FK/PK） · skill `portal-dialog-form-labels`（弹窗表单） · `i18n-rules` |
 | i18n key 增改 | `i18n-rules`（en / zh-CN / zh-TW 同更） |
-| FU export/import/clone/snapshot | skill `function-unit-portability` |
+| FU export/import/clone/snapshot（含 Admin parser/sync、Deploy ZIP） | skill `function-unit-portability`（消费者矩阵：DW **和** Admin，禁止只改一侧） |
 | FU version/rollback | skill `function-unit-version-rollback` |
 | View access | skill `view-access-control` |
 | Portal MI | `portal-mi-subtable-my-request` + `performance-change-safety` |
@@ -107,7 +107,7 @@ IDE 无红线或「理论上能编译」不能代替命令输出。
 
 - **通用性**：由元数据/schema/binding/稳定 code 或运行时上下文驱动；禁止硬编码具体 FU/form/table/field/process key 决定业务语义。
 - **双样本**：运行验证至少覆盖「新建 FU」+「已有或导入 FU」。若环境无法跑双样本，但静态审查能证明无硬编码且生命周期点已同步 → 通用性可写「静态 PASS」；运行证据标未验证，结论最多 `CONDITIONAL`。仅单一报告 FU / 固定 seed 通过 → 不得判运行 PASS。
-- **生命周期**：Save/Load · Export · Import · Clone · Version/Rollback · Admin JSON import · Admin deploy import · Deploy/Activate · Portal backend · Portal frontend — 每项「已同步+证据」或「有依据 N/A」；不得只改 Admin 两条导入链之一。
+- **生命周期**：Save/Load · Export · Import · Clone · Version/Rollback · Admin JSON import · Admin deploy import · Deploy/Activate · Portal backend · Portal frontend — 每项「已同步+证据」或「有依据 N/A」；不得只改 Admin 两条导入链之一；**不得只改 DW 而不扫 Admin parser/`*SyncComponent`/Engine**（见 skill `function-unit-portability` 消费者矩阵）。
 
 ## 5. 安全、隐私与增量敏感信息
 

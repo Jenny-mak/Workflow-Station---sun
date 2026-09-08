@@ -27,6 +27,23 @@ describe('useProcessFormSubBindings field mapping', () => {
     expect(options.map((o: SubTableFieldOption) => o.fieldName)).toEqual(['case_number', 'legal_hold'])
   })
 
+  it('excludes computed and audit columns from email mapping', () => {
+    const table: TableDefinition = {
+      id: 113,
+      tableName: 'HMDC_Case',
+      tableType: 'MAIN',
+      fieldDefinitions: [
+        field('title'),
+        { ...field('total'), isComputed: true },
+        field('created_at'),
+        field('created_by'),
+      ],
+    } as TableDefinition
+
+    const options = extractMappableFields(table, true)
+    expect(options.map((o) => o.fieldName)).toEqual(['title'])
+  })
+
   it('excludes primary key on sub-table bindings by default', () => {
     const table: TableDefinition = {
       id: 271,

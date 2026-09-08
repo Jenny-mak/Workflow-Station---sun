@@ -192,6 +192,48 @@ class EmailFieldExtractorTest {
     }
 
     @Test
+    void directEmailAttributesMapToMainTableFields() {
+        EmailMessage email = new EmailMessage(
+                "<msg-001@bank.com>",
+                "Case notice",
+                "Sender Name <sender@bank.com>",
+                "body",
+                null,
+                Map.of(
+                        "to", "Ops Team <ops@bank.com>",
+                        "cc", "audit@bank.com",
+                        "reply-to", "noreply@bank.com",
+                        "date", "2026-09-08T08:30:00Z",
+                        "message-id", "<msg-001@bank.com>"));
+
+        EmailExtractionSpec spec = new EmailExtractionSpec();
+        spec.setFields(List.of(
+                directRule("sender_email", Source.FROM),
+                directRule("recipient_email", Source.TO),
+                directRule("cc_list", Source.CC),
+                directRule("reply_address", Source.REPLY_TO),
+                directRule("sent_at", Source.DATE),
+                directRule("provider_message_id", Source.MESSAGE_ID),
+                directRule("email_subject", Source.SUBJECT)));
+
+        ExtractionResult result = EmailFieldExtractor.extract(email, spec);
+
+        assertThat(result.getFields())
+                .containsEntry("sender_email", "Sender Name <sender@bank.com>")
+                .containsEntry("recipient_email", "Ops Team <ops@bank.com>")
+                .containsEntry("cc_list", "audit@bank.com")
+                .containsEntry("reply_address", "noreply@bank.com")
+                .containsEntry("sent_at", "2026-09-08T08:30:00Z")
+                .containsEntry("provider_message_id", "<msg-001@bank.com>")
+                .containsEntry("email_subject", "Case notice");
+    }
+
+    private FieldRule directRule(String target, Source source) {
+        FieldRule rule = field(target, source, RuleType.DIRECT);
+        return rule;
+    }
+
+    @Test
     void specDeserializesFromJson() throws Exception {
         String json = """
                 {

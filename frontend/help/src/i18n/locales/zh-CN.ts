@@ -337,7 +337,7 @@ export default {
     flowTitle: '操作顺序',
     flow1: '建入站连接',
     flow2: '建监听模板',
-    flow3: '把样例文本绑到主表字段',
+    flow3: '把样例正文和邮件属性绑到主表字段',
     flow4: '在开始事件上打开入站邮件触发',
     flow5: '保存开始事件绑定，再 Deploy',
     inboundFigure: '编辑连接：方向为入站（监听）。填邮箱和 IMAP 登录；主机来自系统配置。',
@@ -377,23 +377,79 @@ export default {
     fFromNotHere: '不在此表单。对话框提示：发件人/主题过滤配在每个开始事件上，不配在这里。',
     fSubjectNotHere: '不在此表单。主题过滤只配在开始事件上。',
     extractSample: '从邮件主题填入的主表字段（采购申请示例）。',
+    extractSampleTitle: '样例邮件页签',
+    extractSampleBody:
+      '在第一个页签粘贴真实样例。主题、发件人、收件人、抄送、回复地址、发送时间和 Message-ID 用于预览「邮件属性」映射；纯文本用于「绑定选中」和正文解析；可选 HTML 仅用于子表映射。',
+    extractSampleFigure:
+      '样例邮件页签：主题、收发件人、发送时间、Message-ID 与正文（截图中邮箱与账号已打码）。',
+    extractSampleCatalogLead: '字段目录 — 监听对话框「样例邮件」页签上的每一个控件。',
+    extractFieldMappingTitle: '字段映射 — 邮件属性与正文',
+    extractFieldMappingBody:
+      '在「字段映射」页签选择目标字段（主表列）和来源。邮件属性（From、To、主题等）以方式「直接映射（整值）」写入整段头字段；正文来源仍用 LABEL、BETWEEN、REGEX。公式、审计及平台填写的 Owner 列不会出现在目标字段列表中。',
+    extractFieldMappingFigure:
+      '字段映射页签：目标字段、来源（邮件属性 / 正文分组）、From 的直接映射与预览列（截图中个人邮箱已打码）。',
+    extractFieldCatalogLead: '字段目录 — 监听对话框「字段映射」页签上的每一个控件。',
+    extractAttributeSample:
+      '示例：来源选「发件人 (From)」→ 主表 sender_email；运行时写入 IMAP 返回的原始 From 字符串（可含显示名与地址）。',
+    extractSubTableTitle: '子表（HTML 表格）页签',
+    extractSubTableBody:
+      '可选第三个页签。把邮件里的一张 HTML 表映射到表单子表（一行一条记录）。若绑定列表为空，请先在主流程表单添加子表。',
+    extractSubTableCatalogLead: '字段目录 —「子表（HTML 表格）」页签上的每一个控件。',
     extractTitle: '字段提取（零代码）',
     extractBody:
       '粘贴真实样例主题和纯文本正文。选中一段文字，再「绑定选中」到主表字段。需要时勾选必填。可选 HTML 正文用于表格：把一封邮件里的 HTML 表映射到子表（一行一条记录）。若子表绑定列表为空，先在主流程表单上加子表。',
     extractCatalogLead: '字段目录 — 监听对话框里的「字段提取（零代码）」。',
     fSampleTab: '第一个页签。放你用来绑定的样例邮件。不会发出去。',
-    fSampleSubject: '粘贴真实样例主题，再选中文字去绑定。空白则主题映射没有预览。',
-    fSampleFrom: '选填。给 Header 映射用的样例发件人。空白则基于 From 的规则预览为空。',
+    fSampleSubject:
+      '样例主题。用于预览「主题」映射（直接映射整行主题，或在主题上用 LABEL/BETWEEN/REGEX 解析）。空白则主题映射预览为空。',
+    fSampleFrom:
+      '样例 From 头（发件人）。用于预览「发件人」属性映射及旧版 Header/From 规则。空白则 From 预览为空。运行时按 IMAP 原样写入。',
+    fSampleTo:
+      '样例 To 头（主收件人）。多个收件人用逗号分隔。用于 To 属性预览。空白则 To 预览为空。',
+    fSampleCc:
+      '样例 Cc 头。抄送收件人，逗号分隔。用于 Cc 属性预览。空白则 Cc 预览为空。',
+    fSampleReplyTo:
+      '样例 Reply-To（若邮件有）。用于 Reply-To 属性预览。空白则预览为空；运行时无该头则字段为空。',
+    fSampleDate:
+      '样例发送时间（可从运行日志复制 ISO-8601）。用于「发送时间」映射预览。空白则日期预览为空。',
+    fSampleMessageId:
+      '样例 Message-ID（或 imap-uid 回退值）。用于 Message-ID 映射预览，适合追踪/关联列。空白则预览为空。',
     fSampleText: '粘贴纯文本正文，选中一段再绑定选中。空白则正文映射没有预览。',
     fSampleHtml: '选填。给表格映射用的 HTML。空白则「子表（HTML 表格）」没有可映射内容。',
-    fFieldMapping: '第二个页签。把样例里的值复制到主表字段的行。',
-    fAddField: '加一行空映射。然后设目标字段、来源、方法和规则。',
+    fFieldMapping: '第二个页签。把样例或运行时邮件中的值写入主表字段。',
+    fAddField: '加一行空映射。然后设目标字段、来源，正文映射还需方式与规则。',
     fBindSelection: '把当前选中的样例文字写入所选映射（前后文本或标签）。未选中时无效果。',
-    fTargetField: '每行必填。要填入的主表列。列表为空：主表没有可映射字段。',
-    fSource: '从哪里读。选项：主题；文本 + HTML（推荐）；文本 + HTML；仅 HTML；邮件头；常量。',
-    fMethod: '如何截取值。选项：LABEL、BETWEEN、REGEX、CONST、HEADER（界面显示这些代码）。',
+    fTargetField:
+      '每行必填。流程启动时要填入的主表列（字段名须与流程表单一致）。列表为空：主表没有可映射字段（公式/审计列已隐藏）。',
+    fSourceGroupAttributes:
+      '来源下拉分组 — 读取整段邮件头/属性。From、To、Cc、Reply-To、发送时间、Message-ID 自动使用「直接映射（整值）」。',
+    fSourceGroupBody:
+      '来源下拉分组 — 读取正文或固定常量。配合 LABEL、BETWEEN、REGEX、CONST 或高级「邮件头」。',
+    fSourceSubject:
+      '邮件属性 — 整段主题（直接映射），或在主题文本上用 LABEL/BETWEEN/REGEX 截取部分。',
+    fSourceFrom:
+      '邮件属性 — 原始 From 头（IMAP 返回的发件人显示名与地址）。方式锁定为直接映射。可映射到 sender_email 等文本主表字段。',
+    fSourceTo:
+      '邮件属性 — 原始 To 头（所有主收件人，逗号分隔）。直接映射。提供商未返回 To 时为空。',
+    fSourceCc:
+      '邮件属性 — 原始 Cc 头。直接映射。无抄送时为空。',
+    fSourceReplyTo:
+      '邮件属性 — 邮件中的 Reply-To 头。直接映射。无 Reply-To 时为空。',
+    fSourceDate:
+      '邮件属性 — 邮件提供商记录的发送时间（可用时为 ISO-8601）。直接映射。按字段类型映射到文本或日期列。',
+    fSourceMessageId:
+      '邮件属性 — Message-ID 头；缺失时为 imap-uid:{uid}。直接映射。可用于追踪/幂等列；也会写入流程业务元数据。',
+    fSourceTextAndHtml:
+      '正文来源 — 纯文本加 HTML 推导文本（推荐，适合转发/HTML-only 邮件）。配合 LABEL、BETWEEN 或 REGEX。',
+    fSource:
+      '从哪里读。「邮件属性」：主题、发件人、收件人、抄送、Reply-To、发送时间、Message-ID。「正文/常量」：正文+HTML、仅 HTML、邮件头（高级）、常量。',
+    fMethodDirect:
+      '方式 — 直接映射（整值）。From、To、Cc、Reply-To、发送时间、Message-ID 自动使用。主题也可选直接映射整行。无需填规则列。',
+    fMethodParse:
+      '方式 — LABEL（同行标签后文本）、BETWEEN（两锚点之间）、REGEX（正则）、CONST（固定值）、HEADER（旧版头名）。用于正文或在主题上解析。',
+    fMethod: '如何取值。邮件属性用直接映射；正文用 LABEL、BETWEEN、REGEX、CONST 或 HEADER。',
     fRule:
-      '随方法变化：LABEL 填标签如 Case No；BETWEEN 填前文和后文；REGEX 填模式；CONST 填固定值；HEADER 填头名如 From。空白则预览为空。',
+      '随方式变化：直接映射无需规则；LABEL 填标签；BETWEEN 填前后文；REGEX 填模式；CONST 填固定值；HEADER 填头名（旧版，建议用邮件属性）。直接映射时预览显示整段属性值。',
     fRequired: '打开：缺值时按「转人工复核」处理。关闭：该字段可空，流程仍可启动。',
     fPreview: '只读。显示规则从样例里抽出的值。空表示规则还没匹配上。',
     fSubTableTab: '第三个页签。把邮件里的一张 HTML 表映射到表单子表（一行一条记录）。',

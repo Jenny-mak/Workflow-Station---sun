@@ -2,7 +2,6 @@ package com.portal.properties;
 
 import com.portal.client.WorkflowEngineClient;
 import com.portal.component.ChangeHistoryComponent;
-import com.portal.component.ComputedFieldRecalculator;
 import com.portal.component.FunctionUnitAccessComponent;
 import com.portal.component.MiOverlayComponent;
 import com.portal.component.ProcessApplicationQueryComponent;
@@ -92,8 +91,7 @@ class ProcessOperationProperties {
                 restTemplate,
                 jdbcTemplate,
                 Mockito.mock(com.portal.component.MeetingParticipantVariablesPersistence.class),
-                Mockito.mock(com.portal.component.ProcessSubTablePrimaryKeyEnricherComponent.class),
-                Mockito.mock(ComputedFieldRecalculator.class),
+                Mockito.mock(com.portal.component.ProcessStartFormEnricherComponent.class),
                 Mockito.mock(com.portal.component.OwnerFieldComponent.class),
                 Mockito.mock(TaskFormComponent.class),
                 userDisplayNameResolver,

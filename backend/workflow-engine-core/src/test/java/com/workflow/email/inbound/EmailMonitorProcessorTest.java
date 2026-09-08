@@ -2,8 +2,6 @@ package com.workflow.email.inbound;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.client.AdminCenterClient;
-import com.workflow.component.ProcessEngineComponent;
-import com.workflow.dto.request.StartProcessRequest;
 import com.workflow.dto.response.ProcessInstanceResult;
 import com.workflow.email.extract.EmailMessage;
 import com.workflow.email.inbound.entity.ProcessedEmailMessage;
@@ -12,6 +10,9 @@ import com.workflow.email.inbound.repository.ProcessedEmailMessageRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.util.List;
 import java.util.Map;
@@ -25,13 +26,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * Unit tests for {@link EmailMonitorProcessor}: review gate on missing required fields,
- * happy-path START_PROCESS with mapped variables, and idempotency on duplicate messageId.
- */
 class EmailMonitorProcessorTest {
 
-    private ProcessEngineComponent processEngineComponent;
     private ProcessedEmailMessageRepository processedRepository;
     private EmailMonitorPortalSyncComponent portalSyncComponent;
     private AdminCenterClient adminCenterClient;
@@ -39,15 +35,16 @@ class EmailMonitorProcessorTest {
 
     @BeforeEach
     void setUp() {
-        processEngineComponent = mock(ProcessEngineComponent.class);
         processedRepository = mock(ProcessedEmailMessageRepository.class);
         portalSyncComponent = mock(EmailMonitorPortalSyncComponent.class);
         adminCenterClient = mock(AdminCenterClient.class);
         when(adminCenterClient.resolveFunctionUnitCodeById(eq("fu-1")))
                 .thenReturn(Optional.of("FU-MCY"));
+        PlatformTransactionManager txManager = mock(PlatformTransactionManager.class);
+        when(txManager.getTransaction(any(TransactionDefinition.class)))
+                .thenReturn(new SimpleTransactionStatus());
         processor = new EmailMonitorProcessor(
-                processEngineComponent, processedRepository, portalSyncComponent,
-                adminCenterClient, new ObjectMapper());
+                processedRepository, portalSyncComponent, adminCenterClient, new ObjectMapper(), txManager);
     }
 
     private SysEmailMonitorRule rule(Map<String, Object> extractionRules) {
@@ -76,16 +73,16 @@ class EmailMonitorProcessorTest {
         String status = processor.process(rule, email);
 
         assertThat(status).isEqualTo(ProcessedEmailMessage.STATUS_REVIEW);
-        verify(processEngineComponent, never()).startProcess(any());
+        verify(portalSyncComponent, never()).startPortalProcess(any(), any(), any(), any(), any());
         verify(processedRepository).save(any());
     }
 
     @Test
-    void startsProcessWithExtractedVariables() {
+    void startsProcessViaPortalWithExtractedVariables() {
         SysEmailMonitorRule rule = rule(labelRule("case_number", "Case No: ", true));
         EmailMessage email = new EmailMessage("m2", "s", "a@b.com", "Case No: ABC-7", null, Map.of());
 
-        when(processEngineComponent.startProcess(any()))
+        when(portalSyncComponent.startPortalProcess(any(), any(), any(), any(), any()))
                 .thenReturn(ProcessInstanceResult.builder()
                         .processInstanceId("pi-9").success(true).build());
 
@@ -93,17 +90,59 @@ class EmailMonitorProcessorTest {
 
         assertThat(status).isEqualTo(ProcessedEmailMessage.STATUS_STARTED);
 
-        ArgumentCaptor<StartProcessRequest> captor = ArgumentCaptor.forClass(StartProcessRequest.class);
-        verify(processEngineComponent).startProcess(captor.capture());
-        StartProcessRequest sent = captor.getValue();
-        assertThat(sent.getProcessDefinitionKey()).isEqualTo("case_process");
-        assertThat(sent.getBusinessKey()).isEqualTo("email:m2");
-        assertThat(sent.getVariables()).containsEntry("case_number", "ABC-7");
-        assertThat(sent.getVariables()).containsEntry("initiator", "system");
-        assertThat(sent.getVariables()).containsEntry("functionUnitId", "fu-1");
-        assertThat(sent.getVariables()).containsEntry("functionUnitCode", "FU-MCY");
-        assertThat(sent.getVariables()).containsKey("__inboundEmail__");
-        verify(portalSyncComponent).hydratePortalProcessInstanceAsync(org.mockito.ArgumentMatchers.eq("pi-9"), any());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> vars = ArgumentCaptor.forClass(Map.class);
+        verify(portalSyncComponent).startPortalProcess(
+                eq("case_process"), eq("FU-MCY"), eq("system"), eq("email:m2"), vars.capture());
+        assertThat(vars.getValue()).containsEntry("case_number", "ABC-7");
+        assertThat(vars.getValue()).containsEntry("initiator", "system");
+        assertThat(vars.getValue()).containsEntry("functionUnitCode", "FU-MCY");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inbound = (Map<String, Object>) vars.getValue().get("__inboundEmail__");
+        assertThat(inbound).containsEntry("messageId", "m2");
+    }
+
+    @Test
+    void inboundEmailSnapshotIncludesHeadersWhenPresent() {
+        SysEmailMonitorRule rule = rule(labelRule("case_number", "Case No: ", true));
+        Map<String, String> headers = Map.of(
+                "to", "user@example.com",
+                "cc", "cc@example.com",
+                "reply-to", "reply@example.com",
+                "date", "2026-09-08T10:00:00Z");
+        EmailMessage email = new EmailMessage(
+                "m5", "Subject line", "from@example.com", "Case No: X", null, headers);
+
+        when(portalSyncComponent.startPortalProcess(any(), any(), any(), any(), any()))
+                .thenReturn(ProcessInstanceResult.builder()
+                        .processInstanceId("pi-10").success(true).build());
+
+        processor.process(rule, email);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> vars = ArgumentCaptor.forClass(Map.class);
+        verify(portalSyncComponent).startPortalProcess(any(), any(), any(), any(), vars.capture());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inbound = (Map<String, Object>) vars.getValue().get("__inboundEmail__");
+        assertThat(inbound)
+                .containsEntry("to", "user@example.com")
+                .containsEntry("cc", "cc@example.com")
+                .containsEntry("reply-to", "reply@example.com")
+                .containsEntry("date", "2026-09-08T10:00:00Z");
+    }
+
+    @Test
+    void unresolvedFunctionUnitCodeFailsBeforePortalStart() {
+        SysEmailMonitorRule rule = rule(labelRule("case_number", "Case No: ", true));
+        rule.setFunctionUnitId("fu-missing");
+        when(adminCenterClient.resolveFunctionUnitCodeById("fu-missing")).thenReturn(Optional.empty());
+        EmailMessage email = new EmailMessage("m4", "s", "a@b.com", "Case No: ABC-7", null, Map.of());
+
+        String status = processor.process(rule, email);
+
+        assertThat(status).isEqualTo(ProcessedEmailMessage.STATUS_FAILED);
+        verify(portalSyncComponent, never()).startPortalProcess(any(), any(), any(), any(), any());
+        verify(processedRepository).save(any());
     }
 
     @Test
@@ -115,7 +154,7 @@ class EmailMonitorProcessorTest {
         String status = processor.process(rule, email);
 
         assertThat(status).isNull();
-        verify(processEngineComponent, never()).startProcess(any());
+        verify(portalSyncComponent, never()).startPortalProcess(any(), any(), any(), any(), any());
         verify(processedRepository, never()).save(any());
     }
 }

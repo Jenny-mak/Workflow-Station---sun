@@ -1,5 +1,6 @@
 package com.developer.property;
 
+import com.developer.component.impl.EmailMonitorRulePortability;
 import com.developer.component.impl.FunctionUnitComponentImpl;
 import com.developer.component.impl.FunctionUnitImportWriter;
 import com.developer.component.impl.FunctionUnitSnapshotRestorer;
@@ -124,6 +125,7 @@ public class DecisionDesignVersionSnapshotPropertyTest extends DecisionDesignPro
             // Step 2: Restore via FunctionUnitSnapshotRestorer (legacy path)
             FunctionUnitSnapshotRestorer snapshotRestorer = new FunctionUnitSnapshotRestorer(
                     mock(FunctionUnitImportWriter.class),
+                    mock(EmailMonitorRulePortability.class),
                     mock(FormDefinitionRepository.class),
                     mock(ProcessDefinitionRepository.class),
                     mock(ProcessBpmnStaleIdFixer.class),

@@ -337,7 +337,7 @@ export default {
     flowTitle: '操作順序',
     flow1: '建入站連線',
     flow2: '建監聽範本',
-    flow3: '把樣例文字綁到主表欄位',
+    flow3: '把樣例內文與郵件屬性綁到主表欄位',
     flow4: '在開始事件上開啟入站郵件觸發',
     flow5: '儲存開始事件綁定，再 Deploy',
     inboundFigure: '編輯連線：方向為入站（監聽）。填信箱與 IMAP 登入；主機來自系統設定。',
@@ -377,23 +377,79 @@ export default {
     fFromNotHere: '不在此表單。對話框提示：寄件人/主旨過濾設在每個開始事件上，不設在這裡。',
     fSubjectNotHere: '不在此表單。主旨過濾只設在開始事件上。',
     extractSample: '從郵件主旨填入的主表欄位（採購申請示例）。',
+    extractSampleTitle: '樣例郵件頁籤',
+    extractSampleBody:
+      '在第一個頁籤貼上真實樣例。主旨、寄件人、收件人、副本、回覆地址、寄送時間與 Message-ID 用於預覽「郵件屬性」對應；純文字用於「綁定選取」與內文解析；可選 HTML 僅用於子表對應。',
+    extractSampleFigure:
+      '樣例郵件頁籤：主旨、收寄件人、寄送時間、Message-ID 與內文（截圖中信箱與帳號已打碼）。',
+    extractSampleCatalogLead: '欄位目錄 — 監聽對話框「樣例郵件」頁籤上的每一個控制項。',
+    extractFieldMappingTitle: '欄位對應 — 郵件屬性與內文',
+    extractFieldMappingBody:
+      '在「欄位對應」頁籤選擇目標欄位（主表欄）與來源。郵件屬性（From、To、主旨等）以方式「直接對應（整值）」寫入整段標頭；內文來源仍用 LABEL、BETWEEN、REGEX。公式、稽核及平台填寫的 Owner 欄不會出現在目標欄位清單中。',
+    extractFieldMappingFigure:
+      '欄位對應頁籤：目標欄位、來源（郵件屬性 / 內文分組）、From 的直接對應與預覽欄（截圖中個人信箱已打碼）。',
+    extractFieldCatalogLead: '欄位目錄 — 監聽對話框「欄位對應」頁籤上的每一個控制項。',
+    extractAttributeSample:
+      '示例：來源選「寄件人 (From)」→ 主表 sender_email；執行時寫入 IMAP 回傳的原始 From 字串（可含顯示名稱與地址）。',
+    extractSubTableTitle: '子表（HTML 表格）頁籤',
+    extractSubTableBody:
+      '可選第三個頁籤。把郵件裡的一張 HTML 表對應到表單子表（一列一筆紀錄）。若綁定清單為空，請先在主流程表單新增子表。',
+    extractSubTableCatalogLead: '欄位目錄 —「子表（HTML 表格）」頁籤上的每一個控制項。',
     extractTitle: '欄位擷取（零程式碼）',
     extractBody:
       '貼上真實樣例主旨與純文字內文。選取一段文字，再「綁定選取」到主表欄位。需要時勾選必填。可選 HTML 內文用於表格：把一封郵件裡的 HTML 表對應到子表（一列一筆紀錄）。若子表綁定清單為空，先在主流程表單上加子表。',
     extractCatalogLead: '欄位目錄 — 監聽對話框裡的「欄位擷取（零程式碼）」。',
     fSampleTab: '第一個頁籤。放你用來綁定的樣例郵件。不會寄出去。',
-    fSampleSubject: '貼上真實樣例主旨，再選取文字去綁定。空白則主旨對應沒有預覽。',
-    fSampleFrom: '選填。給 Header 對應用的樣例寄件人。空白則基於 From 的規則預覽為空。',
+    fSampleSubject:
+      '樣例主旨。用於預覽「主旨」對應（直接對應整行主旨，或在主旨上用 LABEL/BETWEEN/REGEX 解析）。空白則主旨對應預覽為空。',
+    fSampleFrom:
+      '樣例 From 標頭（寄件人）。用於預覽「寄件人」屬性對應及舊版 Header/From 規則。空白則 From 預覽為空。執行時按 IMAP 原樣寫入。',
+    fSampleTo:
+      '樣例 To 標頭（主收件人）。多位收件人以逗號分隔。用於 To 屬性預覽。空白則 To 預覽為空。',
+    fSampleCc:
+      '樣例 Cc 標頭。副本收件人，逗號分隔。用於 Cc 屬性預覽。空白則 Cc 預覽為空。',
+    fSampleReplyTo:
+      '樣例 Reply-To（若郵件有）。用於 Reply-To 屬性預覽。空白則預覽為空；執行時無該標頭則欄位為空。',
+    fSampleDate:
+      '樣例寄送時間（可從執行紀錄複製 ISO-8601）。用於「寄送時間」對應預覽。空白則日期預覽為空。',
+    fSampleMessageId:
+      '樣例 Message-ID（或 imap-uid 回退值）。用於 Message-ID 對應預覽，適合追蹤/關聯欄。空白則預覽為空。',
     fSampleText: '貼上純文字內文，選取一段再綁定選取。空白則內文對應沒有預覽。',
     fSampleHtml: '選填。給表格對應用的 HTML。空白則「子表（HTML 表格）」沒有可對應內容。',
-    fFieldMapping: '第二個頁籤。把樣例裡的值複製到主表欄位的列。',
-    fAddField: '加一列空對應。然後設目標欄位、來源、方法與規則。',
+    fFieldMapping: '第二個頁籤。把樣例或執行時郵件中的值寫入主表欄位。',
+    fAddField: '加一列空對應。然後設目標欄位、來源，內文對應還需方式與規則。',
     fBindSelection: '把目前選取的樣例文字寫入所選對應（前後文字或標籤）。未選取時無效果。',
-    fTargetField: '每列必填。要填入的主表欄。清單為空：主表沒有可對應欄位。',
-    fSource: '從哪裡讀。選項：主旨；文字 + HTML（建議）；文字 + HTML；僅 HTML；郵件頭；常數。',
-    fMethod: '如何擷取值。選項：LABEL、BETWEEN、REGEX、CONST、HEADER（介面顯示這些代碼）。',
+    fTargetField:
+      '每列必填。流程啟動時要填入的主表欄（欄位名須與流程表單一致）。清單為空：主表沒有可對應欄位（公式/稽核欄已隱藏）。',
+    fSourceGroupAttributes:
+      '來源下拉分組 — 讀取整段郵件標頭/屬性。From、To、Cc、Reply-To、寄送時間、Message-ID 自動使用「直接對應（整值）」。',
+    fSourceGroupBody:
+      '來源下拉分組 — 讀取內文或固定常數。配合 LABEL、BETWEEN、REGEX、CONST 或進階「郵件標頭」。',
+    fSourceSubject:
+      '郵件屬性 — 整段主旨（直接對應），或在主旨文字上用 LABEL/BETWEEN/REGEX 擷取部分。',
+    fSourceFrom:
+      '郵件屬性 — 原始 From 標頭（IMAP 回傳的寄件人顯示名稱與地址）。方式鎖定為直接對應。可對應到 sender_email 等文字主表欄位。',
+    fSourceTo:
+      '郵件屬性 — 原始 To 標頭（所有主收件人，逗號分隔）。直接對應。提供商未回傳 To 時為空。',
+    fSourceCc:
+      '郵件屬性 — 原始 Cc 標頭。直接對應。無副本時為空。',
+    fSourceReplyTo:
+      '郵件屬性 — 郵件中的 Reply-To 標頭。直接對應。無 Reply-To 時為空。',
+    fSourceDate:
+      '郵件屬性 — 郵件提供商記錄的寄送時間（可用時為 ISO-8601）。直接對應。依欄位型別對應到文字或日期欄。',
+    fSourceMessageId:
+      '郵件屬性 — Message-ID 標頭；缺失時為 imap-uid:{uid}。直接對應。可用於追蹤/冪等欄；亦會寫入流程業務中繼資料。',
+    fSourceTextAndHtml:
+      '內文來源 — 純文字加 HTML 推導文字（建議，適合轉寄/HTML-only 郵件）。配合 LABEL、BETWEEN 或 REGEX。',
+    fSource:
+      '從哪裡讀。「郵件屬性」：主旨、寄件人、收件人、副本、Reply-To、寄送時間、Message-ID。「內文/常數」：內文+HTML、僅 HTML、郵件標頭（進階）、常數。',
+    fMethodDirect:
+      '方式 — 直接對應（整值）。From、To、Cc、Reply-To、寄送時間、Message-ID 自動使用。主旨也可選直接對應整行。無需填規則欄。',
+    fMethodParse:
+      '方式 — LABEL（同行標籤後文字）、BETWEEN（兩錨點之間）、REGEX（正則）、CONST（固定值）、HEADER（舊版標頭名）。用於內文或在主旨上解析。',
+    fMethod: '如何取值。郵件屬性用直接對應；內文用 LABEL、BETWEEN、REGEX、CONST 或 HEADER。',
     fRule:
-      '隨方法變化：LABEL 填標籤如 Case No；BETWEEN 填前文與後文；REGEX 填模式；CONST 填固定值；HEADER 填頭名如 From。空白則預覽為空。',
+      '隨方式變化：直接對應無需規則；LABEL 填標籤；BETWEEN 填前後文；REGEX 填模式；CONST 填固定值；HEADER 填標頭名（舊版，建議用郵件屬性）。直接對應時預覽顯示整段屬性值。',
     fRequired: '開啟：缺值時依「轉人工覆核」處理。關閉：該欄位可空，流程仍可啟動。',
     fPreview: '唯讀。顯示規則從樣例裡抽出的值。空表示規則還沒匹配上。',
     fSubTableTab: '第三個頁籤。把郵件裡的一張 HTML 表對應到表單子表（一列一筆紀錄）。',

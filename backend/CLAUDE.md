@@ -12,6 +12,7 @@
 @../.cursor/rules/backend-architecture.mdc
 @../.cursor/rules/docker-k8s-config-sync.mdc
 @../.cursor/rules/form-preview-fk-pk-runtime.mdc
+@../.cursor/rules/function-unit-portability-consumers.mdc
 @../.cursor/rules/jpa-entity.mdc
 @../.cursor/rules/json-row-storage-no-physical-tables.mdc
 @../.cursor/rules/testing.mdc

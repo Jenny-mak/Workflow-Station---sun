@@ -233,6 +233,65 @@ try {
 
   await clickTab('Email Monitors')
   await shot('dw-email-monitors.png', page.locator('.designer-workspace'))
+  const editMonitor = page.locator('.email-monitor-designer .el-table').getByRole('button', { name: 'Edit' }).first()
+  if (await editMonitor.count()) {
+    await editMonitor.click()
+    const monitorDlg = page.locator('.el-dialog').filter({ hasText: 'Field Extraction' }).last()
+    await monitorDlg.waitFor({ state: 'visible', timeout: 15000 })
+    await page.waitForTimeout(600)
+    await clickTab('Sample Email')
+    await page.evaluate(() => {
+      const dlg = document.querySelector('.el-dialog:last-of-type')
+      if (!dlg) return
+      const setInput = (label, value) => {
+        const item = [...dlg.querySelectorAll('.el-form-item')].find((el) =>
+          el.querySelector('.el-form-item__label')?.textContent?.trim().startsWith(label),
+        )
+        const input = item?.querySelector('input, textarea')
+        if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+          input.value = value
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+      }
+      setInput('Subject', 'Vendor quote for help_pr — CaseNo: 2026001')
+      setInput('From', 'Vendor Desk <vendor@example.com>')
+      setInput('To', 'Procurement Team <procurement@example.com>')
+      setInput('Cc', 'audit@example.com')
+      setInput('Reply-To', 'noreply@example.com')
+      setInput('Sent date', '2026-09-08T08:30:00Z')
+      setInput('Message-ID', '<help-demo-msg@example.com>')
+      setInput('Plain Text Body', 'Case No: 2026001\nAmount: HKD 1,200.00')
+    })
+    await page.waitForTimeout(400)
+    await shot('dw-email-extraction-sample.png', monitorDlg)
+    await clickTab('Field Mapping')
+    await page.evaluate(() => {
+      const dlg = document.querySelector('.el-dialog:last-of-type')
+      if (!dlg) return
+      const addBtn = [...dlg.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Add Field')
+      addBtn?.click()
+    })
+    await page.waitForTimeout(800)
+    await page.evaluate(() => {
+      const dlg = document.querySelector('.el-dialog:last-of-type')
+      if (!dlg) return
+      const row = dlg.querySelector('.el-table__body tr:last-child')
+      if (!row) return
+      const selects = row.querySelectorAll('.el-select')
+      if (selects.length >= 2) {
+        selects[1].click()
+      }
+    })
+    await page.waitForTimeout(300)
+    const fromOpt = page.getByRole('option', { name: 'From (sender)', exact: true })
+    if (await fromOpt.count()) {
+      await fromOpt.click()
+    }
+    await page.waitForTimeout(500)
+    await shot('dw-email-field-mapping.png', monitorDlg)
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(400)
+  }
 
   await clickTab('Process Design')
   await page.waitForTimeout(1500)

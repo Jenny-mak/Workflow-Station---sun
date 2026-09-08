@@ -3405,3 +3405,65 @@
     截图 To Do Claimed By、Help #leader、Admin 审计 Change Type 含 Claim/Reassign。
     本环境待办无 BU Role 池行，未点到 Reassign 弹窗。
 
+- id: "1604"
+  status: fixed
+  fixed_at: "2026-09-08"
+  severity: major
+  category: bug
+  summary: "Email START_PROCESS skipped Portal start enrich (PK, FK, formula, Request ID, Owner, audit, first task)"
+  file: "backend/user-portal/src/main/java/com/portal/component/ProcessStartFormEnricherComponent.java"
+  note: |
+    邮件建 case 原先引擎直启，只写抽取字段，不分配主表 auto-PK、不填结构 FK、
+    不重算公式、不 stamp Request ID、不写 Owner/审计、不自动完成发起人首任务。
+    修复：ProcessStartFormEnricherComponent 作为 Portal 发起与邮件内部发起的唯一填写链
+    （主表 PK → FK → 子表 PK → FK → Owner → 审计 → 公式 → Request ID）；
+    引擎改调 POST /api/portal/internal/runtime/start-process。
+    邮件映射列表排除公式列与 created_*/updated_*。
+    验证：ProcessStartFormEnricherComponentTest、EmailMonitorProcessorTest、
+    InternalEmailProcessStartComponentTest、useProcessFormSubBindings.test.ts；
+    enrich fail-closed（FU 未解析则中止）；邮件 Portal HTTP 移出 @Transactional；
+    functionUnitCode 解析失败则 STATUS_FAILED。
+    重建 user-portal / workflow-engine / developer-workstation-frontend 已启动。
+    未发真实邮件端到端。
+
+- id: "1605"
+  status: fixed
+  fixed_at: "2026-09-08"
+  severity: major
+  category: bug
+  summary: "FU import dropped Email Monitor templates; designer list empty after round-trip"
+  file: "backend/developer-workstation/src/main/java/com/developer/component/impl/EmailMonitorRulePortability.java"
+  note: |
+    根因：Exporter 只写 startEventId IS NOT NULL 的运行时绑定；设计器 listTemplates
+    只查未绑定模板，导入后 Email Monitors 页为空。import 不写 sourceRuleId；clone 漏拷贝。
+    修复：导出全部 monitor（含模板）且始终写 emailMonitors: []；两遍导入先模板后绑定并 remap
+    sourceRuleId/connectionUid；clone 同样两遍；Admin 同步跳过无 startEventId 的模板以免引擎误 poll。
+    验证：EmailPortabilityTest 先红（快照 size 1）后绿（size 2 + sourceRuleId remap）；
+    VersionRollbackParityTest、EmailMonitorSyncComponentImplTest pass；
+    mvn package；compose rebuild developer-workstation + admin-center 已启动。
+    未做：真实 ZIP 手测 Export→Import 覆盖。
+
+- id: "1606"
+  status: open
+  severity: minor
+  category: quality
+  summary: "EmailExtractionWizard.vue 756 行超 SFC 600 行硬上限，需拆分子组件"
+  file: "frontend/developer-workstation/src/components/designer/email/EmailExtractionWizard.vue"
+  note: |
+    2026-09-08 code review：DIRECT 邮件属性映射功能合并后文件 756 行（硬上限 600）。
+    建议拆分为 Sample 预览 / Field Mapping 表格 / Sub-table 段独立子组件或 composable。
+    本 PR 刻意不修，单独 refactor PR + 截图验证 wizard 行为不变。
+
+- id: "1607"
+  status: fixed
+  fixed_at: "2026-09-08"
+  severity: major
+  category: bug
+  summary: "Deploy sync wiped sys_email_monitor_rules.last_sync_cursor and skipped new mail"
+  file: "backend/admin-center/src/main/java/com/admin/component/EmailMonitorSyncComponentImpl.java"
+  note: |
+    根因：syncMonitorRules deleteByFunctionUnitId + insert 不保留 lastSyncCursor/lastSyncedAt；
+    deploy 后 IMAP baseline 跳过高 UID 邮件（dev 实测 UID 3480 被跳过）。
+    修复：按 ruleUid upsert，同 id 保留 cursor；删除 payload 中已移除的 stale binding。
+    验证：EmailMonitorSyncComponentImplTest（含 preservesLastSyncCursorForSameRuleUid）pass。
+

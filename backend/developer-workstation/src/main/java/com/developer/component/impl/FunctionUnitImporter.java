@@ -54,6 +54,7 @@ public class FunctionUnitImporter {
     private final DeveloperWorkstationSequenceSynchronizer sequenceSynchronizer;
     private final ExportImportPackageParser packageParser;
     private final FunctionUnitImportWriter importWriter;
+    private final EmailMonitorRulePortability emailMonitorRulePortability;
     private final ProcessBpmnStaleIdFixer staleIdFixer;
     private final VersionComponent versionComponent;
     private final RelationTableStructurePortability relationTablePortability;
@@ -279,9 +280,11 @@ public class FunctionUnitImporter {
         if (packageData.containsKey("emailMonitors")) {
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> monitors = (List<Map<String, Object>>) packageData.get("emailMonitors");
-            for (Map<String, Object> monitorData : monitors) {
-                importWriter.importEmailMonitorRule(functionUnit, monitorData, formIdMapping, bindingIdMapping);
-            }
+            emailMonitorRulePortability.importAll(
+                    functionUnit,
+                    monitors,
+                    EmailMonitorRulePortability.MonitorImportMaps.of(
+                            formIdMapping, bindingIdMapping, connectionUidMapping));
         }
 
         // Write process after tables/forms/actions/email import; rewrite old BPMN IDs (same as clone)

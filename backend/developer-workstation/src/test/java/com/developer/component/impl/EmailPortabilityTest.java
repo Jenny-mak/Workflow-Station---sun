@@ -54,6 +54,7 @@ class EmailPortabilityTest {
     private EmailMonitorRuleRepository emailMonitorRuleRepository;
 
     private FunctionUnitImportWriter importWriter;
+    private EmailMonitorRulePortability monitorPortability;
 
     @BeforeEach
     void setUp() {
@@ -63,7 +64,6 @@ class EmailPortabilityTest {
                 mock(ActionDefinitionRepository.class),
                 mock(DecisionDefinitionRepository.class),
                 emailConnectionRepository,
-                emailMonitorRuleRepository,
                 emailTemplateRepository,
                 mock(FormTableBindingRepository.class),
                 mock(LinkFormComponentRepository.class),
@@ -71,6 +71,7 @@ class EmailPortabilityTest {
                 mock(SubTableViewConfigRepository.class),
                 mock(DmnXmlParser.class),
                 new ObjectMapper());
+        monitorPortability = new EmailMonitorRulePortability(emailMonitorRuleRepository, new ObjectMapper());
     }
 
     @Test
@@ -193,7 +194,7 @@ class EmailPortabilityTest {
         when(emailMonitorRuleRepository.save(any(EmailMonitorRule.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        importWriter.importEmailMonitorRule(functionUnit, ruleData, Map.of(), Map.of());
+        monitorPortability.importRule(functionUnit, ruleData, identityUidMaps("uid-abc"));
 
         ArgumentCaptor<EmailMonitorRule> captor = ArgumentCaptor.forClass(EmailMonitorRule.class);
         verify(emailMonitorRuleRepository).save(captor.capture());
@@ -209,7 +210,7 @@ class EmailPortabilityTest {
         ruleData.put("targetFormId", 99);
 
         org.assertj.core.api.Assertions.assertThatThrownBy(
-                        () -> importWriter.importEmailMonitorRule(functionUnit, ruleData, Map.of(), Map.of()))
+                        () -> monitorPortability.importRule(functionUnit, ruleData, emptyMaps()))
                 .isInstanceOf(com.developer.exception.DeveloperBusinessException.class)
                 .hasMessageContaining("targetFormId");
     }
@@ -223,9 +224,76 @@ class EmailPortabilityTest {
         ruleData.put("targetBindingId", "55");
 
         assertThatThrownBy(
-                        () -> importWriter.importEmailMonitorRule(functionUnit, ruleData, Map.of(), Map.of()))
+                        () -> monitorPortability.importRule(functionUnit, ruleData, emptyMaps()))
                 .isInstanceOf(com.developer.exception.DeveloperBusinessException.class)
                 .hasMessageContaining("targetBindingId");
+    }
+
+    @Test
+    void buildVersionSnapshotPayload_includesMonitorTemplatesAndBindings() {
+        FunctionUnitRepository functionUnitRepository = mock(FunctionUnitRepository.class);
+        TableDefinitionRepository tableDefinitionRepository = mock(TableDefinitionRepository.class);
+        FormDefinitionRepository formDefinitionRepository = mock(FormDefinitionRepository.class);
+        ActionDefinitionRepository actionDefinitionRepository = mock(ActionDefinitionRepository.class);
+        DecisionDefinitionRepository decisionDefinitionRepository = mock(DecisionDefinitionRepository.class);
+        FormStageBindingRepository formStageBindingRepository = mock(FormStageBindingRepository.class);
+        TableRelationRepository tableRelationRepository = mock(TableRelationRepository.class);
+        FunctionUnitWorkspaceAccessService accessService = mock(FunctionUnitWorkspaceAccessService.class);
+
+        FunctionUnit functionUnit = FunctionUnit.builder().id(42L).name("Demo").code("fu_demo").build();
+        when(functionUnitRepository.findById(42L)).thenReturn(Optional.of(functionUnit));
+        when(tableDefinitionRepository.findByFunctionUnitIdWithFields(42L)).thenReturn(List.of());
+        when(formDefinitionRepository.findByFunctionUnitIdWithBindings(42L)).thenReturn(List.of());
+        when(actionDefinitionRepository.findByFunctionUnitId(42L)).thenReturn(List.of());
+        when(decisionDefinitionRepository.findByFunctionUnitId(42L)).thenReturn(List.of());
+        when(tableRelationRepository.findByFunctionUnitId(42L)).thenReturn(List.of());
+
+        FunctionUnitExporter exporter = ExportImportTestComponents.exporter(
+                functionUnitRepository,
+                tableDefinitionRepository,
+                formDefinitionRepository,
+                actionDefinitionRepository,
+                decisionDefinitionRepository,
+                formStageBindingRepository,
+                tableRelationRepository,
+                accessService,
+                new ObjectMapper());
+
+        EmailMonitorRule template = EmailMonitorRule.builder()
+                .id(11L)
+                .name("Inbound template")
+                .connectionUid("uid-abc")
+                .enabled(true)
+                .build();
+        EmailMonitorRule binding = EmailMonitorRule.builder()
+                .id(12L)
+                .name("Inbound template → StartEvent_1")
+                .connectionUid("uid-abc")
+                .sourceRuleId(11L)
+                .startEventId("StartEvent_1")
+                .enabled(true)
+                .build();
+        EmailMonitorRuleRepository monitorRepo = mock(EmailMonitorRuleRepository.class);
+        when(monitorRepo.findByFunctionUnitIdOrderByNameAsc(42L)).thenReturn(List.of(template, binding));
+        org.springframework.test.util.ReflectionTestUtils.setField(exporter, "emailMonitorRuleRepository", monitorRepo);
+
+        Map<String, Object> payload = exporter.buildVersionSnapshotPayload(42L);
+
+        assertThat(payload).containsKey("emailMonitors");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> monitors = (List<Map<String, Object>>) payload.get("emailMonitors");
+        assertThat(monitors).hasSize(2);
+        assertThat(monitors).anySatisfy(row -> {
+            assertThat(row.get("ruleId")).isEqualTo(11L);
+            assertThat(row.get("name")).isEqualTo("Inbound template");
+            assertThat(row.get("startEventId")).isNull();
+            assertThat(row.get("sourceRuleId")).isNull();
+        });
+        assertThat(monitors).anySatisfy(row -> {
+            assertThat(row.get("ruleId")).isEqualTo(12L);
+            assertThat(row.get("sourceRuleId")).isEqualTo(11L);
+            assertThat(row.get("startEventId")).isEqualTo("StartEvent_1");
+        });
     }
 
     @Test
@@ -263,6 +331,8 @@ class EmailPortabilityTest {
         assertThat(payload).containsKey("emailTemplates");
         assertThat(payload.get("emailTemplates")).isInstanceOf(List.class);
         assertThat((List<?>) payload.get("emailTemplates")).isEmpty();
+        assertThat(payload).containsKey("emailMonitors");
+        assertThat((List<?>) payload.get("emailMonitors")).isEmpty();
     }
 
     @Test
@@ -317,5 +387,114 @@ class EmailPortabilityTest {
 
         assertThat(rewritten).contains("name=\"connectionId\" value=\"uid-cloned\"");
         assertThat(rewritten).doesNotContain("uid-source");
+    }
+
+    @Test
+    void importAll_importsTemplateThenRemapsBindingSourceRuleId() {
+        FunctionUnit functionUnit = FunctionUnit.builder().id(7L).code("fu_new").build();
+        Map<String, Object> template = new HashMap<>();
+        template.put("ruleId", 11);
+        template.put("name", "Inbound template");
+        template.put("connectionUid", "uid-abc");
+        Map<String, Object> binding = new HashMap<>();
+        binding.put("ruleId", 12);
+        binding.put("name", "Inbound template → StartEvent_1");
+        binding.put("connectionUid", "uid-abc");
+        binding.put("sourceRuleId", 11);
+        binding.put("startEventId", "StartEvent_1");
+
+        java.util.concurrent.atomic.AtomicLong ids = new java.util.concurrent.atomic.AtomicLong(100);
+        when(emailMonitorRuleRepository.save(any(EmailMonitorRule.class)))
+                .thenAnswer(inv -> {
+                    EmailMonitorRule saved = inv.getArgument(0);
+                    saved.setId(ids.getAndIncrement());
+                    return saved;
+                });
+
+        monitorPortability.importAll(
+                functionUnit,
+                List.of(binding, template),
+                identityUidMaps("uid-abc"));
+
+        ArgumentCaptor<EmailMonitorRule> captor = ArgumentCaptor.forClass(EmailMonitorRule.class);
+        verify(emailMonitorRuleRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+        List<EmailMonitorRule> saved = captor.getAllValues();
+        assertThat(saved.get(0).getName()).isEqualTo("Inbound template");
+        assertThat(saved.get(0).getSourceRuleId()).isNull();
+        assertThat(saved.get(0).getStartEventId()).isNull();
+        assertThat(saved.get(1).getStartEventId()).isEqualTo("StartEvent_1");
+        assertThat(saved.get(1).getSourceRuleId()).isEqualTo(100L);
+    }
+
+    @Test
+    void importRule_malformedExtractionRulesJson_throwsBusinessException() {
+        FunctionUnit functionUnit = FunctionUnit.builder().id(7L).code("fu_new").build();
+        Map<String, Object> ruleData = new HashMap<>();
+        ruleData.put("name", "Inbound");
+        ruleData.put("extractionRules", "{not-valid-json");
+
+        assertThatThrownBy(() -> monitorPortability.importRule(functionUnit, ruleData, emptyMaps()))
+                .isInstanceOf(com.developer.exception.DeveloperBusinessException.class)
+                .hasMessageContaining("Failed to parse JSON");
+    }
+
+    @Test
+    void importRule_unmappedConnectionUid_throwsBusinessException() {
+        FunctionUnit functionUnit = FunctionUnit.builder().id(7L).code("fu_new").build();
+        Map<String, Object> ruleData = new HashMap<>();
+        ruleData.put("name", "Inbound");
+        ruleData.put("connectionUid", "missing-uid");
+
+        assertThatThrownBy(() -> monitorPortability.importRule(functionUnit, ruleData, emptyMaps()))
+                .isInstanceOf(com.developer.exception.DeveloperBusinessException.class)
+                .hasMessageContaining("connectionUid");
+    }
+
+    @Test
+    void cloneAll_remapsSourceRuleIdWhenBindingListedBeforeTemplate() {
+        FunctionUnit target = FunctionUnit.builder().id(8L).code("fu_clone").build();
+        EmailMonitorRule template = EmailMonitorRule.builder()
+                .id(11L)
+                .name("Inbound template")
+                .connectionUid("uid-src")
+                .enabled(true)
+                .build();
+        EmailMonitorRule binding = EmailMonitorRule.builder()
+                .id(12L)
+                .name("A binding first")
+                .connectionUid("uid-src")
+                .sourceRuleId(11L)
+                .startEventId("StartEvent_1")
+                .enabled(true)
+                .build();
+        when(emailMonitorRuleRepository.findByFunctionUnitIdOrderByNameAsc(1L))
+                .thenReturn(List.of(binding, template));
+        java.util.concurrent.atomic.AtomicLong ids = new java.util.concurrent.atomic.AtomicLong(200);
+        when(emailMonitorRuleRepository.save(any(EmailMonitorRule.class)))
+                .thenAnswer(inv -> {
+                    EmailMonitorRule saved = inv.getArgument(0);
+                    saved.setId(ids.getAndIncrement());
+                    return saved;
+                });
+
+        monitorPortability.cloneAll(1L, target, Map.of(), Map.of(), Map.of("uid-src", "uid-cloned"));
+
+        ArgumentCaptor<EmailMonitorRule> captor = ArgumentCaptor.forClass(EmailMonitorRule.class);
+        verify(emailMonitorRuleRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+        List<EmailMonitorRule> saved = captor.getAllValues();
+        assertThat(saved.get(0).getName()).isEqualTo("Inbound template");
+        assertThat(saved.get(0).getSourceRuleId()).isNull();
+        assertThat(saved.get(0).getConnectionUid()).isEqualTo("uid-cloned");
+        assertThat(saved.get(1).getStartEventId()).isEqualTo("StartEvent_1");
+        assertThat(saved.get(1).getSourceRuleId()).isEqualTo(200L);
+        assertThat(saved.get(1).getProcessDefinitionKey()).isEqualTo("fu_clone");
+    }
+
+    private static EmailMonitorRulePortability.MonitorImportMaps identityUidMaps(String uid) {
+        return EmailMonitorRulePortability.MonitorImportMaps.of(Map.of(), Map.of(), Map.of(uid, uid));
+    }
+
+    private static EmailMonitorRulePortability.MonitorImportMaps emptyMaps() {
+        return EmailMonitorRulePortability.MonitorImportMaps.of(Map.of(), Map.of(), Map.of());
     }
 }

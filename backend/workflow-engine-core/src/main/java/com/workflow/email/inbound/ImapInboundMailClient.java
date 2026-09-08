@@ -3,6 +3,7 @@ package com.workflow.email.inbound;
 import com.platform.common.mail.ImapTransportProperties;
 import com.platform.common.mail.MailDiagnostics;
 import com.workflow.email.extract.EmailMessage;
+import jakarta.mail.Address;
 import jakarta.mail.Folder;
 import jakarta.mail.Message;
 import jakarta.mail.Multipart;
@@ -139,13 +140,41 @@ public class ImapInboundMailClient implements InboundMailClient {
         if (from != null) {
             headers.put("from", from);
         }
+        putHeader(headers, "to", formatAddresses(message.getRecipients(Message.RecipientType.TO)));
+        putHeader(headers, "cc", formatAddresses(message.getRecipients(Message.RecipientType.CC)));
+        if (message instanceof MimeMessage mimeMessage) {
+            putHeader(headers, "reply-to", formatAddresses(mimeMessage.getReplyTo()));
+        }
         if (message.getSentDate() != null) {
             headers.put("date", message.getSentDate().toInstant().toString());
+        }
+        if (StringUtils.hasText(messageId)) {
+            headers.put("message-id", messageId);
         }
         return new EmailMessage(messageId, subject, from,
                 text.length() > 0 ? text.toString() : null,
                 html.length() > 0 ? html.toString() : null,
                 headers);
+    }
+
+    private static void putHeader(Map<String, String> headers, String name, String value) {
+        if (StringUtils.hasText(value)) {
+            headers.put(name, value);
+        }
+    }
+
+    static String formatAddresses(Address[] addresses) {
+        if (addresses == null || addresses.length == 0) {
+            return null;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < addresses.length; i++) {
+            if (i > 0) {
+                builder.append(", ");
+            }
+            builder.append(addresses[i].toString());
+        }
+        return builder.toString();
     }
 
     private String resolveMessageId(Message message, long uid) throws Exception {

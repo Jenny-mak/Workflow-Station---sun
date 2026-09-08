@@ -10,6 +10,21 @@
           <el-form-item :label="t('emailMonitor.wizard.sampleFrom')">
             <el-input v-model="sample.from" placeholder="sender@example.com" />
           </el-form-item>
+          <el-form-item :label="t('emailMonitor.wizard.sampleTo')">
+            <el-input v-model="sample.to" placeholder="recipient@example.com" />
+          </el-form-item>
+          <el-form-item :label="t('emailMonitor.wizard.sampleCc')">
+            <el-input v-model="sample.cc" placeholder="cc@example.com" />
+          </el-form-item>
+          <el-form-item :label="t('emailMonitor.wizard.sampleReplyTo')">
+            <el-input v-model="sample.replyTo" placeholder="reply@example.com" />
+          </el-form-item>
+          <el-form-item :label="t('emailMonitor.wizard.sampleDate')">
+            <el-input v-model="sample.date" placeholder="2026-09-08T08:30:00Z" />
+          </el-form-item>
+          <el-form-item :label="t('emailMonitor.wizard.sampleMessageId')">
+            <el-input v-model="sample.messageId" placeholder="&lt;message-id@example.com&gt;" />
+          </el-form-item>
           <el-form-item :label="t('emailMonitor.wizard.sampleText')">
             <el-input
               v-model="sample.text"
@@ -69,28 +84,49 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column :label="t('emailMonitor.wizard.source')" width="140">
+          <el-table-column :label="t('emailMonitor.wizard.source')" width="170">
             <template #default="{ row }">
-              <el-select v-model="row.source" size="small">
-                <el-option
-                  v-for="s in SOURCES"
-                  :key="s"
-                  :label="sourceLabel(s)"
-                  :value="s"
-                />
+              <el-select v-model="row.source" size="small" @change="onSourceChange(row)">
+                <el-option-group :label="t('emailMonitor.wizard.sourceGroupAttributes')">
+                  <el-option
+                    v-for="s in ATTRIBUTE_SOURCES"
+                    :key="s"
+                    :label="sourceLabel(s)"
+                    :value="s"
+                  />
+                </el-option-group>
+                <el-option-group :label="t('emailMonitor.wizard.sourceGroupBody')">
+                  <el-option
+                    v-for="s in BODY_SOURCES"
+                    :key="s"
+                    :label="sourceLabel(s)"
+                    :value="s"
+                  />
+                </el-option-group>
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column :label="t('emailMonitor.wizard.type')" width="120">
+          <el-table-column :label="t('emailMonitor.wizard.type')" width="130">
             <template #default="{ row }">
-              <el-select v-model="row.type" size="small">
-                <el-option v-for="ty in TYPES" :key="ty" :label="ty" :value="ty" />
+              <el-select
+                v-if="!isLockedAttributeSource(row.source)"
+                v-model="row.type"
+                size="small"
+              >
+                <el-option
+                  v-for="ty in typesForSource(row.source)"
+                  :key="ty"
+                  :label="typeLabel(ty)"
+                  :value="ty"
+                />
               </el-select>
+              <span v-else class="wizard-direct-label">{{ typeLabel('DIRECT') }}</span>
             </template>
           </el-table-column>
           <el-table-column :label="t('emailMonitor.wizard.config')" min-width="220">
             <template #default="{ row }">
-              <el-input v-if="row.type === 'LABEL'" v-model="row.label" size="small" placeholder="Case No: " />
+              <span v-if="row.type === 'DIRECT'" class="wizard-hint">—</span>
+              <el-input v-else-if="row.type === 'LABEL'" v-model="row.label" size="small" placeholder="Case No: " />
               <template v-else-if="row.type === 'BETWEEN'">
                 <el-input v-model="row.before" size="small" :placeholder="t('emailMonitor.wizard.before')" />
                 <el-input v-model="row.after" size="small" :placeholder="t('emailMonitor.wizard.after')" />
@@ -250,15 +286,62 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'update:modelValue', value: ExtractionRules): void }>()
 const { t } = useI18n()
 
-const SOURCES = ['SUBJECT', 'TEXT_AND_HTML', 'TEXT', 'HTML', 'HEADER', 'CONST'] as const
-const TYPES = ['LABEL', 'BETWEEN', 'REGEX', 'CONST', 'HEADER'] as const
+const ATTRIBUTE_SOURCES = [
+  'SUBJECT', 'FROM', 'TO', 'CC', 'REPLY_TO', 'DATE', 'MESSAGE_ID',
+] as const
+const BODY_SOURCES = ['TEXT_AND_HTML', 'TEXT', 'HTML', 'HEADER', 'CONST'] as const
+const LOCKED_ATTRIBUTE_SOURCES = ['FROM', 'TO', 'CC', 'REPLY_TO', 'DATE', 'MESSAGE_ID'] as const
+const BODY_TYPES = ['LABEL', 'BETWEEN', 'REGEX', 'CONST', 'HEADER'] as const
+const SUBJECT_TYPES = ['DIRECT', 'LABEL', 'BETWEEN', 'REGEX'] as const
 
-function sourceLabel(source: typeof SOURCES[number]): string {
+function sourceLabel(source: typeof ATTRIBUTE_SOURCES[number] | typeof BODY_SOURCES[number]): string {
   return t(`emailMonitor.wizard.source_${source}`)
 }
 
+function typeLabel(type: string): string {
+  if (type === 'DIRECT') {
+    return t('emailMonitor.wizard.type_DIRECT')
+  }
+  return type
+}
+
+function isLockedAttributeSource(source?: string): boolean {
+  return LOCKED_ATTRIBUTE_SOURCES.includes(source as typeof LOCKED_ATTRIBUTE_SOURCES[number])
+}
+
+function typesForSource(source?: string): string[] {
+  if (source === 'SUBJECT') {
+    return [...SUBJECT_TYPES]
+  }
+  return [...BODY_TYPES]
+}
+
+function onSourceChange(row: ExtractionFieldRule) {
+  if (isLockedAttributeSource(row.source)) {
+    row.type = 'DIRECT'
+    return
+  }
+  if (row.source === 'SUBJECT' && !SUBJECT_TYPES.includes(row.type as typeof SUBJECT_TYPES[number])) {
+    row.type = 'DIRECT'
+    return
+  }
+  if (row.type === 'DIRECT') {
+    row.type = 'LABEL'
+  }
+}
+
 const activeTab = ref('sample')
-const sample = reactive({ subject: '', from: '', text: '', html: '' })
+const sample = reactive({
+  subject: '',
+  from: '',
+  to: '',
+  cc: '',
+  replyTo: '',
+  date: '',
+  messageId: '',
+  text: '',
+  html: '',
+})
 const lastSelection = ref('')
 const lastSelectionPrefix = ref('')
 
@@ -329,6 +412,11 @@ function seedFromModel(model?: ExtractionRules) {
   const s = model?.sampleEmail
   sample.subject = s?.subject ?? ''
   sample.from = s?.from ?? ''
+  sample.to = s?.to ?? ''
+  sample.cc = s?.cc ?? ''
+  sample.replyTo = s?.replyTo ?? ''
+  sample.date = s?.date ?? ''
+  sample.messageId = s?.messageId ?? ''
   sample.text = s?.text ?? ''
   sample.html = s?.html ?? ''
 }
@@ -336,6 +424,17 @@ seedFromModel(props.modelValue)
 
 function addFieldRule() {
   fields.push({ target: '', source: 'TEXT_AND_HTML', type: 'LABEL', required: false })
+}
+
+function attributePreviewValue(source?: string): string | null {
+  if (source === 'SUBJECT') return sample.subject?.trim() || null
+  if (source === 'FROM') return sample.from?.trim() || null
+  if (source === 'TO') return sample.to?.trim() || null
+  if (source === 'CC') return sample.cc?.trim() || null
+  if (source === 'REPLY_TO') return sample.replyTo?.trim() || null
+  if (source === 'DATE') return sample.date?.trim() || null
+  if (source === 'MESSAGE_ID') return sample.messageId?.trim() || null
+  return null
 }
 
 /** New block defaults its tableIndex to the next HTML table (0,1,2…) — the common multi-table case. */
@@ -388,12 +487,11 @@ function combinedSampleTextAndHtml(): string {
   return `${plain}\n${html}`
 }
 
-/** Client-side mirror of the backend interpreter for live preview (LABEL/BETWEEN/REGEX/CONST/HEADER). */
+/** Client-side mirror of the backend interpreter for live preview. */
 function sourceText(source?: string): string {
   if (source === 'SUBJECT') return sample.subject
   if (source === 'HTML') return stripHtml(sample.html)
-  if (source === 'TEXT') return combinedSampleTextAndHtml()
-  if (source === 'TEXT_AND_HTML') return combinedSampleTextAndHtml()
+  if (source === 'TEXT' || source === 'TEXT_AND_HTML') return combinedSampleTextAndHtml()
   return sample.text
 }
 
@@ -406,9 +504,19 @@ function stripHtml(html: string): string {
 function previewField(rule: ExtractionFieldRule): string {
   try {
     let raw: string | null = null
-    if (rule.type === 'CONST') raw = rule.value ?? null
-    else if (rule.type === 'HEADER') raw = rule.header?.toLowerCase() === 'from' ? sample.from : null
-    else if (rule.type === 'LABEL') raw = byLabel(sourceText(rule.source), rule.label)
+    if (rule.type === 'DIRECT') {
+      raw = attributePreviewValue(rule.source) ?? sourceText(rule.source)
+    } else if (rule.type === 'CONST') raw = rule.value ?? null
+    else if (rule.type === 'HEADER') {
+      const header = rule.header?.toLowerCase()
+      if (header === 'from') raw = sample.from || null
+      else if (header === 'to') raw = sample.to || null
+      else if (header === 'cc') raw = sample.cc || null
+      else if (header === 'reply-to') raw = sample.replyTo || null
+      else if (header === 'date') raw = sample.date || null
+      else if (header === 'message-id') raw = sample.messageId || null
+      else raw = null
+    } else if (rule.type === 'LABEL') raw = byLabel(sourceText(rule.source), rule.label)
     else if (rule.type === 'BETWEEN') raw = between(sourceText(rule.source), rule.before, rule.after)
     else if (rule.type === 'REGEX') raw = byRegex(sourceText(rule.source), rule.pattern, rule.group ?? 1)
     return applyPost(raw, rule.postProcess) ?? '—'
@@ -508,12 +616,27 @@ function buildRules(): ExtractionRules {
       return rule
     })
   if (cleanSubTables.length) result.subTables = cleanSubTables
-  if (sample.subject?.trim() || sample.from?.trim() || sample.text?.trim() || sample.html?.trim()) {
+  if (
+    sample.subject?.trim()
+    || sample.from?.trim()
+    || sample.to?.trim()
+    || sample.cc?.trim()
+    || sample.replyTo?.trim()
+    || sample.date?.trim()
+    || sample.messageId?.trim()
+    || sample.text?.trim()
+    || sample.html?.trim()
+  ) {
     result.sampleEmail = {
       subject: sample.subject.trim() || undefined,
       from: sample.from.trim() || undefined,
+      to: sample.to.trim() || undefined,
+      cc: sample.cc.trim() || undefined,
+      replyTo: sample.replyTo.trim() || undefined,
+      date: sample.date.trim() || undefined,
+      messageId: sample.messageId.trim() || undefined,
       text: sample.text.trim() || undefined,
-      html: sample.html.trim() || undefined
+      html: sample.html.trim() || undefined,
     }
   }
   return result
@@ -563,6 +686,10 @@ defineExpose({ buildRules })
   .wizard-preview-val {
     font-family: monospace;
     color: #409eff;
+  }
+  .wizard-direct-label {
+    font-size: 12px;
+    color: #606266;
   }
   .wizard-subpreview {
     margin-top: 12px;

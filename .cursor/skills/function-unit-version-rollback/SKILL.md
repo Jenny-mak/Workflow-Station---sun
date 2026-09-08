@@ -29,6 +29,8 @@ View 访问规则语义：`.cursor/skills/view-access-control/SKILL.md`
 
 Rollback 只保证 **Developer Workstation 设计态** 与目标版本一致；**Admin Center FU Access（Portal 门禁）** 在 `sys_function_unit_access`，不在 `dw_versions` 快照内。
 
+若改动的是 **ZIP / snapshot 字段**（会随 Export 或 Deploy 离开 DW），MUST 按 skill `function-unit-portability` **消费者矩阵**同时核对 Admin parser、两条导入 HTTP、`*SyncComponent` 与 Engine。Rollback 本身不写 `sys_*`，但同一套导出物会被 Admin 消费。
+
 **Rollback 前自动备份：** 每次 Rollback 会先写一条 `Auto backup before rollback` 版本；若目标版本不含某属性，可 Rollback 到该备份版本恢复。
 
 ---

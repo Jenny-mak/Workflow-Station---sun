@@ -38,6 +38,18 @@ public class EmailExtractionSpec {
     /** Which part of the email a rule reads from. */
     public enum Source {
         SUBJECT,
+        /** Sender address (raw From header). */
+        FROM,
+        /** Primary recipients (raw To header). */
+        TO,
+        /** Carbon-copy recipients (raw Cc header). */
+        CC,
+        /** Reply-To header when present. */
+        REPLY_TO,
+        /** Sent date/time (ISO-8601 instant when available from IMAP). */
+        DATE,
+        /** Provider message id (Message-ID header or IMAP uid fallback). */
+        MESSAGE_ID,
         /** Plain-text body only. */
         TEXT,
         /** HTML body converted to text only. */
@@ -50,6 +62,8 @@ public class EmailExtractionSpec {
 
     /** How a value is located inside the chosen source. */
     public enum RuleType {
+        /** Map the entire chosen source without parsing (email attributes and full subject). */
+        DIRECT,
         /** Fixed literal value (uses {@code value}). */
         CONST,
         /** Text after a label up to end-of-line (uses {@code label}). */
