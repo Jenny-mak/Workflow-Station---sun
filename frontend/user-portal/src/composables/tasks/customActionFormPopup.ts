@@ -2,6 +2,7 @@ import type { Ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { processApi } from '@/api/process'
 import { submitActionFormPopup } from '@/api/processForm'
+import { warnIfUploadsBlocking } from '@platform-shared/upload/uploadSubmitGate'
 import type { TaskActionInfo } from '@/api/task'
 import type { FormField, FormTab, PortalViewContext } from '@/components/formRendererHelpers'
 import type { PreparedFormPopupContext } from './customActionTypes'
@@ -174,6 +175,10 @@ export function createCustomActionFormPopup(deps: {
       ElMessage.error(t('task.formSubmitFailed'))
       return
     }
+    if (!warnIfUploadsBlocking({
+      inflight: t('upload.waitUntilComplete'),
+      failed: t('upload.fixFailedBeforeSubmit'),
+    })) return
     submitting.value = true
     try {
       await submitActionFormPopup(taskId, action.actionId, formPopupData.value)

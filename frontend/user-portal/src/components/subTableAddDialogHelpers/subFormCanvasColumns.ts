@@ -145,7 +145,7 @@ export function mapSubFormRuleToDialogColumns(
       type = 'treeselect'
     } else if (r.type === 'tree') {
       type = 'tree'
-    } else if (r.type === 'upload') {
+    } else if (r.type === 'upload' || r.type === 'advancedUpload') {
       type = 'upload'
     } else if (r.type === 'userSelect' || r.type === 'user') {
       type = 'user'

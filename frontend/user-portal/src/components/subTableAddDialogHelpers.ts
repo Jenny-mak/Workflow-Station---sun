@@ -39,6 +39,7 @@ export {
   mergeListViewFieldColumn,
   normalizeSubTableColumns,
 } from './subTableAddDialogHelpers/fileColumns'
+export { unionListViewWithSubFormUploadColumns } from '@platform-shared/upload/unionUploadColumns'
 
 // Relation-table field defs, indexes, schema resolution
 export {

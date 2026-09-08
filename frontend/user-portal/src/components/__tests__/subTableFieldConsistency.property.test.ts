@@ -54,7 +54,7 @@ function deriveColumnsFromBinding(
       type = rProps.isRange === true ? 'timerange' : 'time'
     } else if (r.type === 'treeSelect') {
       type = 'treeselect'
-    } else if (r.type === 'upload') {
+    } else if (r.type === 'upload' || r.type === 'advancedUpload') {
       type = 'upload'
     } else if (r.type === 'userSelect' || r.type === 'user') {
       type = 'user'

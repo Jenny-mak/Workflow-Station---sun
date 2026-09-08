@@ -4,6 +4,7 @@ import com.admin.entity.EmailConnection;
 import com.admin.entity.FunctionUnit;
 import com.admin.repository.EmailConnectionRepository;
 import com.admin.repository.FunctionUnitRepository;
+import com.platform.common.mail.EmailConnectionPortability;
 import com.platform.security.encryption.EncryptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,7 +50,8 @@ public class EmailConnectionSyncComponentImpl implements EmailConnectionSyncComp
                     .host((String) conn.get("host"))
                     .port(conn.get("port") != null ? ((Number) conn.get("port")).intValue() : 587)
                     .username((String) conn.get("username"))
-                    .passwordEncrypted(usableSecret((String) conn.get("passwordEncrypted"), connectionUid, "password"))
+                    .credentialEncrypted(usableSecret(
+                            EmailConnectionPortability.readEncryptedCredential(conn), connectionUid, "credential"))
                     .fromEmail((String) conn.get("fromEmail"))
                     .fromName((String) conn.get("fromName"))
                     .useTls(conn.get("useTls") != null ? (Boolean) conn.get("useTls") : true)
@@ -145,8 +147,8 @@ public class EmailConnectionSyncComponentImpl implements EmailConnectionSyncComp
         creds.put("username", conn.getUsername());
         creds.put("fromEmail", conn.getFromEmail());
         creds.put("fromName", conn.getFromName());
-        if (conn.getPasswordEncrypted() != null) {
-            creds.put("password", encryptionService.decrypt(conn.getPasswordEncrypted()));
+        if (conn.getCredentialEncrypted() != null) {
+            creds.put("password", encryptionService.decrypt(conn.getCredentialEncrypted()));
         }
 
         if (SystemSmtpConfigResolver.isOutboundCapable(conn.getDirection())) {

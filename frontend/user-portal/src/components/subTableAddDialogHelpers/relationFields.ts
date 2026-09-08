@@ -1,6 +1,7 @@
 import { legacyBindingIdAliases } from '../formRendererHelpers'
 import type { ColumnType, DialogColumn, RelationFieldDef, SubListViewColumn } from './types'
 import { mergeListViewFieldColumn } from './fileColumns'
+import { isAnyUploadType } from '@platform-shared/upload/uploadRuleType'
 
 /** Apply designer table display names to list / dialog column labels. */
 export function enrichColumnsWithTableFieldDisplayNames(
@@ -115,7 +116,7 @@ export function deriveColumnsFromRelationFieldDefinitions(fields: RelationFieldD
       if (!fieldName) return null
       const type = mapRelationFieldDataTypeToColumnType(String(f.dataType ?? ''))
       const label = String(f.displayName || fieldName)
-      if (type === 'upload') {
+      if (isAnyUploadType(type)) {
         return mergeListViewFieldColumn(
           { fieldName, comment: label, dataType: 'FILE' },
           { field: fieldName, label, minWidth: 180 },

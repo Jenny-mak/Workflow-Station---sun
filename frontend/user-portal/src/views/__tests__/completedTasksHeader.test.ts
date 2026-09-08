@@ -17,7 +17,6 @@ const COLUMNS: ListColumnMeta[] = [
   { field: 'requestId', label: 'task.requestId', kind: 'TEXT', filterable: true, sortable: true, operators: ['contains', 'eq'] },
   { field: 'taskName', label: 'task.taskName', kind: 'TEXT', filterable: true, sortable: true, operators: ['contains', 'eq'] },
   { field: 'processDefinitionName', label: 'task.processName', kind: 'TEXT', filterable: true, sortable: true, operators: ['contains'] },
-  { field: 'action', label: 'task.action', kind: 'ENUM', filterable: true, sortable: true, operators: ['eq', 'ne'], options: [{ value: 'approved', label: 'action.approved' }] },
   { field: 'createTime', label: 'task.createTime', kind: 'DATETIME', filterable: true, sortable: true, operators: ['on', 'between'] },
   { field: 'completedTime', label: 'task.completedTime', kind: 'DATETIME', filterable: true, sortable: true, operators: ['between'] },
   { field: 'durationInMillis', label: 'task.duration', kind: 'NUMBER', filterable: true, sortable: true, operators: ['gt', 'between'] },

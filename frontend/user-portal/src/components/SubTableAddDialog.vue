@@ -332,18 +332,27 @@
                     @change="(v: unknown) => onDialogFieldChange(col.field, v)"
                   />
 
-                  <!-- upload (readonly) -->
+                  <!-- upload (readonly): keep cards clickable so file details can open -->
                   <div
                     v-else-if="isUploadColumn(col, formData[col.field]) && isColDisabled(col)"
-                    class="ro-value"
                   >
-                    <span
-                      v-for="item in (uploadFileLists[col.field] || [])"
-                      :key="item.url"
-                      class="upload-download-link"
-                      @click="previewDialogFile(col, item.url)"
-                    >{{ item.name }}</span>
-                    <span v-if="!(uploadFileLists[col.field] || []).length">-</span>
+                    <FormUploadDropZone
+                      compact
+                      disabled
+                      :action="col.props?.action && col.props.action !== '/' ? col.props.action : (uploadUrl || '/api/v1/upload')"
+                      :accept="col.props?.accept || ''"
+                      :limit="maxFilesOf(col)"
+                      :multiple="isMultiple(col)"
+                      :file-list="uploadFileLists[col.field] || []"
+                      :max-file-size-mb="maxFileSizeMbOf(col)"
+                      :drag-text="t('upload.dragText')"
+                      :click-text="t('upload.clickText')"
+                      :fail-label="t('upload.failed')"
+                      :remove-label="t('common.delete')"
+                      :success-status-label="t('upload.statusUploaded')"
+                      :uploading-status-label="t('upload.statusUploading')"
+                      :handle-open-details="(file) => openDialogDetails(col, file)"
+                    />
                   </div>
                   <!-- upload -->
                   <div
@@ -358,14 +367,22 @@
                       :multiple="isMultiple(col)"
                       :file-list="uploadFileLists[col.field] || []"
                       :http-request="httpRequest"
+                      :max-file-size-mb="maxFileSizeMbOf(col)"
                       :drag-text="t('upload.dragText')"
                       :click-text="t('upload.clickText')"
+                      :tip="t('upload.tip', { types: col.props?.accept || 'jpg/png/pdf/docx/xlsx', size: maxFileSizeMbOf(col) })"
+                      :fail-label="t('upload.failed')"
+                      :remove-label="t('common.delete')"
+                      :success-status-label="t('upload.statusUploaded')"
+                      :uploading-status-label="t('upload.statusUploading')"
                       :handle-success="(res: unknown, file: { name?: string; url?: string }, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadSuccess(res, file, col, list)"
                       :handle-change="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadChange(col, list)"
                       :handle-remove="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadRemove(col, list)"
                       :handle-exceed="() => handleUploadExceed(col)"
-                      :handle-error="() => handleUploadError(col)"
-                      :handle-preview="(file: { url?: string }) => previewDialogFile(col, file.url)"
+                      :handle-error="(error: unknown) => handleUploadError(col, error)"
+                      :handle-size-exceed="() => handleSizeExceed(col)"
+                      :handle-duplicate="(name: string) => handleDuplicate(col, name)"
+                      :handle-open-details="(file) => openDialogDetails(col, file)"
                     />
                   </div>
 
@@ -655,12 +672,20 @@
       <el-button
         type="primary"
         :loading="saving"
-        @click="handleSave"
+        @click="saveDialogRow"
       >
         {{ t('common.save') }}
       </el-button>
     </template>
   </el-dialog>
+  <FormUploadDetailsDrawer
+    v-model="detailsOpen"
+    :title="t('upload.fileDetails')"
+    :file="detailsFile"
+    :readonly="detailsReadonly"
+    :labels="uploadDetailLabels"
+    :preview-file="previewDetailsFile"
+  />
 </template>
 
 <script setup lang="ts">
@@ -668,12 +693,15 @@ import { computed, defineAsyncComponent, inject, nextTick, onBeforeUnmount, ref,
 import { useI18n } from 'vue-i18n'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import FormUploadDropZone from '@platform-shared/upload/FormUploadDropZone.vue'
+import FormUploadDetailsDrawer from '@platform-shared/upload/FormUploadDetailsDrawer.vue'
+import type { UploadDetailFile } from '@platform-shared/upload/FormUploadFileDetails.vue'
 import '@wangeditor/editor/dist/css/style.css'
 import { isUploadColumn, getLookupSelectedDisplayField } from './subTableAddDialogHelpers'
 import type { DialogColumn } from './subTableAddDialogHelpers'
 import { extractFileLinks } from '@platform-shared/list/fileNames'
 import { FILE_PREVIEW_PLAYLIST_KEY, openFilePreviewFromList } from '@/composables/filePreview/useFilePreview'
 import { uploadPropsBlockDownload } from '@/utils/filePreview'
+import { warnIfUploadsBlocking } from '@platform-shared/upload/uploadSubmitGate'
 import {
   buildDialogLayoutGroups,
   groupAssignmentFieldsUnderMarker,
@@ -723,7 +751,7 @@ const { t } = useI18n()
 const HANDLED_TYPES = new Set([
   'text', 'textarea', 'number', 'select', 'radio', 'checkbox',
   'password', 'timerange', 'treeselect', 'tree', 'switch', 'date',
-  'datetime', 'upload', 'colorPicker', 'rate', 'slider', 'editor',
+  'datetime', 'upload', 'advancedUpload', 'colorPicker', 'rate', 'slider', 'editor',
   'signature', 'transfer', 'cascader', 'lookup', 'user', 'department', 'owner',
 ])
 
@@ -1036,6 +1064,7 @@ const {
   uploadFileLists,
   httpRequest,
   maxFilesOf,
+  maxFileSizeMbOf,
   isMultiple,
   resetUploadNames,
   backfillUploadNames,
@@ -1043,8 +1072,33 @@ const {
   handleUploadRemove,
   handleUploadChange,
   handleUploadError,
+  handleSizeExceed,
   handleUploadExceed,
+  handleDuplicate,
 } = useSubTableDialogUpload(formData, () => props.columns, t)
+
+const uploadDetailLabels = computed(() => ({
+  description: t('upload.fileDescription'),
+  callbackUrl: t('upload.callbackUrl'),
+  status: t('upload.autoSendToFileNet'),
+  completed: t('upload.statusCompleted'),
+  saveFailed: t('upload.descriptionSaveFailed'),
+}))
+
+const detailsOpen = ref(false)
+const detailsFile = ref<UploadDetailFile | null>(null)
+const detailsCol = ref<DialogColumn | null>(null)
+
+function openDialogDetails(col: DialogColumn, file: UploadDetailFile) {
+  detailsCol.value = col
+  detailsFile.value = file
+  detailsOpen.value = true
+}
+
+function previewDetailsFile(file: UploadDetailFile) {
+  if (!detailsCol.value) return
+  previewDialogFile(detailsCol.value, file.url)
+}
 
 const previewPlaylist = inject(FILE_PREVIEW_PLAYLIST_KEY, null)
 
@@ -1292,6 +1346,16 @@ const {
   scriptFieldErrors,
   isDialogFieldDisabled,
 })
+
+const detailsReadonly = computed(() => !detailsCol.value || isColDisabled(detailsCol.value))
+
+function saveDialogRow() {
+  if (!warnIfUploadsBlocking({
+    inflight: t('upload.waitUntilComplete'),
+    failed: t('upload.fixFailedBeforeSubmit'),
+  })) return
+  return handleSave()
+}
 
 const {
   showMasked,

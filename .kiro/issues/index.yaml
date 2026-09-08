@@ -3191,3 +3191,217 @@
     2026-09-04_atm-corr-000036-lookup-after.png 可见 Customer Notification / Outbound /
     Email / Draft。
 
+- id: "1593"
+  status: fixed
+  fixed_at: "2026-09-04"
+  severity: major
+  category: bug
+  summary: "Portal Change History empty on My Request / To Do / Completed because nested form fields were omitted from the visibility allow-list"
+  file: "backend/user-portal/src/main/java/com/portal/component/ChangeHistoryComponent.java"
+  note: |
+    反例：process 7d59d4a7-a813-11f1-9349-0e07b434d6a2（atm-20260623-gaevus）库内
+    up_change_history 有 case_stage/case_status/card_number/urge_status，GET
+    /change-history 200 但 UI 无记录。extractFieldLabelsFromConfig 只扫 rule[*].field
+    和 subForms 顶层，不进 elCard/fcRow/col children；ATM 主表字段全在卡片里。
+    DETAIL「test」顶层 merchant_credit 与 PROCESS 控件 id、子表 correspondence_* 把
+    topLevelFields 变成非空白名单，isUserVisible 把真正业务字段全滤掉。三条入口同一 API。
+    修复：与 collectEditableHistoryFields 一样递归 children。未猜列名。
+    验证：ChangeHistoryNestedFormFieldVisibilityTest；user-portal 镜像已重建 Started。
+
+- id: "1594"
+  status: fixed
+  fixed_at: "2026-09-04"
+  severity: major
+  category: bug
+  summary: "Change History wrote only main-table fields because dw:/rt: __subTables__ keys were not aliased"
+  file: "backend/user-portal/src/main/java/com/portal/component/ChangeHistorySubmissionFilter.java"
+  note: |
+    反例：To Do 795db05e（process 612d0fd0 ATM-DC-PW-000039）库内仅 4 条主表 FIELD_UPDATE；
+    variables.__subTables__ 已有 dw:atm_transaction 1 行、dw:atm_correspondence 1 行
+    （Corr-000043）。发起与 Transaction Assignment 保存都提交了 __subTables__，但
+    ChangeHistorySubmissionFilter 只把 binding id / 表名 / 显示名当别名，规范 key
+    dw:atm_transaction 对不上，整表从审计 payload 丢掉。To Do 再按 MI rowId 过滤时
+    会把共享子表（Correspondence 另一套 row_id）一并藏掉。
+    修复：按 binding.relation_table_id 注册 SubTableStoreKeys.storeKey；读路径仅对
+    binding_link_mode=miParticipantRow 的集合表按当前行过滤。
+    验证：ChangeHistorySubmissionFilterTest.canonicalDwStoreKeyIsAuditedAsThePhysicalSubTable
+    + miTaskRowFilterKeepsSharedSubTablesAndHidesOtherCollectionRows。存量单不会回填。
+
+- id: "1595"
+  status: fixed
+  fixed_at: "2026-09-04"
+  severity: major
+  category: bug
+  summary: "Later-stage ATM Correspondence edits were persisted but never written to Change History"
+  file: "backend/user-portal/src/main/java/com/portal/component/ChangeHistorySubmissionFilter.java"
+  note: |
+    反例：My Request 26b27161 ATM-DC-PW 仅 Case Submission（Activity_092hlui）有
+    atm_correspondence ROW_ADD；Assignment 26d5ff70 19:05 保存把 Corr-000044/045
+    写入 variables（transaction 行上嵌套 dw:atm correspondence + 顶层
+    dw:atm_correspondence），后续 stage 库内 0 条 CH。
+    根因：Correspondence 在后续 TASK 表单是 Transaction 的 link-child，提交落在
+    父行 __subTables__；filterSubTables 只扫顶层 key，嵌套子表进不了审计 payload。
+    保存已把数据 flatten/persist，complete 再 diff 已是新基线，看起来像「只记了提交」。
+    修复：递归提升父行嵌套 __subTables__ 到审计 map（按 identity 覆盖，深度 2）。
+    未猜列名。存量单不回填；新单后续 stage 编辑 Correspondence 会记 ROW_ADD/UPDATE。
+    验证：nestedLinkChildSubTablesAreAuditedAsTheirPhysicalTable；user-portal 已重建
+    Started。
+
+- id: "1596"
+  status: fixed
+  fixed_at: "2026-09-04"
+  severity: major
+  category: bug
+  summary: "Link-form Change History stored lookup JSON and phantom ROW_DELETEs from nested row-id churn"
+  file: "backend/user-portal/src/main/java/com/portal/component/ChangeHistorySubmissionFilter.java"
+  note: |
+    反例：To Do 82605843（process 51c89e5c Transaction Approval）。Correspondence
+    Lookup 新旧值是整行 JSON（id/created_by/standardizations…）；Assignment/Investigation
+    出现 SUB_TABLE_ROW_DELETE（0be12ef6 / b2b4269d），用户并未删行。
+    根因：1) 审计 payload 原样保存 Lookup 选中行对象；2) 嵌套 link-child 副本换了
+    UUID，diff 把旧 identity 当删除、新副本当新增。
+    修复：按表单 lookupConfig.selectedDisplayField 记展示值；剩余行按字段重叠配成
+    UPDATE，行数增加时只 ADD 不 DELETE。存量 CH 行不改写。
+    验证：lookupFieldsRecordConfiguredDisplayValueNotRowJson +
+    extraNestedCopyIsUpdateAndAddNotDelete；user-portal 已重建。
+
+- id: "1597"
+  status: fixed
+  fixed_at: "2026-09-04"
+  severity: major
+  category: bug
+  summary: "ATM Correspondence Change History recorded UPDATE+ADD for one nested link-child row"
+  file: "backend/user-portal/src/main/java/com/portal/component/SubTableChangeHistoryDiff.java"
+  note: |
+    反例：To Do cbc7ee10（process 83ba5829 Transaction Approval / Investigation）。
+    同一条 Correspondence 同时出现 SUB_TABLE_ROW_UPDATE（f65cf040 空→Letter）和
+    SUB_TABLE_ROW_ADD（0ef1ffde 同样 Letter）；Assignment 还把 Email 记成清空。
+    根因：嵌套 link-child 与顶层 binding 副本 UUID 不同，审计快照当成两行；
+    pairByStableId 拿薄副本配对旧行，另一份完整副本当 ADD。
+    修复：1) 嵌套提升后再出现的同表新 identity 不再并入审计 snapshot；
+    2) 同一快照内折叠指纹相同/不完整影子行；3) 全空薄覆盖不记字段清空。
+    存量 CH 不回填。读取 Change History 时折叠「空→值的 UPDATE + 同值 ADD」
+    以及整行 new_value 为空的假清空，cbc7ee10 刷新即可看到。未猜列名。
+    验证：identicalNestedCopyIsUpdateNotUpdateAndAdd +
+    ChangeHistoryDisplayCollapserTest；user-portal Started。
+
+- id: "1598"
+  status: fixed
+  fixed_at: "2026-09-07"
+  severity: minor
+  category: ui
+  summary: "Developer Workstation 按钮是胶囊造型，与 Admin Center / User Portal 的 4px 直角按钮不一致"
+  file: "frontend/developer-workstation/src/styles/ws-theme.scss"
+  detail: |
+    现象：/dev 全站 el-button（含按钮组、is-link 小按钮）border-radius 999px，
+    /admin 与 /portal 同类按钮是 4px。主色、字号、内边距三端本来就一致，只有外形不同。
+    根因：三端镜像的设计系统里有一条 `.el-button { border-radius: 999px }`（胶囊造型），
+    它是否生效取决于打包顺序 —— admin-center / user-portal 里 Element Plus 的 el-button
+    样式是懒加载 chunk，晚于全局样式加载并把圆角重置回 --el-border-radius-base(4px)；
+    developer-workstation 把 EP 样式打进了入口 CSS（早于全局样式），胶囊规则反而胜出。
+    即三端里只有 DW 真正应用了这条规则，admin/portal 从一开始就是「写了但不生效」。
+    修复：三端同步删掉这条覆盖（及其配套的 .el-button.is-circle），圆角交回 EP 默认。
+    没有用提权选择器（`.el-button.el-button`）—— 它与 EP 的 `.el-button.is-round` /
+    `.is-circle` 同权，会把圆形/胶囊按钮一起压成方角。需要胶囊时用 EP 的 `round` 属性。
+    验证：三端重新 build + 重建 *-frontend 容器；Playwright 量 computed border-radius，
+    DW 由 999px → 4px（小号 is-link 3px，与 admin 完全一致），admin / portal 无变化。
+    截图：frontend/developer-workstation/verification-screenshots/2026-09-07_btn-unify-{before,after}-dw-*.png，
+    参照 frontend/admin-center/verification-screenshots/2026-09-07_btn-unify-reference-admin-*.png。
+    第二处（同轮一并修）：DW 的 variables.scss 还覆盖了 --el-color-success(#00A651) /
+    --el-color-warning(#FF6600) / --el-color-danger(#DB0011)，admin / portal 用 EP 默认，
+    导致 warning 的 Deploy、danger 的 Delete 跨端不同色。而且这里只覆盖得到基色，
+    覆盖不到 EP 派生的 light-3/5/7/8/9 与 dark-2 —— 实测 DW 的 danger 基色是 #DB0011
+    但 hover 用的 light-3 仍是 EP 的 #f78989，同一个按钮基色与 hover 自相矛盾。
+    修复：只保留 --el-color-primary，删掉 success / warning / danger 三条覆盖。
+    这三个变量在 DW 没有 SCSS 侧消费者（$success-color / $warning-color / $danger-color
+    在 .vue / .scss 里零引用），所有着色都走 --el-color-*，不会出现半旧半新。
+    验证：三端 :root 语义令牌（基色 + light-3 + light-9）逐项相同；
+    DW Deploy 由 #FF6600 → rgb(230,162,60)，Table Design 的 Delete 由 #DB0011 →
+    rgb(245,108,108)，与 admin 的 Delete / Rollback 完全一致。
+    截图：..._btn-unify-semantic-after-dw-{fu-detail,function-units,automation,danger}.png。
+
+- id: "1599"
+  status: fixed
+  fixed_at: "2026-09-07"
+  severity: major
+  category: bug
+  summary: "My Request Advanced Upload showed 1 of N files and could not preview (Meeting Doc)"
+  file: "frontend/user-portal/src/utils/applyUploadPropsFromRule.ts"
+  note: |
+    反例：applications/a217f0ad（1_Meeting-000034）fileupload 已存 2 个文件 JSON，
+    REQUEST「Main (My Request)」仍是 native upload limit:1，列表只显示 1 个且无预览。
+    根因：1) 场景副本不继承 Advanced Upload / maxFiles；2) 卡片行只有 response.url
+    没有 stamp 到 url，点击不打开抽屉；3) designer limit:4 被当成默认 10。
+    修复：跨表单继承 advanced+maxFiles；stampStoredUploadUrl；honor limit≠1；
+    native on-preview。验证：Playwright 2 cards + drawer + preview popup；
+    verify-portal-form-upload-multi 三文件卡片。
+
+- id: "1600"
+  status: fixed
+  fixed_at: "2026-09-07"
+  severity: major
+  category: bug
+  summary: "Canvas Advanced Upload must be placed per scene; Portal must not invent widgets"
+  file: "frontend/developer-workstation/src/utils/copyStartFormAdvancedUpload.ts"
+  note: |
+    反例：TASK Main 上的额外 Advanced Upload 只在 New Request 可见。错误做法是
+    Portal 运行时把发起表单的控件叠到 My Request / To Do。正确做法：各场景画布
+    各自放置同一 field 的高级上传。已撤回 overlay；Form Design 工具栏
+    「从发起表单添加高级上传」把 New Request 上缺失的 advancedUpload 规则
+    （同一 field）放到当前画布，保存后门户才渲染。
+
+- id: "1601"
+  status: fixed
+  fixed_at: "2026-09-07"
+  severity: major
+  category: bug
+  summary: "Independent Advanced Upload missing on Todo / My Request / Completed (main + attachment)"
+  file: "frontend/developer-workstation/src/main.ts"
+  note: |
+    反例：独立 advancedUpload（非 Basic file/fileupload）发起时已上传，Assign Task /
+    My Request / Completed 主控件与附件列空白。
+    真实根因：Extend 调色板 advancedUpload 用 `field: unique()`，每次拖入得到新
+    F… key。Basic Upload 跨场景可用是因为 Field 就是 Table Design FILE 列名
+    （fileupload / file）。未绑列的 advancedUpload 数据写在 F… 下，其它画布读不到。
+    实例 e3af08f0-aaa9-11f1-85aa-329cd4e431bf：发起存 Fma7mtr45s95abc，To Do /
+    My Request 各用别的 F…；附件同理。
+    错误做法（已撤回）：保存时把未绑列的 field 改成 advanced_upload、后端
+    AdvancedUploadFieldProvisioner 自动往表里加 FILE 列。拖一个控件不该改表结构。
+    正确做法（配置，不自动化）：先在 Table Design 建 FILE 列；Form Design 用
+    「导入表字段」或把控件 Field 改成该列名。其它场景用「从发起表单添加高级上传」
+    复制同一 Field，不要再各拖一遍。旧实例分叉 field 不迁移，需重新绑列后新申请。
+
+- id: "1602"
+  status: fixed
+  fixed_at: "2026-09-08"
+  severity: major
+  category: bug
+  summary: "Upload file cards: status badge, readonly details, drawer z-index, duplicate reject"
+  file: "frontend/shared/src/upload/FormUploadFileCard.vue"
+  note: |
+    1) 成功/上传中/失败卡片右上角绿/黄/红状态点。
+    2) 子表只读弹窗 .ro-value { pointer-events:none } 挡住卡片点击，无法打开详情。
+    3) 详情抽屉写死 z-index:4100，会被子表弹窗 nextZIndex 盖在灰层下面。
+    4) 同名文件会再次上传成功。
+    修复：状态角标；只读不再包 ro-value；resolveUploadDrawerZIndex(nextZIndex + overlay CSS var)；
+    beforeUpload 按文件名去重并 toast。
+    验证：vitest uploadFieldValue + uploadOverlayZIndex；
+    frontend/scripts/verify-upload-card-status.mjs（绿标、重复拦截、详情抽屉）。
+
+- id: "1603"
+  status: fixed
+  fixed_at: "2026-09-08"
+  severity: major
+  category: architecture
+  summary: "BU Role Leader Reassign for claim-pool tasks, with Change History and audit"
+  file: "backend/workflow-engine-core/src/main/java/com/workflow/component/TaskClaimSupport.java"
+  note: |
+    Leader / BU Approver / SYS_ADMIN 可将认领池任务指定给同角色成员（含已被他人持有），
+    不走 Transfer（保持 CANDIDATE_USERS 池）。Force Unclaim 仍独立退回池。
+    Claim / Unclaim / Force Unclaim / Reassign 写入 up_change_history（field claimed_by）
+    并出现在 Change History 与 Admin User Portal Audit Log。
+    To Do 默认列 Claimed By。引擎 POST /tasks/{id}/reassign-claim；门户 POST /tasks/{id}/reassign。
+    验证：TaskClaimSupportReassignTest + TaskReassignComponentTest + portal vitest；
+    截图 To Do Claimed By、Help #leader、Admin 审计 Change Type 含 Claim/Reassign。
+    本环境待办无 BU Role 池行，未点到 Reassign 弹窗。
+

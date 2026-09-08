@@ -41,7 +41,7 @@ public class EmailConnectionResponse {
                 .fromName(entity.getFromName())
                 .useTls(entity.getUseTls())
                 .enabled(entity.getEnabled())
-                .hasPassword(entity.getPasswordEncrypted() != null && !entity.getPasswordEncrypted().isBlank())
+                .hasPassword(entity.getCredentialEncrypted() != null && !entity.getCredentialEncrypted().isBlank())
                 .direction(entity.getDirection())
                 .mailboxAddress(entity.getMailboxAddress())
                 .imapHost(entity.getImapHost())

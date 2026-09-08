@@ -19,7 +19,7 @@ class CompletedTaskColumnSpecTest {
         assertThat(column("durationInMillis").kind()).isEqualTo(Kind.NUMBER);
         assertThat(column("completedTime").kind()).isEqualTo(Kind.DATETIME);
         assertThat(column("taskName").kind()).isEqualTo(Kind.TEXT);
-        assertThat(column("action").kind()).isEqualTo(Kind.ENUM);
+        assertThat(CompletedTaskColumnSpec.columns()).noneMatch(c -> "action".equals(c.field()));
     }
 
     @Test
@@ -38,7 +38,6 @@ class CompletedTaskColumnSpecTest {
         assertThat(column("durationInMillis").operators()).contains("gt", "between");
         assertThat(column("completedTime").operators()).contains("today", "between");
         assertThat(column("taskName").operators()).contains("contains", "eq");
-        assertThat(column("action").operators()).containsExactly("eq", "ne", "isNull", "isNotNull");
     }
 
     private static ListColumnMeta column(String field) {

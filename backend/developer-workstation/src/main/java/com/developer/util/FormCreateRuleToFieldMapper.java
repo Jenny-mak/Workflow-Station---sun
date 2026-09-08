@@ -126,7 +126,7 @@ public final class FormCreateRuleToFieldMapper {
             case "datePicker" -> "datetime".equalsIgnoreCase(propsType) ? DataType.TIMESTAMP
                     : "time".equalsIgnoreCase(propsType) ? DataType.TIME : DataType.DATE;
             case "timePicker" -> DataType.TIME;
-            case "upload" -> DataType.FILE;
+            case "upload", "advancedUpload" -> DataType.FILE;
             case "input" -> "textarea".equalsIgnoreCase(propsType) || "password".equalsIgnoreCase(propsType)
                     ? ("textarea".equalsIgnoreCase(propsType) ? DataType.TEXT : DataType.VARCHAR)
                     : DataType.VARCHAR;

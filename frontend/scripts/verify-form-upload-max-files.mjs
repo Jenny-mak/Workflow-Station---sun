@@ -32,7 +32,7 @@ async function findUploadForm(page) {
     const list = Array.isArray(forms) ? forms : []
     for (const form of list) {
       const blob = JSON.stringify(form.configJson ?? form.data ?? form)
-      if (blob.includes('"type":"upload"')) {
+      if (blob.includes('"type":"advancedUpload"') || blob.includes('"type":"upload"')) {
         return { fuId: String(fu.id), formName: String(form.formName || '') }
       }
     }
@@ -153,8 +153,8 @@ try {
       tmpPdf('gamma-upload.pdf'),
     ])
     await page.waitForFunction(() => {
-      const names = [...document.querySelectorAll('.form-preview-dialog .el-upload-list__item-name, .form-preview-dialog .el-upload-list__item')]
-      return names.filter((el) => /alpha-upload|beta-upload|gamma-upload/.test(el.textContent || '')).length >= 3
+      const cards = [...document.querySelectorAll('.form-preview-dialog [data-testid="upload-file-card"]')]
+      return cards.filter((el) => /alpha-upload|beta-upload|gamma-upload/.test(el.textContent || '')).length >= 3
     }, null, { timeout: 25000 })
     rec('Form Preview keeps three files after one picker', true)
   } else {

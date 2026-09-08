@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.common.audit.SystemAuditFields;
 import com.platform.common.jdbc.SubTableRowIdentity;
-import com.platform.common.jdbc.SubTableRowKeySupport;
+import com.platform.common.subtable.SubTableStoreKeys;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,6 +29,9 @@ import java.util.Set;
 @Component
 @RequiredArgsConstructor
 public class ChangeHistorySubmissionFilter {
+    /** Row-identity field names preserved through any field-level filtering so row matching on
+     *  subsequent saves keeps working even when the identity field itself is not user-editable. */
+    public static final List<String> ROW_IDENTITY_FIELDS = SubTableRowIdentity.IDENTITY_FIELDS;
     /**
      * Row-identity field names for one binding, preserved through any field-level filtering so row
      * matching on subsequent saves keeps working even when the identity field is not user-editable.
@@ -66,6 +69,7 @@ public class ChangeHistorySubmissionFilter {
         }
         return SubTableRowIdentity.identityFieldsFor(designerPk);
     }
+
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
@@ -109,7 +113,7 @@ public class ChangeHistorySubmissionFilter {
     private Object filterSubTableBaseline(Object storedSubTables, Map<String, Object> formDefinition) {
         if (!(storedSubTables instanceof Map<?, ?> tables))
             return null;
-        Map<String, Object> wrapper = Map.of("__subTables__", castMap(tables));
+        Map<String, Object> wrapper = Map.of("__subTables__", ChangeHistoryFilterMaps.castMap(tables));
         return retainUserEditableSubmission(wrapper, wrapper, formDefinition).get("__subTables__");
     }
 
@@ -177,151 +181,34 @@ public class ChangeHistorySubmissionFilter {
         if (config.isEmpty())
             return Map.of();
         Map<String, String> permissions = stringMapValue(formDefinition.get("fieldPermissions"));
-        Set<String> topLevelEditable = collectEditableFields(config, permissions);
-        Map<String, Set<String>> editableByBinding = collectEditableSubFormFields(config, permissions);
-        BindingAliases aliases = resolveBindingContract(
+        Map<String, String> topLevelLookupDisplay = new HashMap<>();
+        Set<String> topLevelEditable = collectEditableFields(config, permissions, topLevelLookupDisplay);
+        Map<String, Map<String, String>> lookupDisplayByBinding = new HashMap<>();
+        Map<String, Set<String>> editableByBinding = collectEditableSubFormFields(
+                config, permissions, lookupDisplayByBinding);
+        ChangeHistoryBindingAliases aliases = resolveBindingContract(
                 formDefinition, topLevelEditable, editableByBinding);
         Map<String, Object> result = new LinkedHashMap<>();
         for (String field : topLevelEditable) {
             if (!submitted.containsKey(field))
                 continue;
-            // The audit value must be exactly what the user submitted. Enriched values may
-            // contain
-            // workflow outcomes or normalized system representations of the same field.
-            result.put(field, submitted.get(field));
+            result.put(field, ChangeHistoryLookupAuditValues.visibleAuditValue(
+                    submitted.get(field), topLevelLookupDisplay.get(field)));
         }
         Object submittedSubTables = submitted.get("__subTables__");
         if (submittedSubTables instanceof Map<?, ?> rawTables) {
             Map<?, ?> enrichedTables = enriched != null && enriched.get("__subTables__") instanceof Map<?, ?> map
                     ? map
                     : Map.of();
-            Map<String, Object> filteredTables = filterSubTables(
-                    rawTables, enrichedTables, editableByBinding, aliases);
+            Map<String, Object> filteredTables = ChangeHistorySubTableAuditWalk.filter(
+                    rawTables, enrichedTables, editableByBinding, aliases, lookupDisplayByBinding);
             if (!filteredTables.isEmpty())
                 result.put("__subTables__", filteredTables);
         }
         return copyPayload(result);
     }
 
-    private Map<String, Object> filterSubTables(Map<?, ?> submittedTables,
-            Map<?, ?> enrichedTables,
-            Map<String, Set<String>> editableByBinding,
-            BindingAliases aliases) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        Map<String, Integer> bestPriorityByBinding = new HashMap<>();
-        Map<String, Map<String, Map<String, Object>>> rowsByTableAndIdentity = new LinkedHashMap<>();
-        List<Map.Entry<?, ?>> entries = new ArrayList<>(submittedTables.entrySet());
-        entries.sort((left, right) -> {
-            int priority = Integer.compare(
-                    aliasPriority(left.getKey(), aliases), aliasPriority(right.getKey(), aliases));
-            return priority != 0 ? priority
-                    : String.valueOf(left.getKey()).compareToIgnoreCase(String.valueOf(right.getKey()));
-        });
-        for (Map.Entry<?, ?> entry : entries) {
-            String rawKey = stringValue(entry.getKey());
-            if (rawKey == null || !(entry.getValue() instanceof List<?> submittedRows))
-                continue;
-            String bindingId = aliases.aliasToBinding().getOrDefault(normalizeAlias(rawKey), rawKey);
-            Set<String> editableFields = editableByBinding.get(bindingId);
-            if (editableFields == null || editableFields.isEmpty())
-                continue;
-            int priority = aliasPriority(rawKey, aliases);
-            Integer bestPriority = bestPriorityByBinding.putIfAbsent(bindingId, priority);
-            if (bestPriority != null && priority >= bestPriority)
-                continue;
-            List<?> enrichedRows = findRows(enrichedTables, rawKey, bindingId, aliases);
-            // This binding's row identity: the platform key plus the DESIGNER's primary key
-            // columns. Reading it from configuration is what lets a table keyed by
-            // `correspondence_id` be matched at all — a fixed list of likely column names cannot
-            // name it, and would read a business column called `id` as an identity.
-            List<String> pkFields = aliases.primaryKeyFieldsByBinding().get(bindingId);
-            List<Map<String, Object>> filteredRows = new ArrayList<>();
-            for (int i = 0; i < submittedRows.size(); i++) {
-                if (!(submittedRows.get(i) instanceof Map<?, ?> submittedRow))
-                    continue;
-                Map<?, ?> enrichedRow = findEnrichedRow(submittedRow, enrichedRows, i, pkFields);
-                Map<String, Object> filteredRow = new LinkedHashMap<>();
-                for (String identityField : SubTableRowIdentity.identityFieldsFor(pkFields)) {
-                    Object identity = enrichedRow.containsKey(identityField)
-                            ? enrichedRow.get(identityField)
-                            : submittedRow.get(identityField);
-                    if (identity != null)
-                        filteredRow.put(identityField, identity);
-                }
-                for (String field : editableFields) {
-                    if (submittedRow.containsKey(field))
-                        filteredRow.put(field, submittedRow.get(field));
-                }
-                // Keep identity-only rows so removal of all editable values can still be
-                // compared.
-                if (!filteredRow.isEmpty())
-                    filteredRows.add(filteredRow);
-            }
-            // Canonicalize every alias to its physical table name. Otherwise the same row
-            // can be
-            // recorded twice as, for example, "subtable" and "participants" across task
-            // forms.
-            // An explicitly submitted empty list remains present to represent delete-all
-            // intent.
-            String outputKey = aliases.bindingToHistoryName().get(bindingId);
-            if (outputKey == null) {
-                outputKey = ChangeHistoryComponent.normalizeSubTableNameForHistory(rawKey);
-            }
-            if (outputKey == null)
-                continue;
-            Map<String, Map<String, Object>> rowsByIdentity = rowsByTableAndIdentity
-                    .computeIfAbsent(outputKey, ignored -> new LinkedHashMap<>());
-            if (submittedRows.isEmpty() && priority <= bestPriorityByBinding.get(bindingId)) {
-                rowsByIdentity.clear();
-            }
-            for (Map<String, Object> row : filteredRows) {
-                String identity = SubTableRowIdentity.identityOf(row);
-                if (identity == null)
-                    identity = "__index_" + rowsByIdentity.size();
-                rowsByIdentity.putIfAbsent(identity, row);
-            }
-        }
-        rowsByTableAndIdentity.forEach((tableName, rows) -> result.put(tableName, new ArrayList<>(rows.values())));
-        return result;
-    }
-
-    private int aliasPriority(Object rawKeyValue, BindingAliases aliases) {
-        String rawKey = stringValue(rawKeyValue);
-        if (rawKey == null)
-            return Integer.MAX_VALUE;
-        String bindingId = aliases.aliasToBinding().getOrDefault(normalizeAlias(rawKey), rawKey);
-        return aliases.aliasPriorities().getOrDefault(normalizeAlias(rawKey), Integer.MAX_VALUE);
-    }
-
-    private Map<?, ?> findEnrichedRow(Map<?, ?> submittedRow, List<?> enrichedRows, int fallbackIndex,
-            List<String> designerPrimaryKeyFields) {
-        Set<String> submittedIdentities = rowIdentities(submittedRow, designerPrimaryKeyFields);
-        if (!submittedIdentities.isEmpty()) {
-            for (Object candidate : enrichedRows) {
-                if (candidate instanceof Map<?, ?> row
-                        && !java.util.Collections.disjoint(submittedIdentities,
-                                rowIdentities(row, designerPrimaryKeyFields))) {
-                    return row;
-                }
-            }
-            return Map.of();
-        }
-        return fallbackIndex < enrichedRows.size() && enrichedRows.get(fallbackIndex) instanceof Map<?, ?> row
-                ? row
-                : Map.of();
-    }
-
-    private Set<String> rowIdentities(Map<?, ?> row) {
-        return rowIdentities(row, null);
-    }
-
-    /** @param designerPrimaryKeyFields this binding's configured primary key; null when unknown */
-    private Set<String> rowIdentities(Map<?, ?> row, List<String> designerPrimaryKeyFields) {
-        return SubTableRowIdentity.identityValuesOf(
-                SubTableRowKeySupport.normalizeStringKeyMap(row), designerPrimaryKeyFields);
-    }
-
-    /** A {@code text[]} column as a list; empty when the column is null or not an array. */
+    /** Read a Postgres {@code text[]} column (the primary-key subquery) as a list. */
     private static List<String> textArrayValue(Object raw) {
         if (raw instanceof java.sql.Array sqlArray) {
             try {
@@ -343,7 +230,7 @@ public class ChangeHistorySubmissionFilter {
         return List.of();
     }
 
-    private BindingAliases resolveBindingContract(Map<String, Object> formDefinition,
+    private ChangeHistoryBindingAliases resolveBindingContract(Map<String, Object> formDefinition,
             Set<String> topLevelEditable,
             Map<String, Set<String>> editableByBinding) {
         Map<String, String> aliasToBinding = new HashMap<>();
@@ -356,7 +243,8 @@ public class ChangeHistorySubmissionFilter {
         });
         String formId = stringValue(formDefinition.get("formId"));
         if (formId == null)
-            return new BindingAliases(aliasToBinding, bindingToHistoryName, aliasPriorities, primaryKeyFieldsByBinding);
+            return new ChangeHistoryBindingAliases(aliasToBinding, bindingToHistoryName,
+                    aliasPriorities, primaryKeyFieldsByBinding);
         try {
             List<Map<String, Object>> bindings = jdbcTemplate.queryForList(
                     """
@@ -364,10 +252,14 @@ public class ChangeHistorySubmissionFilter {
                                 COALESCE(td.table_name, rt.table_name) AS table_name,
                                 COALESCE(td.table_display_name, rt.display_name) AS table_display_name,
                                 sibling.id AS sibling_id,
-                                (SELECT array_agg(f.field_name ORDER BY f.sort_order NULLS LAST, f.id)
-                                 FROM dw_field_definitions f
-                                 WHERE f.table_id = binding.table_id
-                                   AND COALESCE(f.is_primary_key, false) = true) AS primary_key_fields
+                                binding.relation_table_id,
+                                -- The columns this table declares as its primary key. Row identity
+                                -- is configuration: a table keyed by `correspondence_id` matches no
+                                -- list of likely column names.
+                                (SELECT array_agg(pk.field_name ORDER BY pk.sort_order NULLS LAST, pk.id)
+                                   FROM dw_field_definitions pk
+                                  WHERE pk.table_id = binding.table_id
+                                    AND COALESCE(pk.is_primary_key, false) = true) AS primary_key_fields
                             FROM dw_form_definitions form
                             INNER JOIN dw_form_table_bindings binding ON binding.form_id = form.id
                             LEFT JOIN dw_table_definitions td ON td.id = binding.table_id
@@ -405,6 +297,12 @@ public class ChangeHistorySubmissionFilter {
                 List<String> pkFields = textArrayValue(binding.get("primary_key_fields"));
                 if (!pkFields.isEmpty())
                     primaryKeyFieldsByBinding.putIfAbsent(bindingId, pkFields);
+                // Portal persists __subTables__ under SubTableStoreKeys (dw:/rt:), not binding
+                // ids. Without this alias the audit payload drops every user-edited sub-table.
+                registerAlias(aliasToBinding, aliasPriorities, bindingId,
+                        SubTableStoreKeys.storeKey(tableName, tableName,
+                                isRelationTableBinding(binding.get("relation_table_id"))),
+                        1);
             }
         } catch (RuntimeException ex) {
             // Form binding metadata is authoritative. If it cannot be read, fail closed
@@ -415,38 +313,21 @@ public class ChangeHistorySubmissionFilter {
             topLevelEditable.clear();
             editableByBinding.clear();
         }
-        return new BindingAliases(aliasToBinding, bindingToHistoryName, aliasPriorities, primaryKeyFieldsByBinding);
-    }
-
-    private List<?> findRows(Map<?, ?> enrichedTables,
-            String rawKey,
-            String bindingId,
-            BindingAliases aliases) {
-        Object exact = enrichedTables.get(rawKey);
-        if (exact instanceof List<?> rows)
-            return rows;
-        String expectedBinding = aliases.aliasToBinding().getOrDefault(normalizeAlias(rawKey), bindingId);
-        for (Map.Entry<?, ?> candidate : enrichedTables.entrySet()) {
-            String candidateKey = stringValue(candidate.getKey());
-            if (candidateKey == null || !(candidate.getValue() instanceof List<?> rows))
-                continue;
-            String candidateBinding = aliases.aliasToBinding()
-                    .getOrDefault(normalizeAlias(candidateKey), candidateKey);
-            if (expectedBinding.equals(candidateBinding))
-                return rows;
-        }
-        return List.of();
+        return new ChangeHistoryBindingAliases(aliasToBinding, bindingToHistoryName,
+                aliasPriorities, primaryKeyFieldsByBinding);
     }
 
     private Set<String> collectEditableFields(Map<String, Object> config,
-            Map<String, String> permissions) {
+            Map<String, String> permissions,
+            Map<String, String> lookupDisplayByField) {
         Set<String> fields = new HashSet<>();
-        collectEditableRules(config.get("rule"), permissions, fields, true, null);
+        collectEditableRules(config.get("rule"), permissions, fields, true, null, lookupDisplayByField);
         return fields;
     }
 
     private Map<String, Set<String>> collectEditableSubFormFields(Map<String, Object> config,
-            Map<String, String> permissions) {
+            Map<String, String> permissions,
+            Map<String, Map<String, String>> lookupDisplayByBinding) {
         Map<String, Set<String>> result = new HashMap<>();
         Object subForms = config.get("subForms");
         if (!(subForms instanceof Map<?, ?> forms))
@@ -456,8 +337,11 @@ public class ChangeHistorySubmissionFilter {
             if (bindingId == null || !(entry.getValue() instanceof Map<?, ?> rawConfig))
                 continue;
             Set<String> fields = new HashSet<>();
-            collectEditableRules(rawConfig.get("rule"), permissions, fields, true, bindingId);
+            Map<String, String> lookupDisplay = new HashMap<>();
+            collectEditableRules(rawConfig.get("rule"), permissions, fields, true, bindingId, lookupDisplay);
             result.put(bindingId, fields);
+            if (!lookupDisplay.isEmpty())
+                lookupDisplayByBinding.put(bindingId, lookupDisplay);
         }
         return result;
     }
@@ -466,7 +350,8 @@ public class ChangeHistorySubmissionFilter {
             Map<String, String> permissions,
             Set<String> fields,
             boolean ancestorEditable,
-            String bindingId) {
+            String bindingId,
+            Map<String, String> lookupDisplayByField) {
         if (!(rulesValue instanceof List<?> rules))
             return;
         for (Object ruleValue : rules) {
@@ -474,9 +359,14 @@ public class ChangeHistorySubmissionFilter {
                 continue;
             String field = stringValue(rule.get("field"));
             boolean effectiveEditable = ancestorEditable && isRuleContainerEditable(rule);
-            if (field != null && effectiveEditable && isEditableRule(field, rule, permissions, bindingId))
+            if (field != null && effectiveEditable && isEditableRule(field, rule, permissions, bindingId)) {
                 fields.add(field);
-            collectEditableRules(rule.get("children"), permissions, fields, effectiveEditable, bindingId);
+                String displayField = ChangeHistoryLookupAuditValues.selectedDisplayField(rule, objectMapper);
+                if (displayField != null)
+                    lookupDisplayByField.putIfAbsent(field, displayField);
+            }
+            collectEditableRules(rule.get("children"), permissions, fields, effectiveEditable, bindingId,
+                    lookupDisplayByField);
         }
     }
 
@@ -646,7 +536,7 @@ public class ChangeHistorySubmissionFilter {
 
     private Map<String, Object> parseObject(Object raw) {
         if (raw instanceof Map<?, ?> map)
-            return castMap(map);
+            return ChangeHistoryFilterMaps.castMap(map);
         if (raw == null || String.valueOf(raw).isBlank())
             return Map.of();
         try {
@@ -671,16 +561,7 @@ public class ChangeHistorySubmissionFilter {
     }
 
     private static Map<String, Object> mapValue(Object value) {
-        return value instanceof Map<?, ?> map ? castMap(map) : Map.of();
-    }
-
-    private static Map<String, Object> castMap(Map<?, ?> source) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        source.forEach((key, value) -> {
-            if (key != null)
-                result.put(String.valueOf(key), value);
-        });
-        return result;
+        return value instanceof Map<?, ?> map ? ChangeHistoryFilterMaps.castMap(map) : Map.of();
     }
 
     private static Map<String, String> stringMapValue(Object value) {
@@ -699,27 +580,24 @@ public class ChangeHistorySubmissionFilter {
     }
 
     private static String stringValue(Object value) {
-        if (value == null)
-            return null;
-        String normalized = String.valueOf(value).trim();
-        return normalized.isEmpty() ? null : normalized;
+        return ChangeHistoryFilterMaps.stringValue(value);
+    }
+
+    private static boolean isRelationTableBinding(Object relationTableId) {
+        if (relationTableId instanceof Number number) {
+            return number.longValue() > 0;
+        }
+        if (relationTableId == null) {
+            return false;
+        }
+        try {
+            return Long.parseLong(String.valueOf(relationTableId).trim()) > 0;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
     }
 
     private static String normalizeAlias(String value) {
-        String normalized = ChangeHistoryComponent.normalizeSubTableNameForHistory(value);
-        return normalized != null ? normalized : value.trim().toLowerCase();
-    }
-
-    private record BindingAliases(Map<String, String> aliasToBinding,
-            Map<String, String> bindingToHistoryName,
-            Map<String, Integer> aliasPriorities,
-            /**
-             * Designer primary key columns per binding id, from
-             * {@code dw_field_definitions.is_primary_key}. Row identity is resolved from this —
-             * never from a list of likely column names, which cannot name a key such as
-             * {@code correspondence_id} and would read a business column called {@code id} or
-             * {@code row_id} as an identity.
-             */
-            Map<String, List<String>> primaryKeyFieldsByBinding) {
+        return ChangeHistoryFilterMaps.normalizeAlias(value);
     }
 }

@@ -6,6 +6,15 @@ export const DEFAULT_UPLOAD_MAX_FILES = 10
 /** Hard cap for the designer number input. */
 export const ABSOLUTE_UPLOAD_MAX_FILES = 50
 
+/** Default per-field max size when the designer has not set {@code maxFileSizeMb}. */
+export const DEFAULT_UPLOAD_MAX_FILE_SIZE_MB = 10
+
+/** Platform hard cap for a single uploaded file. */
+export const PLATFORM_UPLOAD_MAX_FILE_SIZE_MB = 50
+
+export const PLATFORM_UPLOAD_MAX_FILE_SIZE_BYTES =
+  PLATFORM_UPLOAD_MAX_FILE_SIZE_MB * 1024 * 1024
+
 export interface StoredUploadFile {
   url: string
   name: string
@@ -14,12 +23,15 @@ export interface StoredUploadFile {
 /**
  * Resolve how many files an Upload/FILE field accepts.
  * Old generator wrote {@code multiple:false} + {@code limit:1}; that is not designer intent.
- * Explicit {@code maxFiles} (this feature) wins. Else {@code multiple:true} + {@code limit}.
+ * Explicit {@code maxFiles} wins. Else honor {@code limit} unless it is that leftover 1.
  */
 export function resolveUploadMaxFiles(props?: Record<string, unknown> | null): number {
   const maxFiles = props?.maxFiles
   if (isPositiveInt(maxFiles)) return clampMaxFiles(maxFiles)
-  if (props?.multiple === true && isPositiveInt(props.limit)) return clampMaxFiles(props.limit)
+  if (isPositiveInt(props?.limit)) {
+    if (props?.multiple === false && props.limit === 1) return DEFAULT_UPLOAD_MAX_FILES
+    return clampMaxFiles(props.limit)
+  }
   return DEFAULT_UPLOAD_MAX_FILES
 }
 
@@ -27,26 +39,76 @@ export function isUploadMultiple(props?: Record<string, unknown> | null): boolea
   return resolveUploadMaxFiles(props) > 1
 }
 
+/** Per-field max size in MB. Unconfigured fields stay at 10; designer may raise up to 50. */
+export function resolveUploadMaxFileSizeMb(props?: Record<string, unknown> | null): number {
+  const raw = props?.maxFileSizeMb
+  if (isPositiveInt(raw)) return Math.min(Math.floor(raw), PLATFORM_UPLOAD_MAX_FILE_SIZE_MB)
+  return DEFAULT_UPLOAD_MAX_FILE_SIZE_MB
+}
+
+export function fileExceedsUploadSize(file: { size: number }, maxFileSizeMb: number): boolean {
+  const mb = Math.min(Math.max(1, Math.floor(maxFileSizeMb)), PLATFORM_UPLOAD_MAX_FILE_SIZE_MB)
+  return file.size > mb * 1024 * 1024
+}
+
+export function normalizeUploadFileName(name: string): string {
+  return name.trim().toLowerCase()
+}
+
+export function uploadFileDisplayName(file: { name?: string; url?: string }): string {
+  if (typeof file.name === 'string' && file.name.trim()) return file.name.trim()
+  if (typeof file.url === 'string' && file.url.trim()) return fileDisplayText(file.url)
+  return ''
+}
+
+/** Same original name already in the list (failed rows may be retried). */
+export function isDuplicateUploadFile(
+  incomingName: string,
+  existing: Array<{ name?: string; url?: string; status?: string }>,
+): boolean {
+  const key = normalizeUploadFileName(incomingName)
+  if (!key) return false
+  return existing.some((item) => {
+    if (item.status === 'fail') return false
+    return normalizeUploadFileName(uploadFileDisplayName(item)) === key
+  })
+}
+
+export function rejectUploadFileReason(
+  file: { name: string; size: number },
+  existing: Array<{ name?: string; url?: string; status?: string }>,
+  maxFileSizeMb?: number,
+): 'size' | 'duplicate' | null {
+  if (maxFileSizeMb != null && fileExceedsUploadSize(file, maxFileSizeMb)) return 'size'
+  if (isDuplicateUploadFile(file.name, existing)) return 'duplicate'
+  return null
+}
+
+/**
+ * Persist uploaded files as a Flowable-safe string: one URL, or JSON of {url,name}[].
+ * Returning a JS array makes Flowable store Java serializable bytes that My Request cannot show.
+ */
 export function persistUploadValue(
   files: Array<{ url: string; name: string }>,
   maxFiles: number,
-): string | StoredUploadFile[] {
+): string {
   const trimmed = files
     .filter((f) => typeof f.url === 'string' && f.url.trim())
     .slice(0, clampMaxFiles(maxFiles))
     .map((f) => ({ url: f.url.trim(), name: f.name?.trim() || fileDisplayText(f.url) }))
-  if (maxFiles <= 1) return trimmed[0]?.url ?? ''
-  return trimmed
+  if (trimmed.length <= 1) return trimmed[0]?.url ?? ''
+  return JSON.stringify(trimmed)
 }
 
 export function persistFromUploadFileList(
   fileList: Array<{ url?: string; name?: string; status?: string; response?: unknown }>,
   maxFiles: number,
-): string | StoredUploadFile[] {
+): string {
   const files: StoredUploadFile[] = []
   for (const item of fileList) {
     if (item.status && item.status !== 'success') continue
-    const url = extractStoredUploadUrl(item.response) || String(item.url || '').trim()
+    stampStoredUploadUrl(item)
+    const url = String(item.url || '').trim()
     if (!url) continue
     const name = (typeof item.name === 'string' && item.name.trim()) || fileDisplayText(url)
     files.push({ url, name })
@@ -70,12 +132,13 @@ export function splitUploadFileList<T extends {
 }>(
   liveList: T[],
   maxFiles: number,
-): { stored: string | StoredUploadFile[]; display: T[] } {
+): { stored: string; display: T[] } {
   const stored = persistFromUploadFileList(liveList, maxFiles)
   const storedUrls = new Set(extractFileLinks(stored).map((link) => link.url))
   const display = liveList.filter((item) => {
     if (isInflightUploadStatus(item.status)) return true
-    const url = extractStoredUploadUrl(item.response) || String(item.url || '').trim()
+    stampStoredUploadUrl(item)
+    const url = String(item.url || '').trim()
     return Boolean(url && storedUrls.has(url))
   })
   return { stored, display }
@@ -116,6 +179,12 @@ export function extractStoredUploadUrl(res: unknown): string {
   if (o.data != null && o.data !== o) return extractStoredUploadUrl(o.data)
   if (o.response != null && o.response !== o) return extractStoredUploadUrl(o.response)
   return ''
+}
+
+/** Copy response.data.url onto the live el-upload row so cards/preview can open. */
+export function stampStoredUploadUrl(item: { url?: string; response?: unknown }): void {
+  const url = extractStoredUploadUrl(item.response) || String(item.url || '').trim()
+  if (url) item.url = url
 }
 
 function isPositiveInt(value: unknown): value is number {

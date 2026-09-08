@@ -9,6 +9,7 @@ import com.workflow.dto.request.HistoryQueryRequest;
 import com.workflow.dto.request.TaskAssignmentRequest;
 import com.workflow.dto.request.TaskClaimRequest;
 import com.workflow.dto.request.TaskDelegationRequest;
+import com.workflow.dto.request.TaskReassignClaimRequest;
 import com.workflow.dto.request.TaskReturnRequest;
 import com.workflow.dto.request.AssignSubTableRowRequest;
 import com.workflow.dto.response.ApiResponse;
@@ -403,6 +404,32 @@ public class TaskController {
             return ResponseEntity.ok(ApiResponse.success(result));
         } else {
             return ResponseEntity.badRequest().body(ApiResponse.error("UNCLAIM_FAILED", result.getMessage()));
+        }
+    }
+
+    /**
+     * Reassign a claim-pool hold to another member of the same pool.
+     */
+    @PostMapping("/{taskId}/reassign-claim")
+    @Operation(summary = "Reassign Claim", description = "Assign a claim-pool task to another pool member")
+    public ResponseEntity<ApiResponse<TaskAssignmentResult>> reassignClaim(
+            @Parameter(description = "Task ID", required = true)
+            @PathVariable String taskId,
+            @RequestBody @Valid TaskReassignClaimRequest request) {
+
+        Optional<String> actor = WorkflowActorResolver.currentUserId();
+        if (actor.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("UNAUTHORIZED", "Authentication required"));
+        }
+        log.info("Reassigning claim-pool task: {} by {} to {}", taskId, actor.get(), request.getTargetUserId());
+        TaskAssignmentResult result = taskManagerComponent.reassignClaim(
+                taskId, actor.get(), request.getTargetUserId());
+
+        if (result.isSuccess()) {
+            return ResponseEntity.ok(ApiResponse.success(result));
+        } else {
+            return ResponseEntity.badRequest().body(ApiResponse.error("REASSIGN_FAILED", result.getMessage()));
         }
     }
     

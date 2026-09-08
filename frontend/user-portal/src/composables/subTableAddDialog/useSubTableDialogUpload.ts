@@ -1,15 +1,18 @@
-import { ref, type Ref } from 'vue'
+import { onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { isUploadColumn } from '@/components/subTableAddDialogHelpers'
 import type { DialogColumn } from '@/components/subTableAddDialogHelpers'
 import { extractFileLinks } from '@platform-shared/list/fileNames'
 import {
   joinTargetFileNames,
+  resolveUploadMaxFileSizeMb,
   resolveUploadMaxFiles,
   splitUploadFileList,
   toElUploadFileList,
 } from '@platform-shared/upload/uploadFieldValue'
 import { queuedUploadRequest } from '@platform-shared/upload/queuedUploadRequest'
+import { isUploadUnauthorizedError } from '@platform-shared/upload/uploadAuthRefresh'
+import { clearUploadWidgetState, setUploadWidgetState } from '@platform-shared/upload/uploadSubmitGate'
 
 type DialogT = (key: string, named?: Record<string, unknown>) => string
 type UploadListItem = { name: string; url: string; status?: string; response?: unknown }
@@ -24,6 +27,25 @@ export function useSubTableDialogUpload(
   function maxFilesOf(col: DialogColumn): number {
     return resolveUploadMaxFiles(col.props)
   }
+
+  function maxFileSizeMbOf(col: DialogColumn): number {
+    return resolveUploadMaxFileSizeMb(col.props)
+  }
+
+  watch(
+    uploadFileLists,
+    (lists) => {
+      for (const [field, list] of Object.entries(lists)) {
+        setUploadWidgetState(`dialog-upload:${field}`, list)
+      }
+    },
+    { deep: true },
+  )
+  onBeforeUnmount(() => {
+    for (const field of Object.keys(uploadFileLists.value)) {
+      clearUploadWidgetState(`dialog-upload:${field}`)
+    }
+  })
 
   function writeLiveList(col: DialogColumn, list: UploadListItem[]) {
     const { stored, display } = splitUploadFileList(list, maxFilesOf(col))
@@ -46,6 +68,9 @@ export function useSubTableDialogUpload(
   }
 
   function resetUploadNames() {
+    for (const field of Object.keys(uploadFileLists.value)) {
+      clearUploadWidgetState(`dialog-upload:${field}`)
+    }
     uploadFileLists.value = {}
   }
 
@@ -71,12 +96,24 @@ export function useSubTableDialogUpload(
     writeLiveList(col, uploadFiles)
   }
 
-  function handleUploadError(col: DialogColumn) {
+  function handleUploadError(col: DialogColumn, error?: unknown) {
+    if (isUploadUnauthorizedError(error)) {
+      ElMessage.error(t('upload.sessionExpired'))
+      return
+    }
     ElMessage.error(t('subTable.uploadFailed', { field: col.label }))
+  }
+
+  function handleSizeExceed(col: DialogColumn) {
+    ElMessage.warning(t('upload.sizeExceed', { size: maxFileSizeMbOf(col) }))
   }
 
   function handleUploadExceed(col: DialogColumn) {
     ElMessage.warning(t('upload.limitExceed', { limit: maxFilesOf(col) }))
+  }
+
+  function handleDuplicate(_col: DialogColumn, name: string) {
+    ElMessage.warning(t('upload.duplicate', { name }))
   }
 
   function clearUpload(col: DialogColumn) {
@@ -87,6 +124,7 @@ export function useSubTableDialogUpload(
     uploadFileLists,
     httpRequest: queuedUploadRequest,
     maxFilesOf,
+    maxFileSizeMbOf,
     isMultiple: (col: DialogColumn) => maxFilesOf(col) > 1,
     backfillUploadNames,
     resetUploadNames,
@@ -94,7 +132,9 @@ export function useSubTableDialogUpload(
     handleUploadRemove,
     handleUploadChange,
     handleUploadError,
+    handleSizeExceed,
     handleUploadExceed,
+    handleDuplicate,
     clearUpload,
   }
 }

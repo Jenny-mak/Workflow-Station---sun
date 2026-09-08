@@ -15,6 +15,7 @@ import { fileExtension, isBlockedPreviewExtension } from '@/utils/filePreviewKin
 import { isCannotDownload, uploadPropsBlockDownload } from '@/utils/filePreviewFlags'
 import type { FilePreviewItem } from '@/composables/filePreview/useFilePreview'
 import { extractFileLinks } from '@platform-shared/list/fileNames'
+import { isAnyUploadType } from '@platform-shared/upload/uploadRuleType'
 
 export interface PreviewBindingSlice {
   bindingId: number
@@ -124,7 +125,7 @@ function pushUploadFields(
   seen: Set<string>,
 ) {
   for (const field of fields) {
-    if (field.hidden === true || field.type !== 'upload') continue
+    if (field.hidden === true || !isAnyUploadType(field.type)) continue
     const target = (field as { fileNameTargetField?: string }).fileNameTargetField
     const saved = target ? formData[target] : undefined
     pushUploadValue(

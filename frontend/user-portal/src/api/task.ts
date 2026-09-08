@@ -123,6 +123,8 @@ export interface TaskInfo {
   claimable?: boolean
   /** Leader / BU Approver / SYS_ADMIN may release someone else's hold. */
   canForceUnclaim?: boolean
+  /** Leader / BU Approver / SYS_ADMIN may assign this pool task to a specified member. */
+  canReassign?: boolean
 }
 
 export interface PageResponse<T> {
@@ -265,6 +267,17 @@ export function unclaimTask(taskId: string, originalAssignmentType: string, orig
     params: { originalAssignmentType, originalAssignee },
   }
   return request.post<{ data: TaskInfo }>(`/tasks/${taskId}/unclaim`, null, config)
+}
+
+export function reassignTask(taskId: string, targetUserId: string) {
+  const config: AxiosRequestConfig & { skipGlobalErrorHandler?: boolean } = {
+    skipGlobalErrorHandler: true,
+  }
+  return request.post<{ data: TaskInfo }>(
+    `/tasks/${taskId}/reassign`,
+    { targetUserId },
+    config,
+  )
 }
 
 // Complete task

@@ -32,28 +32,32 @@ class ClaimForceUnclaimAnnotatorTest {
     }
 
     @Test
-    void skipsEvaluateWhenNothingIsHeldBySomeoneElse() {
-        TaskInfo free = poolTask("t-free", null, false);
-        TaskInfo mine = poolTask("t-mine", "me", true);
+    void skipsEvaluateWhenNoClaimPoolRows() {
+        TaskInfo direct = TaskInfo.builder().taskId("t-direct").assignmentType("USER").build();
 
-        annotator.annotate(List.of(free, mine), "me");
+        annotator.annotate(List.of(direct), "me");
 
-        assertThat(free.isCanForceUnclaim()).isFalse();
-        assertThat(mine.isCanForceUnclaim()).isFalse();
+        assertThat(direct.isCanForceUnclaim()).isFalse();
+        assertThat(direct.isCanReassign()).isFalse();
         verify(adminCenterClient, never()).evaluateForceUnclaim(eq("me"), anyList());
     }
 
     @Test
-    void oneEvaluateCallSetsForceFlagOnlyOnHeldForeignRows() {
+    void oneEvaluateCallSetsReassignOnAllPoolRowsAndForceUnclaimOnlyOnForeignHolds() {
         TaskInfo held = poolTask("t-held", "alice", false);
         TaskInfo mine = poolTask("t-mine", "me", true);
+        TaskInfo free = poolTask("t-free", null, false);
         when(adminCenterClient.evaluateForceUnclaim(eq("leader"), anyList()))
-                .thenReturn(Map.of("t-held", true));
+                .thenReturn(Map.of("t-held", true, "t-mine", true, "t-free", true));
 
-        annotator.annotate(List.of(held, mine), "leader");
+        annotator.annotate(List.of(held, mine, free), "leader");
 
         assertThat(held.isCanForceUnclaim()).isTrue();
+        assertThat(held.isCanReassign()).isTrue();
         assertThat(mine.isCanForceUnclaim()).isFalse();
+        assertThat(mine.isCanReassign()).isTrue();
+        assertThat(free.isCanForceUnclaim()).isFalse();
+        assertThat(free.isCanReassign()).isTrue();
         verify(adminCenterClient).evaluateForceUnclaim(eq("leader"), anyList());
     }
 
@@ -65,6 +69,7 @@ class ClaimForceUnclaimAnnotatorTest {
         annotator.annotate(List.of(held), "u1");
 
         assertThat(held.isCanForceUnclaim()).isFalse();
+        assertThat(held.isCanReassign()).isFalse();
     }
 
     private static TaskInfo poolTask(String taskId, String assignee, boolean claimedByCurrentUser) {

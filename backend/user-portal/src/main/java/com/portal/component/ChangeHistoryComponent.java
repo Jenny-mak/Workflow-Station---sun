@@ -10,6 +10,7 @@ import com.portal.dto.UserPortalAuditQueryRequest;
 import com.portal.dto.UserPortalAuditRecord;
 import com.portal.entity.ChangeHistory;
 import com.portal.entity.ProcessInstance;
+import com.portal.enums.AssignmentChangeTypes;
 import com.portal.enums.ChangeType;
 import com.portal.repository.ChangeHistoryRepository;
 import com.portal.repository.ProcessInstanceRepository;
@@ -139,7 +140,7 @@ public class ChangeHistoryComponent {
             "assigneedisplayname", "taskid", "taskdefinitionkey");
     private static final String RECORD_NOTE_FIELD_NAME = "__record_note__";
     private static final Set<String> ASSIGNEE_VALUE_FIELDS = Set.of(
-            "assignee", "assigneeuserid", "assigneeid");
+            "assignee", "assigneeuserid", "assigneeid", "claimed_by");
 
     /**
      * Record field changes.
@@ -377,20 +378,18 @@ public class ChangeHistoryComponent {
                 .filter(e -> e.getSubTableName() == null || !isSubTableRowMetadataField(e.getFieldName()))
                 .filter(e -> !semanticallyEqual(e.getFieldName(), e.getOldValue(), e.getNewValue()))
                 .toList();
-        // When a row identifier is given (e.g. from a multi-instance Todo task),
-        // keep only records for that specific row plus top-level field changes.
-        if (rowIdentifier != null && !rowIdentifier.isBlank()) {
-            entities = entities.stream()
-                    .filter(e -> e.getRowIdentifier() == null
-                            || rowIdentifier.equals(e.getRowIdentifier()))
-                    .toList();
-        }
+        // Multi-instance To Do passes the current collection row id so *that table's*
+        // other participants stay hidden. Shared sub-tables (Correspondence, etc.) keep
+        // their own row ids and must still appear — binding_link_mode is the authority.
+        entities = ChangeHistoryMiRowFilter.retainForMiTask(
+                jdbcTemplate, entities, processInstanceId, rowIdentifier);
         HistoryFieldMetadata fieldMetadata = resolveHistoryFieldMetadata(processInstanceId);
         entities = entities.stream()
                 .filter(entity -> !isLegacySystemFieldAlias(entity.getFieldName())
                         || fieldMetadata.isExplicitlyConfigured(
                                 entity.getSubTableName(), entity.getFieldName()))
                 .toList();
+        entities = ChangeHistoryDisplayCollapser.collapse(entities);
         UserDisplayMaps userDisplays = resolveUserDisplayNames(entities);
         UserPortalAuditEnricher.StageNameMaps stageNames = resolveStageNames(processInstanceId);
         return entities.stream()
@@ -863,6 +862,9 @@ public class ChangeHistoryComponent {
         }
 
         boolean isUserVisible(ChangeHistoryRecord record) {
+            if (AssignmentChangeTypes.isAssignmentActionName(record.getChangeType())) {
+                return true;
+            }
             String fieldName = record.getFieldName();
             if (fieldName == null || fieldName.isBlank()) {
                 return false;
@@ -1036,9 +1038,11 @@ public class ChangeHistoryComponent {
     }
 
     /**
-     * Resolve field labels from the PROCESS form configJson.
-     * Extracts field → title mappings from the form designer rule array,
-     * including sub-form fields.
+     * Resolve field labels from every form configJson for the function unit.
+     * Walks the designer {@code rule} tree including nested layout {@code children}
+     * (elCard / fcRow / col) and sub-form fields. A shallow top-level walk misses
+     * the actual business fields and then {@link HistoryFieldMetadata#isUserVisible}
+     * treats the incomplete map as an allow-list, hiding every remaining history row.
      */
     private Map<String, String> resolveFieldLabels(String processInstanceId) {
         Map<String, String> labels = new HashMap<>();
@@ -1049,7 +1053,7 @@ public class ChangeHistoryComponent {
             }
             for (Map<String, Object> config : loadFormConfigs(pi.getProcessDefinitionKey())) {
                 try {
-                    extractFieldLabelsFromConfig(config, labels, null);
+                    ChangeHistoryFormFieldLabelExtractor.walk(config, labels, null);
                 } catch (Exception e) {
                     log.debug("Could not read configJson for field labels: {}", e.getMessage());
                 }
@@ -1070,7 +1074,8 @@ public class ChangeHistoryComponent {
             int[] counter = { 0 };
             for (Map<String, Object> config : loadFormConfigs(pi.getProcessDefinitionKey())) {
                 try {
-                    extractFieldLabelsFromConfig(config, null, new FieldMetaCollector(orders, counter));
+                    ChangeHistoryFormFieldLabelExtractor.walk(
+                            config, null, new FieldMetaCollector(orders, counter)::accept);
                 } catch (Exception e) {
                     log.debug("Could not read configJson for field orders: {}", e.getMessage());
                 }
@@ -1084,37 +1089,6 @@ public class ChangeHistoryComponent {
     private record FieldMetaCollector(Map<String, Integer> fieldOrders, int[] counter) {
         void accept(String fieldName) {
             fieldOrders.putIfAbsent(fieldName, counter[0]++);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private void extractFieldLabelsFromConfig(Map<String, Object> config,
-            Map<String, String> labels,
-            FieldMetaCollector collector) {
-        Object rule = config.get("rule");
-        if (rule instanceof List<?> rules) {
-            for (Object item : rules) {
-                if (item instanceof Map<?, ?> ruleItem) {
-                    Object field = ruleItem.get("field");
-                    Object title = ruleItem.get("title");
-                    if (field instanceof String f && !f.isBlank()) {
-                        if (title instanceof String t && !t.isBlank() && labels != null) {
-                            labels.putIfAbsent(f, t);
-                        }
-                        if (collector != null) {
-                            collector.accept(f);
-                        }
-                    }
-                }
-            }
-        }
-        Object subForms = config.get("subForms");
-        if (subForms instanceof Map<?, ?> subMap) {
-            for (Object subConfig : subMap.values()) {
-                if (subConfig instanceof Map<?, ?> sc) {
-                    extractFieldLabelsFromConfig((Map<String, Object>) sc, labels, collector);
-                }
-            }
         }
     }
 

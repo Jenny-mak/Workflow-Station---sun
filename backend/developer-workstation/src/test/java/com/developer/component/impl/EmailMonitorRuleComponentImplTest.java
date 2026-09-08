@@ -236,7 +236,7 @@ class EmailMonitorRuleComponentImplTest {
     void create_oauthOnly_rejects() {
         FunctionUnit functionUnit = sampleFunctionUnit();
         EmailConnection connection = inboundConnection(functionUnit);
-        connection.setPasswordEncrypted(null);
+        connection.setCredentialEncrypted(null);
         connection.setOauthRefreshTokenEncrypted("oauth-enc");
         EmailMonitorRuleRequest request = sampleTemplateRequest();
 
@@ -346,7 +346,7 @@ class EmailMonitorRuleComponentImplTest {
     void assertRuntimeBindingsForDeploy_oauthOnly_throws() {
         FunctionUnit functionUnit = sampleFunctionUnit();
         EmailConnection connection = inboundConnection(functionUnit);
-        connection.setPasswordEncrypted(null);
+        connection.setCredentialEncrypted(null);
         connection.setOauthRefreshTokenEncrypted("oauth-enc");
         stubDeployWithConnection(connection);
         when(i18nService.getMessage("email.monitor.connection_missing_credentials"))
@@ -440,7 +440,7 @@ class EmailMonitorRuleComponentImplTest {
                 .enabled(true)
                 .direction(EmailConnectionDirection.INBOUND)
                 .mailboxAddress("monitor@example.test")
-                .passwordEncrypted("enc")
+                .credentialEncrypted("enc")
                 .functionUnit(functionUnit)
                 .build();
     }

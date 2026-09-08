@@ -153,15 +153,15 @@ export default {
     upTasksToClaim: {
       title: 'To Do — claim pool',
       summary:
-        'Business-unit role requests live on To Do. Claim before you edit; Claim all takes every free request in batches; the selection bar Claims or Unclaims only checked rows. Unclaim all releases only your holds. Optional auto-claim on open is off by default. Leaders, BU Approvers, and System Administrators can force-release someone else’s hold.',
+        'Business-unit role requests live on To Do. Claim before you edit; Claim all takes every free request in batches; the selection bar Claims or Unclaims only checked rows. Unclaim all releases only your holds. Optional auto-claim on open is off by default. Leaders, BU Approvers, and System Administrators can force-release someone else’s hold or Reassign it to another member of the same role.',
     },
     taskDelegate: {
       title: 'Delegate a task',
       summary: 'Hand this one To Do to a person or a BU+Role pair without changing Current Assignee.',
     },
     formUpload: {
-      title: 'Form Design — Upload',
-      summary: 'Upload fields accept multiple files by default. Set Max files to 1 for a single file.',
+      title: 'Form Design — Advanced Upload',
+      summary: 'Extend Advanced Upload: Max files, size cap, FileNet. Basic Upload stays the stock control.',
     },
     formEvents: {
       title: 'Form events',
@@ -506,6 +506,8 @@ export default {
     unclaimAllSample: 'next to Claim all; releases only your holds, never a colleague’s',
     claimSelectedSample: 'on the selection bar after you tick rows; confirms “Claim N of M selected”',
     unclaimSelectedSample: 'next to selection Claim; only your holds in the ticks, never Force Unclaim',
+    forceUnclaimSample: 'on the row and the task banner; returns the request to the pool',
+    reassignSample: 'on the row and the task banner; pick another member of the same role',
     autoClaimTitle: 'Auto-claim on open',
     autoClaimBody:
       'The Auto-claim on open switch sits on the To Do top bar and on User Profile. It is stored with your account and defaults to off. When it is on, clicking a Request ID on To Do claims that row first if it is still free, then opens the form. There is no success toast. If the claim fails (for example someone else just took it), you still open the form and see an error. Home, notifications, email links, bookmarks, and Completed Tasks do not auto-claim.',
@@ -520,10 +522,10 @@ export default {
     filePreviewSample: 'new tab; Ctrl + scroll zoom; Fit / 100%; Previous file / Next file',
     detailTitle: 'On the task page',
     detailBody:
-      'If nobody holds the role request, or someone else holds it, the form is view-only and the action bar is hidden. The banner at the top says the request is not claimed yet, that you are holding it, or that another person claimed it. Only the holder sees Claimed by You and can Unclaim, edit, and submit. If you are a Leader of this role, a BU Approver of this business unit, or a System Administrator, the banner and the list also show Force Unclaim.',
+      'If nobody holds the role request, or someone else holds it, the form is view-only and the action bar is hidden. The banner at the top says the request is not claimed yet, that you are holding it, or that another person claimed it. Only the holder sees Claimed by You and can Unclaim, edit, and submit. If you are a Leader of this role, a BU Approver of this business unit, or a System Administrator, the banner and the list also show Force Unclaim and Reassign.',
     leaderTitle: 'Leader, Approver, and Admin',
     leaderBody:
-      'Member and Leader are per business unit and role, not a platform-wide flag. A Member Claims and Unclaims only their own hold. A Leader of that same role can Force Unclaim a hold taken by someone else. The business unit Approver and a System Administrator (SYS_ADMIN) have the same Force Unclaim right. An Auditor cannot. Confirm before Force Unclaim: Claimed By becomes empty, and another Member can Claim it. Admin Center → User Management shows Member or Leader on each business unit role. Organization → Eligible Roles lists the Leaders of each role so you can find who can release a stuck hold.',
+      'Member and Leader are per business unit and role, not a platform-wide flag. A Member Claims and Unclaims only their own hold. A Leader of that same role can Force Unclaim a hold taken by someone else, or Reassign the request to another member of the same role (including a free request or one already held). The business unit Approver and a System Administrator (SYS_ADMIN) have the same Force Unclaim and Reassign rights. An Auditor cannot. Force Unclaim and Reassign are separate: Force Unclaim returns the request to the pool; Reassign assigns it to a chosen member and does not send it back to the pool. Confirm before Force Unclaim: Claimed By becomes empty, and another Member can Claim it. Reassign opens a dialog to pick a member of the same role; Change History and Admin Center → User Portal Audit Log record who assigned, when, from whom, and to whom. Admin Center → User Management shows Member or Leader on each business unit role. Organization → Eligible Roles lists the Leaders of each role so you can find who can release or reassign a stuck hold.',
     applyTitle: 'Apply as Member or Leader',
     applyBody:
       'Open User Profile Setup → Apply Permission. Choose the business unit and role, then Member or Leader. The approver’s Approve Request dialog shows that Member or Leader choice and the role. If you already have that role as a Member, you can apply to become Leader. After approval, the User Profile Setup card and Admin user page show Leader on that role.',
@@ -532,7 +534,7 @@ export default {
       'Tasks to Claim is no longer a separate menu. Free role requests, your holds, and colleague holds all appear on To Do. Assignment Type no longer offers Virtual Group as a filter; use BU + role for the claim pool. Older bookmarks to /tasks/to-claim open To Do.',
     failTitle: 'When Claim fails',
     failBody:
-      'Claim fails if another member already holds the request, you are no longer in the role that was written when the task was created, or the engine is unavailable. Refresh the list: the Claimed By column shows the current holder. Unclaim fails if you are not the holder. Unclaim all skips colleague holds and reports skipped or failed counts. Force Unclaim fails if you are not a Leader of that role, a BU Approver of that business unit, or a System Administrator. Claim all continues after a failed row and reports the failed count at the end.',
+      'Claim fails if another member already holds the request, you are no longer in the role that was written when the task was created, or the engine is unavailable. Refresh the list: the Claimed By column shows the current holder. Unclaim fails if you are not the holder. Unclaim all skips colleague holds and reports skipped or failed counts. Force Unclaim and Reassign fail if you are not a Leader of that role, a BU Approver of that business unit, or a System Administrator. Reassign also fails if the chosen user is not in the same role pool, or is already the holder. Claim all continues after a failed row and reports the failed count at the end.',
   },
   taskDelegateGuide: {
     pageTitle: 'Delegate a task',
@@ -581,25 +583,39 @@ export default {
       'Confirm without a user shows Please select user. Confirm without both Business Unit and Role shows Please select both business unit and role. Delegating to yourself is rejected. A completed task cannot be delegated. An unclaimed pool task has no Delegate button.',
   },
   formUploadGuide: {
-    pageTitle: 'Form Design — Upload',
-    crumb: 'Developer Workstation · Function Units · Form Design',
+    pageTitle: 'Form Design — Advanced Upload',
+    crumb: 'Developer Workstation · Function Units · Form Design · Extend',
     intro:
-      'An Upload field on the form can take several files. Default is 10 files, 10MB each. Set Max files to 1 if the field must stay a single file. Saved JSON that still has Multiple off and Limit 1 was a generator default, not a designer choice — those fields also accept up to 10 until you set Max files. The properties panel only shows Max files.',
+      'Advanced Upload lives in the Extend palette. It can take several files. Default is 10 files and 10MB each. The platform hard cap is 50MB per file; set Max file size on the field if a file must be larger than 10MB. Set Max files to 1 if the field must stay a single file. Saved JSON that still has Multiple off and Limit 1 was a generator default, not a designer choice — those fields also accept up to 10 until you set Max files. The properties panel shows Max files, Max file size, Can not download, Readonly, and Advance (FileNet). Basic palette Upload is the stock form-create control and keeps its native properties.',
     flowTitle: 'Order of work',
-    flow1: 'Open Form Design and select an Upload field',
-    flow2: 'Set Max files (default 10; 1 means a single file)',
-    flow3: 'Save the form, then check Preview or User Portal',
+    flow1: 'In Table Design, add a FILE column. In Form Design, Import Table Fields (or set the Advanced Upload Field property to that column name)',
+    flow2: 'Set Max files (default 10; 1 means a single file) and Max file size (default 10MB, up to 50MB)',
+    flow3: 'Optionally turn on Advance and fill FileNet header / repository mapping',
+    flow4: 'If My Request, To Do, or Completed Task must show the same files, open that scene’s form and use Add Advanced Upload from New Request (copies the same Field onto the main canvas and matching sub-tables), then Save',
+    flow5: 'Check Preview or User Portal on that same form',
+    scenesTitle: 'Each scene is its own canvas',
+    scenesBody:
+      'New Request, My Request, and To Do each have a separate form design. Portal only shows Advanced Upload where you placed it, and only if that widget’s Field is a Table Design FILE column (the same name as Basic Upload uses, e.g. fileupload). Create the FILE column in Table Design, then Import Table Fields or type that column name into the widget Field. Dragging from Extend does not add a table column. On My Request or Assign Task, Add Advanced Upload from New Request copies those Field names so files already uploaded on New Request appear. Save that form.',
+    scenesSample: 'Table Design FILE column name in the Advanced Upload Field property',
     maxTitle: 'Max files',
     maxBody:
-      'On the Upload field properties, Max files is the cap. Default 10. Set 1 for a single file. Each file can be up to 10MB. At most 3 uploads run at once. The properties panel does not show Multiple or Maximum number of uploads allowed; Max files is the only cap. The field tip reads: Supported formats: jpg/png/pdf/docx/xlsx. Up to 10 files, 10MB each.',
+      'On the Upload field properties, Max files is the count cap. Default 10. Set 1 for a single file. At most 3 uploads run at once. The properties panel does not show Multiple or Maximum number of uploads allowed; Max files is the only count cap.',
     maxSample: 'the Max files number on the Upload properties panel',
+    maxSizeTitle: 'Max file size',
+    maxSizeBody:
+      'Max file size is the per-file cap in MB. Unconfigured fields stay at 10MB. You may set 1 through 50. 50MB is the platform hard cap (Spring, frontend nginx, and the upload API). Edge nginx is already 50M; Kong allows 100m. A file over the field cap is rejected before upload. Record Note and Admin Center uploads stay at their own 10MB limits.',
+    maxSizeSample: 'the Max file size number next to Max files',
+    advanceTitle: 'Advance (FileNet)',
+    advanceBody:
+      'Advance is at the bottom of the Upload properties. It is off by default. Turn it on to store Header Info, Repository Detail, and document-property mapping on this field. Search Detail List, Retrieve Request Information, and Order By are shown as placeholders only. Tokens and host URLs do not belong on this panel. Advance does not hide the runtime detail drawer.',
+    advanceSample: 'the Advance switch under Upload properties',
     runtimeTitle: 'What people see at runtime',
     runtimeBody:
-      'Drop several files onto the dashed box, or click it and select several files in one go (Ctrl or Shift click in the file picker). User Portal and Form Preview keep the whole list. A sub-table list cell shows the first file name and +N for the rest, for example report.pdf +2. If a companion filename column is configured on the Upload field, the original names are written there, joined with a semicolon and space. Send Email attachments from a FILE field include every stored file.',
+      'Drop several files onto the dashed box, or click it and select several files in one go (Ctrl or Shift click in the file picker). Uploaded files appear as small cards inside the box, sorted by name. Click a card to open a drawer with File Description, Callback URL, and Auto Send to FileNet (Completed until FileNet archive is connected). Left-click Callback URL opens the in-app preview; Ctrl-click or right-click still hits the raw file URL. A sub-table add/edit dialog uses the same cards and drawer. A sub-table list cell still shows the first file name and +N for the rest, for example report.pdf +2. If a companion filename column is configured on the Upload field, the original names are written there, joined with a semicolon and space. Send Email attachments from a FILE field include every stored file.',
     runtimeSample: 'report.pdf +2 on a sub-table cell',
     failTitle: 'When it fails',
     failBody:
-      'Choosing more files than Max files shows Maximum {limit} files allowed. Zip files are not added to the in-form preview playlist. Each file still posts one at a time; a failed file does not remove the ones that already succeeded.',
+      'Choosing more files than Max files shows Maximum {limit} files allowed. A file over Max file size is not added. Submit (or Save in a sub-table dialog) is blocked while any file is still uploading or queued, and while any file failed — wait until uploads finish, or remove/retry the failed file. If the session expired, the upload returns 401 and the form asks you to sign in again, then upload that file again. Zip files are not added to the in-form preview playlist. Each file still posts one at a time; a failed file does not remove the ones that already succeeded.',
   },
   ...formEventMessages,
 }

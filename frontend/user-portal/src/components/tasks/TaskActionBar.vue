@@ -24,6 +24,7 @@
             v-for="action in visibleActions"
             :key="action.actionId"
             :type="resolveButtonType(action)"
+            :style="resolveButtonStyle(action)"
             @click="$emit('customAction', action)"
           >
             <el-icon v-if="resolveIconName(action)">
@@ -57,13 +58,15 @@ import { computed } from 'vue'
 import { Check, Close } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 import type { TaskActionInfo } from '@/api/task'
+import { actionButtonStyle, isCustomButtonColor } from '@/utils/actionButtonColor'
 
 /**
  * Delegate / Transfer / Urge are no longer hardcoded here: they are Action
  * definitions configured in the Developer Workstation Action Designer and bound
  * to the user task node in Process Design, exactly like every other Action.
- * These maps only supply the look the built-in buttons used to have, because the
- * Action Designer does not expose icon / buttonColor yet.
+ * These maps only supply the look the built-in buttons used to have, for Actions
+ * whose designer-configured colour is unset (the Action Designer does not expose
+ * an icon picker yet).
  */
 const BUILT_IN_ICONS: Record<string, string> = {
   DELEGATE: 'user',
@@ -114,9 +117,16 @@ function resolveIconName(action: TaskActionInfo): string | undefined {
 }
 
 function resolveButtonType(action: TaskActionInfo): ElButtonType {
+  // A designer-picked hex colour is applied as inline CSS variables instead of an
+  // Element Plus semantic type, so the button renders exactly that colour.
+  if (isCustomButtonColor(action.buttonColor)) return 'primary'
   if (action.buttonColor) return props.getButtonType(action.buttonColor)
   const builtIn = BUILT_IN_BUTTON_TYPES[actionTypeOf(action)]
   return builtIn === undefined ? props.getButtonType(undefined) : builtIn
+}
+
+function resolveButtonStyle(action: TaskActionInfo): Record<string, string> | undefined {
+  return actionButtonStyle(action.buttonColor)
 }
 </script>
 

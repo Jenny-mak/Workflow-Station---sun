@@ -10,9 +10,9 @@ Do not invent UI labels. Ground answers in these articles and the screenshots un
 - /help/computed-fields — Computed field formulas (Table Design; Admin Relation Tables #relation)
 - /help/email-send — Send email (Connections #connection, Email Templates #template, Send Task #send-task; field catalog for every control)
 - /help/email-monitor — Email Monitor (inbound connection, monitor template, extraction wizard, Start Event #start-event; field catalog for every control)
-- /help/up-tasks-to-claim — To Do: claim pool on the same list; Claim all; selection-bar Claim/Unclaim; Unclaim all (own holds); auto-claim on open (default off); Leader / Approver / SYS_ADMIN force unclaim
+- /help/up-tasks-to-claim — To Do: claim pool on the same list; Claim all; selection-bar Claim/Unclaim; Unclaim all (own holds); auto-claim on open (default off); Leader / Approver / SYS_ADMIN force unclaim and reassign
 - /help/task-delegate — Delegate a task (User Portal To Do; specified user lookup or BU+Role; does not change Current Assignee)
-- /help/form-upload — Form Design Upload (drop or multi-select files; Max files default 10; set 1 for a single file; list cells show firstName +N)
+- /help/form-upload — Form Design Advanced Upload in Extend (drop or multi-select files; Max files default 10; Max file size default 10MB, platform cap 50MB; Advance stores FileNet mapping; runtime cards inside the drop zone open a details drawer; list cells show firstName +N). Basic Upload stays stock. Bind the widget Field to a Table Design FILE column (Import Table Fields, or type the column name). Dragging from Extend does not add a table column. Each scene is its own canvas: on My Request / Assign Task use Add Advanced Upload from New Request so the same Field is reused, then Save.
 - /help/form-events — How to write events (control Edit + Form event: parameters, values, required, lock, show/hide, options, errors, banners, lookup filter, focus, labels, hooks, user)
 - /help/form-events-basic — Basic palette control events (Input, Select, Date, Upload, …)
 - /help/form-events-extend — Extend and MI control events (Sub-Table, Lookup, Assignment Mode, …)

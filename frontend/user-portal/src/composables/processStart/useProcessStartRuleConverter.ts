@@ -3,13 +3,14 @@ import { isFormCreateRuleReadonly, applyDesignerHideFlagToFormField } from '@/co
 import { applyRuleDefaultToFormField } from '@/utils/formCreateRuleDefaults'
 import { applyFormCreateValidationToFormField } from '@/utils/formCreateValidateRules'
 import { applySensitiveMaskFromRule } from '@/utils/applySensitiveMaskFromRule'
-import { applyUploadPropsFromRule } from '@/utils/applyUploadPropsFromRule'
+import { applyUploadPropsFromRule, type UploadSceneFlagsArg } from '@/utils/applyUploadPropsFromRule'
+import { mapDesignerUploadToPortalFieldType } from '@platform-shared/upload/uploadRuleType'
 
 /**
  * 将单条 form-create 规则转换为 FormRenderer 字段。
  * 逻辑与原 useProcessStartFormParsing 内联实现逐行一致；无响应式依赖。
  */
-export function convertFormCreateRule(rule: any, blockedFieldKeys?: Set<string>): FormField | null {
+export function convertFormCreateRule(rule: any, blockedFieldKeys?: UploadSceneFlagsArg): FormField | null {
   if (!rule || !rule.field) return null
 
   // 确定日期类型
@@ -20,7 +21,7 @@ export function convertFormCreateRule(rule: any, blockedFieldKeys?: Set<string>)
     dateType = 'daterange'
   }
 
-  const typeMap: Record<string, string> = {
+    const typeMap: Record<string, string> = {
     'input': 'text',
     'inputNumber': 'number',
     'select': 'select',
@@ -41,6 +42,7 @@ export function convertFormCreateRule(rule: any, blockedFieldKeys?: Set<string>)
     'colorPicker': 'colorPicker',
     'treeSelect': 'treeselect',
     'upload': 'upload',
+    'advancedUpload': 'upload',
     'editor': 'editor',
     'signature': 'signature',
     'transfer': 'transfer'
@@ -49,7 +51,7 @@ export function convertFormCreateRule(rule: any, blockedFieldKeys?: Set<string>)
   const field: FormField = {
     key: rule.field,
     label: rule.title || rule.field,
-    type: typeMap[rule.type] || 'text',
+    type: mapDesignerUploadToPortalFieldType(rule.type) || typeMap[rule.type] || 'text',
     placeholder: rule.props?.placeholder || '',
     span: rule.col?.span || 24
   }

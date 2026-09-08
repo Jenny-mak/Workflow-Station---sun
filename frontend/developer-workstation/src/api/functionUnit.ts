@@ -266,6 +266,8 @@ export interface ActionDefinition {
   actionName: string
   actionType: string
   description?: string
+  /** User Portal button colour, stored as a `#RRGGBB` hex string (legacy rows may hold an Element Plus type name). */
+  buttonColor?: string
   configJson: Record<string, any>
   actionConfig?: string // deprecated, use configJson instead
 }

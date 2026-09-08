@@ -14,6 +14,7 @@ import {
   isAssignmentConfigured,
 } from '@/utils/miAssignmentConfig'
 import { ensureSubTableMapIdentities } from '@/utils/subTableRowIdentity'
+import { warnIfUploadsBlocking } from '@platform-shared/upload/uploadSubmitGate'
 function resolveProcessTaskId(source: MaybeRef<string>): string {
   const v = unref(source)
   return typeof v === 'string' ? v.trim() : ''
@@ -227,6 +228,10 @@ export function useTaskActions(options: {
         return
       }
     }
+    if (!warnIfUploadsBlocking({
+      inflight: t('upload.waitUntilComplete'),
+      failed: t('upload.fixFailedBeforeSubmit'),
+    })) return
     options.submitting.value = true
     try {
       if (options.prepareBeforeComplete) {

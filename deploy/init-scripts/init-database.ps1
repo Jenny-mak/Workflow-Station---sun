@@ -144,11 +144,13 @@ $migrations = @(
     "00-schema/75-up-user-preference-auto-claim.sql",
     "00-schema/76-up-user-preference-auto-preview.sql",
     "00-schema/77-dw-table-data-rows.sql",
-    "00-schema/78-dw-icons-name-not-unique.sql"
+    "00-schema/78-dw-icons-name-not-unique.sql",
+    "00-schema/80-rename-email-connection-credential.sql"
 )
 foreach ($m in $migrations) {
     $path = Join-Path $ScriptDir $m
-    if (Test-Path $path) { Exec-Sql -File $path -Desc (Split-Path $m -Leaf) | Out-Null }
+    if (-not (Test-Path $path)) { Write-Fail "Missing: $m"; exit 1 }
+    Exec-Sql -File $path -Desc (Split-Path $m -Leaf) | Out-Null
 }
 
 # Step 3: Roles, groups, admin user

@@ -284,11 +284,12 @@ export function useTableFieldRules(options: UseTableFieldRulesOptions) {
       case 'FILE':
         rule = {
           ...baseRule,
-          type: 'upload',
+          type: 'advancedUpload',
           props: {
             action: '/api/v1/upload',
             accept: '',
             maxFiles: 10,
+            maxFileSizeMb: 10,
             limit: 10,
             multiple: true,
             listType: 'text',

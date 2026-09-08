@@ -188,7 +188,7 @@ class EmailMonitorSchedulerTest {
         connection.setEnabled(true);
         connection.setDirection("INBOUND");
         connection.setMailboxAddress("monitor@example.test");
-        connection.setPasswordEncrypted("enc");
+        connection.setCredentialEncrypted("enc");
         return connection;
     }
 }

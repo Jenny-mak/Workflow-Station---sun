@@ -818,6 +818,10 @@ export default {
     actionRECORD_NOTE_ADD: 'Note Added',
     actionRECORD_NOTE_UPDATE: 'Note Updated',
     actionRECORD_NOTE_DELETE: 'Note Deleted',
+    actionCLAIM: 'Claim',
+    actionUNCLAIM: 'Unclaim',
+    actionFORCE_UNCLAIM: 'Force Unclaim',
+    actionREASSIGN: 'Reassign',
   },
 
   businessUnit: {

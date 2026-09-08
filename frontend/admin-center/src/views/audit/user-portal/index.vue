@@ -80,6 +80,22 @@
               :label="t('upAudit.actionRECORD_NOTE_DELETE')"
               value="RECORD_NOTE_DELETE"
             />
+            <el-option
+              :label="t('upAudit.actionCLAIM')"
+              value="CLAIM"
+            />
+            <el-option
+              :label="t('upAudit.actionUNCLAIM')"
+              value="UNCLAIM"
+            />
+            <el-option
+              :label="t('upAudit.actionFORCE_UNCLAIM')"
+              value="FORCE_UNCLAIM"
+            />
+            <el-option
+              :label="t('upAudit.actionREASSIGN')"
+              value="REASSIGN"
+            />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('upAudit.processInstanceId')">

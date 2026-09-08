@@ -13,6 +13,12 @@ import { fileDisplayText } from '@/utils/mainTableViewCsvExport'
 
 type TranslateFn = ReturnType<typeof useI18n>['t']
 
+const ASSIGNMENT_CHANGE_TYPES = new Set(['CLAIM', 'UNCLAIM', 'FORCE_UNCLAIM', 'REASSIGN'])
+
+function isAssignmentChangeType(changeType: string | undefined): boolean {
+  return !!changeType && ASSIGNMENT_CHANGE_TYPES.has(changeType)
+}
+
 /** 批次表头解析后的展示字段集合 */
 export interface BatchHeaderFields {
   displayOperator: string
@@ -106,6 +112,9 @@ export function useChangeHistoryFormatting(
     if (row.changeType === 'PROCESS_INITIATION') {
       return t('changeHistory.processInitiation')
     }
+    if (isAssignmentChangeType(row.changeType) || row.fieldName === 'claimed_by') {
+      return t('changeHistory.claimedBy')
+    }
     // Notes carry a fixed backend field name ("Record Note"); localise it here and keep the
     // row id suffix so a sub-table-row (RECORD scope) note points at its own row.
     if (row.changeType?.startsWith('RECORD_NOTE')) {
@@ -195,6 +204,9 @@ export function useChangeHistoryFormatting(
     maxLen = 240,
     fieldName?: string | null,
   ): string {
+    if (fieldName === 'claimed_by' && (raw === null || raw === undefined || String(raw).trim() === '')) {
+      return t('changeHistory.claimPool')
+    }
     if (raw === null || raw === undefined || raw === '') return '—'
     const s = String(raw).trim()
     if (!s) return '—'
@@ -237,6 +249,10 @@ export function useChangeHistoryFormatting(
       RECORD_NOTE_ADD: t('changeHistory.recordNoteAdd'),
       RECORD_NOTE_UPDATE: t('changeHistory.recordNoteUpdate'),
       RECORD_NOTE_DELETE: t('changeHistory.recordNoteDelete'),
+      CLAIM: t('changeHistory.claim'),
+      UNCLAIM: t('changeHistory.unclaim'),
+      FORCE_UNCLAIM: t('changeHistory.forceUnclaim'),
+      REASSIGN: t('changeHistory.reassign'),
     }
     return map[changeType] || changeType
   }
@@ -251,6 +267,10 @@ export function useChangeHistoryFormatting(
       RECORD_NOTE_ADD: 'success',
       RECORD_NOTE_UPDATE: 'warning',
       RECORD_NOTE_DELETE: 'danger',
+      CLAIM: 'success',
+      UNCLAIM: 'warning',
+      FORCE_UNCLAIM: 'danger',
+      REASSIGN: 'warning',
     }
     return map[changeType] || 'info'
   }

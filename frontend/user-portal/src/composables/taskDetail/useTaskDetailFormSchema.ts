@@ -16,6 +16,7 @@ import {
   deriveColumnsFromRelationFieldDefinitions,
   resolveSubTableSchemaByTableId,
   resolveSubListViewColumnsForBinding,
+  unionListViewWithSubFormUploadColumns,
 } from '@/components/subTableAddDialogHelpers'
 import type { TaskDetailCtx } from './context'
 import { assignSensitiveMaskColumnProps } from '@/utils/applySensitiveMaskFromRule'
@@ -113,7 +114,7 @@ export function createTaskDetailFormSchema(ctx: TaskDetailCtx): TaskDetailFormSc
           type = 'treeselect'
         } else if (r.type === 'tree') {
           type = 'tree'
-        } else if (r.type === 'upload') {
+        } else if (r.type === 'upload' || r.type === 'advancedUpload') {
           type = 'upload'
         } else if (r.type === 'userSelect' || r.type === 'user') {
           type = 'user'
@@ -269,7 +270,7 @@ export function createTaskDetailFormSchema(ctx: TaskDetailCtx): TaskDetailFormSc
 
         return mergeListViewFieldColumn(column, baseColumn, fieldRule)
       })
-      return mappedOut
+      return unionListViewWithSubFormUploadColumns(mappedOut, subFormColumns)
     }
 
     if (subFormColumns.length > 0) return subFormColumns

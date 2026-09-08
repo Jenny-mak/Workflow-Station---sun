@@ -65,7 +65,7 @@ To Do lists direct assignments and business-unit role requests (free, held by yo
 
 Order: open To Do → Claim, Claim all, or Unclaim all → edit and submit.
 
-Leader of that role, the business-unit Approver, and SYS_ADMIN can Force Unclaim someone else’s hold (confirm first). Member cannot. Apply Permission on User Profile Setup chooses Member or Leader for that BU+Role.
+Leader of that role, the business-unit Approver, and SYS_ADMIN can Force Unclaim someone else’s hold (confirm first) or Reassign the request to another member of the same role. Force Unclaim returns the request to the pool; Reassign does not. Member cannot. Apply Permission on User Profile Setup chooses Member or Leader for that BU+Role. Change History and Admin Center User Portal Audit Log record claim, unclaim, force unclaim, and reassign (who / when / from / to).
 
 ## Delegate a task (/help/task-delegate)
 
@@ -83,17 +83,19 @@ Unclaimed pool: Delegate is hidden until someone is assigned.
 
 Failures: Please select user; Please select both business unit and role; cannot delegate to yourself; completed tasks cannot be delegated.
 
-## Form Design — Upload (/help/form-upload)
+## Form Design — Advanced Upload (/help/form-upload)
 
-Upload fields accept several files. Default Max files is 10, 10MB each. Set Max files to 1 for a single file. Saved JSON that still has Multiple off + Limit 1 was a generator default, not designer intent; those fields also accept up to 10 until Max files is set. The properties panel only shows Max files.
+Advanced Upload is in the Extend palette. It accepts several files. Default Max files is 10. Default Max file size is 10MB; the platform hard cap is 50MB. Set Max files to 1 for a single file. Saved JSON that still has Multiple off + Limit 1 was a generator default, not designer intent; those fields also accept up to 10 until Max files is set. The properties panel shows Max files and Max file size. Basic palette Upload stays the stock form-create control.
 
-Order: open Form Design → select an Upload field → set Max files → save → check Preview or User Portal.
+Order: in Table Design add a FILE column → in Form Design Import Table Fields, or set the Advanced Upload Field to that column name → set Max files and Max file size → save → check Preview or User Portal on that same form. Dragging from Extend does not add a table column. If My Request or To Do must show the same files, open that scene’s form, click Add Advanced Upload from New Request (copies the same Field onto the main canvas and matching sub-tables), then Save. Portal does not invent the widget at runtime.
 
-Properties: Max files (default 10; 1 = single file). No Multiple switch and no Maximum number of uploads allowed; Max files is the only cap. Tip: Supported formats: jpg/png/pdf/docx/xlsx. Up to 10 files, 10MB each. At most 3 uploads run at once.
+Each scene is its own canvas. New Request, My Request, and To Do each have a separate form design. The widget Field must be a Table Design FILE column (same as Basic Upload, e.g. fileupload). A palette drop that still has a generated F… Field will not show files already stored on a real column.
 
-Runtime: drop several files onto the dashed box, or click it and multi-select in the file picker (Ctrl/Shift). Portal and Preview keep the list; sub-table cell shows report.pdf +2; companion filename column joins names with "; ". Send Email FILE attachments include every stored file.
+Properties: Max files (default 10; 1 = single file). Max file size (default 10MB, 1–50, platform cap 50MB). No Multiple switch and no Maximum number of uploads allowed; Max files is the only count cap. At most 3 uploads run at once.
 
-Failures: Maximum {limit} files allowed; zip is skipped from the in-form preview playlist.
+Runtime: drop several files onto the dashed box, or click it and multi-select in the file picker (Ctrl/Shift). Files appear as name-sorted cards inside the box; click a card for the details drawer (File Description, Callback URL, Auto Send to FileNet). Left-click Callback URL opens in-app preview. Sub-table cell shows report.pdf +2; companion filename column joins names with "; ". Send Email FILE attachments include every stored file.
+
+Failures: Maximum {limit} files allowed; file over Max file size is rejected; submit/save blocked while a file is uploading or failed; session expiry (401) asks you to sign in and upload again; zip is skipped from the in-form preview playlist.
 
 Related: /help/email-send#send-task
 

@@ -28,9 +28,13 @@ $sidebar-width: 240px;
 $sidebar-collapsed-width: 64px;
 
 // Element Plus Overrides
+// 只覆盖主色。success / warning / danger 一律用 Element Plus 默认色板，理由有两条：
+//   1) 三端一致 —— admin-center / user-portal 都没覆盖这三个，DW 单独改会让同类按钮
+//      （warning 的 Deploy、danger 的 Delete）跨端不同色；
+//   2) 这里只能覆盖基色，覆盖不到 EP 派生的 light-3/5/7/8/9 与 dark-2，
+//      结果是基色 HSBC、hover / plain / 浅底仍是 EP 默认色，同一个按钮自相矛盾。
+// 需要 HSBC 语义色时，用上面的 $success-color / $warning-color / $danger-color 单点着色，
+// 不要再改 --el-color-* 这一层。
 :root {
   --el-color-primary: #{$primary-color};
-  --el-color-success: #{$success-color};
-  --el-color-warning: #{$warning-color};
-  --el-color-danger: #{$danger-color};
 }

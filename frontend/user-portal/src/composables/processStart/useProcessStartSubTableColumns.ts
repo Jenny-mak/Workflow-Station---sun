@@ -8,9 +8,11 @@ import {
   parseLookupConfig,
   resolveSubFormDialogColumnsForBinding,
   resolveSubListViewColumnsForBinding,
+  unionListViewWithSubFormUploadColumns,
   type DialogColumn,
 } from '@/components/subTableAddDialogHelpers'
 import { resolveAssigneeFieldForBinding } from '@/utils/subTableAssignment'
+import type { UploadSceneFlagsArg } from '@/utils/applyUploadPropsFromRule'
 
 export function isSyntheticLookupField(fieldName?: string): boolean {
   return !fieldName || String(fieldName).startsWith('lookup:')
@@ -28,7 +30,7 @@ export function isAssigneeLikeLabel(label?: string): boolean {
 export function createSubTableColumnDeriver(deps: {
   lookupDbConfigs: Ref<Record<string, { tableId: number; searchFields: string[]; displayField: string; viewFields: any[] }>>
   relationViewConfigs: Ref<Record<string, { viewFields: any[]; allFields: any[] }>>
-  cannotDownloadFieldKeys?: () => Set<string>
+  cannotDownloadFieldKeys?: () => UploadSceneFlagsArg
 }) {
   const { lookupDbConfigs, relationViewConfigs, cannotDownloadFieldKeys } = deps
 
@@ -37,7 +39,11 @@ export function createSubTableColumnDeriver(deps: {
     relationViewConfigs: relationViewConfigs.value,
   })
 
-  const blockedKeys = () => cannotDownloadFieldKeys?.()
+  const blockedKeys = (): Set<string> | undefined => {
+    const flags = cannotDownloadFieldKeys?.()
+    if (!flags) return undefined
+    return flags instanceof Set ? flags : flags.cannotDownload
+  }
 
   /** Form-design canvas columns for Add/Edit dialog (DW Form Preview parity). */
   const deriveDialogColumnsFromBinding = (
@@ -77,7 +83,8 @@ export function createSubTableColumnDeriver(deps: {
       const subFormColumnByField = new Map(subFormColumns.map(col => [col.field, col]))
       const assigneeField = resolveAssigneeFieldForBinding(binding as never)
       return enrichLookupColumnPropsFromSubFormRule(
-        listColumns.map((column: any): DialogColumn => {
+        unionListViewWithSubFormUploadColumns(
+          listColumns.map((column: any): DialogColumn => {
         if (column.columnType === 'linkForm') {
           return {
             field: column.fieldName || `linkForm:${column.componentId || binding.bindingId}`,
@@ -137,7 +144,9 @@ export function createSubTableColumnDeriver(deps: {
         }
 
         return mergeListViewFieldColumn(column, baseColumn, fieldRule, blockedKeys())
-      }),
+          }),
+          subFormColumns,
+        ),
         subFormRule,
       )
     }

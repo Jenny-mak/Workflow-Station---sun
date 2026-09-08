@@ -9,22 +9,11 @@ import java.util.Map;
 
 /**
  * Fixed column declaration for Completed Tasks. Kind follows the stored type (task name is
- * TEXT, duration is NUMBER, action is a closed ENUM derived from {@code DELETE_REASON_}).
+ * TEXT and duration is NUMBER.
  * Request ID is the persisted process-variable text {@code __request_id} (same key the
  * form writes); filter/sort compile to that JSON path so COUNT and the page share one predicate.
  */
 public final class CompletedTaskColumnSpec {
-
-    /**
-     * Mirrors the engine's historic-task action mapping so a filter/group on Action matches
-     * the tag the cell shows. ILIKE keeps the historic case-insensitive contains behaviour.
-     */
-    public static final String ACTION_SQL = "CASE"
-            + " WHEN ht.DELETE_REASON_ ILIKE '%approved%' THEN 'approved'"
-            + " WHEN ht.DELETE_REASON_ ILIKE '%rejected%' THEN 'rejected'"
-            + " WHEN ht.DELETE_REASON_ ILIKE '%transfer%' THEN 'transferred'"
-            + " WHEN ht.DELETE_REASON_ ILIKE '%delegate%' THEN 'delegated'"
-            + " ELSE 'completed' END";
 
     private CompletedTaskColumnSpec() {
     }
@@ -34,7 +23,6 @@ public final class CompletedTaskColumnSpec {
                 ListColumnMeta.of("requestId", "task.requestId", Kind.TEXT),
                 ListColumnMeta.of("taskName", "task.taskName", Kind.TEXT),
                 ListColumnMeta.of("processDefinitionName", "task.processName", Kind.TEXT),
-                ListColumnMeta.withOptions("action", "task.action", Kind.ENUM, actionOptions()),
                 ListColumnMeta.of("createTime", "task.createTime", Kind.DATETIME),
                 ListColumnMeta.of("completedTime", "task.completedTime", Kind.DATETIME),
                 ListColumnMeta.of("durationInMillis", "task.duration", Kind.NUMBER)
@@ -54,7 +42,6 @@ public final class CompletedTaskColumnSpec {
             case "requestId" -> "pi.variables->>'__request_id'";
             case "taskName" -> "ht.NAME_";
             case "processDefinitionName" -> "pi.process_definition_name";
-            case "action" -> ACTION_SQL;
             case "createTime" -> "ht.START_TIME_::text";
             case "completedTime" -> "ht.END_TIME_::text";
             case "durationInMillis" -> "ht.DURATION_::text";
@@ -62,13 +49,4 @@ public final class CompletedTaskColumnSpec {
         };
     }
 
-    private static List<ListColumnMeta.Option> actionOptions() {
-        return List.of(
-                new ListColumnMeta.Option("approved", "action.approved"),
-                new ListColumnMeta.Option("rejected", "action.rejected"),
-                new ListColumnMeta.Option("transferred", "action.transferred"),
-                new ListColumnMeta.Option("delegated", "action.delegated"),
-                new ListColumnMeta.Option("completed", "action.completed")
-        );
-    }
 }

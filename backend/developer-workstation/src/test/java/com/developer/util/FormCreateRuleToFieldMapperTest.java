@@ -24,17 +24,20 @@ class FormCreateRuleToFieldMapperTest {
                                         "validate", List.of(Map.of("required", true))),
                                 Map.of("type", "switch", "field", "legal_hold", "title", "Legal Hold"),
                                 Map.of("type", "upload", "field", "file", "title", "File"),
+                                Map.of("type", "advancedUpload", "field", "meeting_doc", "title", "Meeting Doc"),
                                 Map.of("type", "subTable", "_bindingId", 273)
                         )
                 )
         );
         List<FieldDefinitionRequest> fields = FormCreateRuleToFieldMapper.fromRules(rule);
-        assertEquals(3, fields.size());
+        assertEquals(4, fields.size());
         assertEquals("case_number", fields.get(0).getFieldName());
         assertEquals(DataType.VARCHAR, fields.get(0).getDataType());
         assertEquals(Boolean.FALSE, fields.get(0).getNullable());
         assertEquals(DataType.BOOLEAN, fields.get(1).getDataType());
         assertEquals(DataType.FILE, fields.get(2).getDataType());
+        assertEquals("meeting_doc", fields.get(3).getFieldName());
+        assertEquals(DataType.FILE, fields.get(3).getDataType());
     }
 
     @Test

@@ -54,7 +54,7 @@ class EmailConnectionSyncCredentialsTest {
                 .fromName("From")
                 .enabled(true)
                 .direction("OUTBOUND")
-                .passwordEncrypted("enc")
+                .credentialEncrypted("enc")
                 .build();
 
         when(emailConnectionRepository.findByFunctionUnitIdAndId("fu-1", "conn-1"))
@@ -123,7 +123,7 @@ class EmailConnectionSyncCredentialsTest {
                 .fromEmail("from@example.com")
                 .enabled(true)
                 .direction("OUTBOUND")
-                .passwordEncrypted("enc")
+                .credentialEncrypted("enc")
                 .build();
 
         when(emailConnectionRepository.findByFunctionUnitIdAndId(
@@ -223,12 +223,37 @@ class EmailConnectionSyncCredentialsTest {
                 "name", "Mail",
                 "host", "smtp.example.com",
                 "fromEmail", "from@example.com",
-                "passwordEncrypted", "ENC:bad")));
+                "credentialEncrypted", "ENC:bad")));
 
         org.mockito.ArgumentCaptor<EmailConnection> captor =
                 org.mockito.ArgumentCaptor.forClass(EmailConnection.class);
         verify(emailConnectionRepository).save(captor.capture());
-        assertNull(captor.getValue().getPasswordEncrypted());
+        assertNull(captor.getValue().getCredentialEncrypted());
         assertEquals("smtp.example.com", captor.getValue().getHost());
+    }
+
+    @Test
+    void syncConnections_acceptsLegacyPasswordEncryptedKey() {
+        FunctionUnit fu = FunctionUnit.builder()
+                .id("fu-1")
+                .code("pr")
+                .name("Purchase Request")
+                .version("1.0.0")
+                .build();
+        when(functionUnitRepository.findById("fu-1")).thenReturn(Optional.of(fu));
+        when(encryptionService.decrypt("enc-legacy")).thenReturn("secret");
+        when(emailConnectionRepository.save(any(EmailConnection.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        syncComponent.syncConnections("fu-1", List.of(Map.of(
+                "connectionUid", "conn-x",
+                "name", "Mail",
+                "host", "smtp.example.com",
+                "fromEmail", "from@example.com",
+                "passwordEncrypted", "enc-legacy")));
+
+        org.mockito.ArgumentCaptor<EmailConnection> captor =
+                org.mockito.ArgumentCaptor.forClass(EmailConnection.class);
+        verify(emailConnectionRepository).save(captor.capture());
+        assertEquals("enc-legacy", captor.getValue().getCredentialEncrypted());
     }
 }

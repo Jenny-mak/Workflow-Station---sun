@@ -104,8 +104,4 @@ class CompletedTaskQuerySqlTest {
     private String pageSql() {
         return preparedSql.get(preparedSql.size() - 1);
     }
-
-    private static String CompletedTaskColumnSpecAction() {
-        return com.portal.util.CompletedTaskColumnSpec.ACTION_SQL;
-    }
 }

@@ -816,6 +816,10 @@ export default {
     actionRECORD_NOTE_ADD: '評論新增',
     actionRECORD_NOTE_UPDATE: '評論編輯',
     actionRECORD_NOTE_DELETE: '評論刪除',
+    actionCLAIM: '認領',
+    actionUNCLAIM: '取消認領',
+    actionFORCE_UNCLAIM: '強制釋放',
+    actionREASSIGN: '重新分配',
   },
   businessUnit: {
     name: '業務單元名稱',

@@ -18,6 +18,8 @@ const flowKeys = [
   'formUploadGuide.flow1',
   'formUploadGuide.flow2',
   'formUploadGuide.flow3',
+  'formUploadGuide.flow4',
+  'formUploadGuide.flow5',
 ]
 
 const related: GuideRelated[] = [
@@ -25,11 +27,29 @@ const related: GuideRelated[] = [
 ]
 
 const sections: GuideSection[] = [
-  {
+    {
     anchor: 'max-files',
     titleKey: 'formUploadGuide.maxTitle',
     bodyKey: 'formUploadGuide.maxBody',
     samples: [{ code: 'Max files = 10', hintKey: 'formUploadGuide.maxSample' }],
+  },
+  {
+    anchor: 'max-file-size',
+    titleKey: 'formUploadGuide.maxSizeTitle',
+    bodyKey: 'formUploadGuide.maxSizeBody',
+    samples: [{ code: 'Max file size = 10', hintKey: 'formUploadGuide.maxSizeSample' }],
+  },
+  {
+    anchor: 'advance',
+    titleKey: 'formUploadGuide.advanceTitle',
+    bodyKey: 'formUploadGuide.advanceBody',
+    samples: [{ code: 'Advance = off', hintKey: 'formUploadGuide.advanceSample' }],
+  },
+  {
+    anchor: 'scenes',
+    titleKey: 'formUploadGuide.scenesTitle',
+    bodyKey: 'formUploadGuide.scenesBody',
+    samples: [{ code: 'Field = fileupload', hintKey: 'formUploadGuide.scenesSample' }],
   },
   {
     titleKey: 'formUploadGuide.runtimeTitle',

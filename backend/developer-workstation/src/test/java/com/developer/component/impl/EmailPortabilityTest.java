@@ -129,6 +129,58 @@ class EmailPortabilityTest {
     }
 
     @Test
+    void importEmailConnection_readsCredentialEncrypted() {
+        FunctionUnit functionUnit = FunctionUnit.builder().id(7L).code("fu_demo").build();
+        Map<String, Object> data = new HashMap<>();
+        data.put("connectionUid", "uid-abc");
+        data.put("name", "SMTP");
+        data.put("fromEmail", "a@example.com");
+        data.put("credentialEncrypted", "enc-new");
+
+        when(emailConnectionRepository.save(any(EmailConnection.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        EmailConnection saved = importWriter.importEmailConnection(functionUnit, data);
+
+        assertThat(saved.getCredentialEncrypted()).isEqualTo("enc-new");
+    }
+
+    @Test
+    void importEmailConnection_acceptsLegacyPasswordEncryptedKey() {
+        FunctionUnit functionUnit = FunctionUnit.builder().id(7L).code("fu_demo").build();
+        Map<String, Object> data = new HashMap<>();
+        data.put("connectionUid", "uid-abc");
+        data.put("name", "SMTP");
+        data.put("fromEmail", "a@example.com");
+        data.put("passwordEncrypted", "enc-legacy");
+
+        when(emailConnectionRepository.save(any(EmailConnection.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        EmailConnection saved = importWriter.importEmailConnection(functionUnit, data);
+
+        assertThat(saved.getCredentialEncrypted()).isEqualTo("enc-legacy");
+    }
+
+    @Test
+    void importEmailConnection_prefersLegacyWhenNewKeyBlank() {
+        FunctionUnit functionUnit = FunctionUnit.builder().id(7L).code("fu_demo").build();
+        Map<String, Object> data = new HashMap<>();
+        data.put("connectionUid", "uid-abc");
+        data.put("name", "SMTP");
+        data.put("fromEmail", "a@example.com");
+        data.put("credentialEncrypted", null);
+        data.put("passwordEncrypted", "enc-legacy");
+
+        when(emailConnectionRepository.save(any(EmailConnection.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        EmailConnection saved = importWriter.importEmailConnection(functionUnit, data);
+
+        assertThat(saved.getCredentialEncrypted()).isEqualTo("enc-legacy");
+    }
+
+    @Test
     void importEmailMonitorRule_usesTargetFunctionUnitCodeAsProcessKey() {
         FunctionUnit functionUnit = FunctionUnit.builder().id(7L).code("fu_new_code").build();
         Map<String, Object> ruleData = new HashMap<>();

@@ -43,8 +43,8 @@ public class EmailConnection {
     private String username;
 
     @JsonIgnore
-    @Column(name = "password_encrypted", columnDefinition = "TEXT")
-    private String passwordEncrypted;
+    @Column(name = "credential_encrypted", columnDefinition = "TEXT")
+    private String credentialEncrypted;
 
     @Column(name = "from_email", nullable = false)
     private String fromEmail;

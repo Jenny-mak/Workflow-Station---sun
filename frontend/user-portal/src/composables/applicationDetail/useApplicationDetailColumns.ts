@@ -8,6 +8,7 @@ import {
   deriveColumnsFromRelationFieldDefinitions,
   resolveSubTableSchemaByTableId,
   resolveSubListViewColumnsForBinding,
+  unionListViewWithSubFormUploadColumns,
 } from '@/components/subTableAddDialogHelpers'
 import {
   isSyntheticLookupField,
@@ -108,7 +109,7 @@ export function createApplicationDetailColumns(ctx: ApplicationDetailCtx): Appli
           type = 'treeselect'
         } else if (r.type === 'tree') {
           type = 'tree'
-        } else if (r.type === 'upload') {
+        } else if (r.type === 'upload' || r.type === 'advancedUpload') {
           type = 'upload'
         } else if (r.type === 'userSelect' || r.type === 'user') {
           type = 'user'
@@ -218,7 +219,7 @@ export function createApplicationDetailColumns(ctx: ApplicationDetailCtx): Appli
       )
       const subFormColumnByField = new Map(subFormColumns.map(col => [col.field, col]))
       const assigneeField = resolveAssigneeFieldForBinding(binding as never)
-      return listColumns
+      const mappedOut = listColumns
         .filter((col: any) => col && col.fieldName)
         .map((column: any) => {
           if (column.columnType === 'linkForm') {
@@ -265,6 +266,7 @@ export function createApplicationDetailColumns(ctx: ApplicationDetailCtx): Appli
 
           return mergeListViewFieldColumn(column, baseColumn, fieldRule)
         })
+      return unionListViewWithSubFormUploadColumns(mappedOut, subFormColumns)
     }
 
     const tableId = binding.tableId != null ? Number(binding.tableId) : NaN

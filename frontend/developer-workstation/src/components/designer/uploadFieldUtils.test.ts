@@ -13,6 +13,6 @@ describe('alignUploadFieldsToColumns', () => {
       [{ field: 'invoice', type: 'upload', props: { maxFiles: 10 } }],
       ['invoice_file'],
     )
-    expect(row.invoice).toEqual(files)
+    expect(row.invoice).toBe(JSON.stringify(files))
   })
 })

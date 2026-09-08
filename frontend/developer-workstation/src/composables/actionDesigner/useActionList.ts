@@ -29,7 +29,7 @@ export function useActionList(options: UseActionListOptions) {
 
   const loading = ref(false)
   const showCreateDialog = ref(false)
-  const createForm = reactive({ actionName: '', actionType: 'APPROVE', description: '' })
+  const createForm = reactive({ actionName: '', actionType: 'APPROVE', buttonColor: '', description: '' })
 
   const actionTypeLabel = (type: string) => {
     const map: Record<string, string> = {
@@ -78,12 +78,13 @@ export function useActionList(options: UseActionListOptions) {
       await store.createAction(functionUnitId, {
         actionName: createForm.actionName,
         actionType: createForm.actionType,
+        buttonColor: createForm.buttonColor || null,
         description: createForm.description,
         configJson: {}
       })
       ElMessage.success(t('action.createSuccess'))
       showCreateDialog.value = false
-      Object.assign(createForm, { actionName: '', actionType: 'APPROVE', description: '' })
+      Object.assign(createForm, { actionName: '', actionType: 'APPROVE', buttonColor: '', description: '' })
       loadActions()
     } catch (e: any) {
       ElMessage.error(e.response?.data?.message || t('action.createFailed'))
@@ -97,6 +98,7 @@ export function useActionList(options: UseActionListOptions) {
       await store.updateAction(functionUnitId, selectedAction.value.id, {
         actionName: selectedAction.value.actionName,
         actionType: selectedAction.value.actionType,
+        buttonColor: selectedAction.value.buttonColor || null,
         description: selectedAction.value.description,
         configJson: actionConfig
       })

@@ -3,6 +3,7 @@ package com.portal.controller;
 import com.portal.component.ClaimBatchComponent;
 import com.portal.component.UnclaimBatchComponent;
 import com.portal.component.TaskProcessComponent;
+import com.portal.component.TaskReassignComponent;
 import com.portal.client.WorkflowEngineClient;
 import com.platform.common.util.ApiResponseBodyUnwrap;
 import com.platform.common.util.SafeUrlInput;
@@ -46,6 +47,7 @@ public class TaskController {
     private final TaskProcessComponent taskProcessComponent;
     private final ClaimBatchComponent claimBatchComponent;
     private final UnclaimBatchComponent unclaimBatchComponent;
+    private final TaskReassignComponent taskReassignComponent;
     private final WorkflowEngineClient workflowEngineClient;
     private final I18nService i18nService;
     private final RestTemplate restTemplate;
@@ -140,6 +142,18 @@ public class TaskController {
             @RequestParam String originalAssignmentType,
             @RequestParam String originalAssignee) {
         TaskInfo task = taskProcessComponent.unclaimTask(taskId, userId, originalAssignmentType, originalAssignee,
+                SecurityContextUtils.getCurrentUsername().orElse(null));
+        return ApiResponse.success(task);
+    }
+
+    @Operation(summary = "Reassign a claim-pool task to another member of the same role")
+    @PostMapping("/{taskId}/reassign")
+    public ApiResponse<TaskInfo> reassignTask(
+            @PathVariable String taskId,
+            @CurrentUserId String userId,
+            @Valid @RequestBody TaskReassignRequest request) {
+        TaskInfo task = taskReassignComponent.reassign(
+                taskId, userId, request.targetUserId(),
                 SecurityContextUtils.getCurrentUsername().orElse(null));
         return ApiResponse.success(task);
     }
