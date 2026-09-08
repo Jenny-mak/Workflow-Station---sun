@@ -17,6 +17,15 @@ import { clearUploadWidgetState, setUploadWidgetState } from '@platform-shared/u
 type DialogT = (key: string, named?: Record<string, unknown>) => string
 type UploadListItem = { name: string; url: string; status?: string; response?: unknown }
 
+/**
+ * One finished upload as el-upload hands it back.
+ *
+ * Named rather than written inline because `SubTableAddDialog`'s `:handle-success` has to state
+ * this same shape: a bare object type literal in a template attribute is unparseable — vue-tsc
+ * reads `{ name?: string }` there as an object *literal* and fails on the `?:`.
+ */
+export type UploadedFile = { name?: string; url?: string }
+
 export function useSubTableDialogUpload(
   formData: Ref<Record<string, any>>,
   columns: () => DialogColumn[],
@@ -76,7 +85,7 @@ export function useSubTableDialogUpload(
 
   function handleUploadSuccess(
     res: unknown,
-    file: { name?: string; url?: string },
+    file: UploadedFile,
     col: DialogColumn,
     uploadFiles?: UploadListItem[],
   ) {

@@ -375,7 +375,7 @@
                       :remove-label="t('common.delete')"
                       :success-status-label="t('upload.statusUploaded')"
                       :uploading-status-label="t('upload.statusUploading')"
-                      :handle-success="(res: unknown, file: { name?: string; url?: string }, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadSuccess(res, file, col, list)"
+                      :handle-success="(res: unknown, file: UploadedFile, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadSuccess(res, file, col, list)"
                       :handle-change="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadChange(col, list)"
                       :handle-remove="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadRemove(col, list)"
                       :handle-exceed="() => handleUploadExceed(col)"
@@ -719,6 +719,7 @@ import { useSubTableDialogSignature } from '@/composables/subTableAddDialog/useS
 import { useSubTableDialogEditor } from '@/composables/subTableAddDialog/useSubTableDialogEditor'
 import { useSubTableDialogRelations } from '@/composables/subTableAddDialog/useSubTableDialogRelations'
 import { useSubTableDialogUpload } from '@/composables/subTableAddDialog/useSubTableDialogUpload'
+import type { UploadedFile } from '@/composables/subTableAddDialog/useSubTableDialogUpload'
 import { useSubTableDialogForm } from '@/composables/subTableAddDialog/useSubTableDialogForm'
 import { useSubTableDialogComponentEvents } from '@/composables/subTableAddDialog/useSubTableDialogComponentEvents'
 import { useSubTableDialogSensitiveMask } from '@/composables/subTableAddDialog/useSubTableDialogSensitiveMask'
