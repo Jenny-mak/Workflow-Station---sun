@@ -2,6 +2,7 @@ package com.portal.component;
 
 import com.platform.common.list.ListColumnFilter;
 import com.portal.client.WorkflowEngineClient;
+import com.portal.dto.MyTaskRef;
 import com.portal.dto.PageResponse;
 import com.portal.dto.PortalListPage;
 import com.portal.dto.TaskInfo;
@@ -22,6 +23,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -77,6 +80,45 @@ public class TodoListQueryComponent {
         String portalUsername = SecurityContextUtils.getCurrentUsername().orElse(null);
         taskPermissionEvaluator.annotateClaimState(merged, userId, portalUsername);
         return merged;
+    }
+
+    /**
+     * The To Do tasks the user holds on each of the given process instances.
+     *
+     * <p>Answers the Views grid's per-row task marker for a whole page in one call — one row at a
+     * time would be one engine round trip per row. It reuses {@link #listMergedTodoTasks} rather
+     * than querying the engine by process instance directly: "is this task mine" is the union of
+     * Mine and the claim pool minus withdrawn, hidden and out-of-workspace tasks, and a second
+     * implementation of that rule would drift from the To Do list the marker promises to open.
+     * The Mine full scan behind it is cached for 15s, so a page load costs about what opening
+     * To Do costs.
+     *
+     * @return process instance id → its tasks, in To Do order; instances with none are absent
+     */
+    public Map<String, List<MyTaskRef>> findMyTaskRefsByProcessInstance(
+            String userId, Collection<String> processInstanceIds) {
+        if (userId == null || userId.isBlank() || processInstanceIds == null || processInstanceIds.isEmpty()) {
+            return Map.of();
+        }
+        Set<String> wanted = processInstanceIds.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .collect(Collectors.toSet());
+        if (wanted.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, List<MyTaskRef>> byInstance = new LinkedHashMap<>();
+        for (TaskInfo task : listMergedTodoTasks(userId)) {
+            String processInstanceId = task.getProcessInstanceId();
+            if (processInstanceId == null || !wanted.contains(processInstanceId)) {
+                continue;
+            }
+            if (task.getTaskId() == null || task.getTaskId().isBlank()) {
+                continue;
+            }
+            byInstance.computeIfAbsent(processInstanceId, k -> new ArrayList<>())
+                    .add(new MyTaskRef(task.getTaskId(), task.getTaskName()));
+        }
+        return byInstance;
     }
 
     static TaskQueryRequest toTaskQuery(String userId, TodoTaskQueryRequest request) {

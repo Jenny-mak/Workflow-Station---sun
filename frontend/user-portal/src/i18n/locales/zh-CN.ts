@@ -125,6 +125,11 @@ export default {
     sectionSetup: '设置'
   },
   mainTableView: {
+    openMyTask: '打开我的任务',
+    myTasksOnRow: '该申请下你有 {count} 条任务',
+    pickTaskToOpen: '打开哪条任务？',
+    unnamedTask: '未命名任务',
+    loadRowTasksFailed: '无法查询哪些行有你的任务',
     openRelatedRecord: '打开关联记录',
     openLookupTable: '在关联表中查看',
     downloadFile: '下载文件',

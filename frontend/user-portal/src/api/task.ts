@@ -326,6 +326,25 @@ export function queryTodoTasks(params: TodoTaskQueryRequest) {
   return request.post<{ data: PortalListPage<TaskInfo> }>('/tasks/todo/query', params)
 }
 
+/** One To Do task reachable from a Views grid row. */
+export interface MyTaskRef {
+  taskId: string
+  taskName?: string | null
+}
+
+/**
+ * The To Do tasks the current user holds on each of the given process instances, for the Views
+ * grid's per-row task marker. One call per page — never one per row.
+ *
+ * @returns process instance id → its tasks; instances with none are absent from the map
+ */
+export function findMyTaskRefs(processInstanceIds: string[]) {
+  return request.post<{ data: Record<string, MyTaskRef[]> }>(
+    '/tasks/mine/by-process-instances',
+    { processInstanceIds },
+  )
+}
+
 // Assign a user to a sub-table row
 export interface AssignSubTableRowRequest {
   assigneeId: string

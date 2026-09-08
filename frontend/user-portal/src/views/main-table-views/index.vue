@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Expand, Fold } from '@element-plus/icons-vue'
+import { Expand, Fold, List } from '@element-plus/icons-vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -14,12 +14,13 @@ const {
   filterDraft, widthDialogVisible, widthDialogField, widthDraft, tableRef, selectedTableRows,
   importProgressVisible, importProgressPercent, importProgressFileName,
   importResultVisible, importResult, importProgressLabel, importResultStatus, importResultHeadline,
-  selectedFuCode, selectedViewMeta, showExportButton, selectedFu, displayColumns,
+  selectedFuCode, showExportButton, selectedFu, displayColumns,
   viewListCollapsed, viewSearchKeyword, filteredGroupedViews, selectedTableKey, currentTableViewsSorted, handleSelectTable,
   MTV_SELECTION_COL_WIDTH, gridInnerStyle, gridScrollRef, gridFits, gridTableHeight, gridTableKey,
   pagedRows, displayTotal, toListColumnMeta,
   handleSearch, handlePageChange, formatCell, isRowSelectable, getRowKey, onSelectionChange, openRow, columnIndex,
   isFkLinkCell, openFkTarget, isLookupLinkCell, openLookupTarget, isFileLinkCell, fileLinksOf, previewFile,
+  showRowTaskColumn, rowTasksOf, openRowTask, MTV_TASK_COL_WIDTH,
   handleSortChange, handleClearSort, openFilterDialog, openWidthDialog, handleMoveColumn,
   applyColumnFilter, clearColumnFilter, clearFilterFromDialog, applyColumnWidth,
   handleColumnResize, handleColumnResizeEnd, displayWidthOf,
@@ -198,10 +199,60 @@ const {
             >
           <el-table-column
             type="selection"
-            width="48"
+            :width="MTV_SELECTION_COL_WIDTH"
             :selectable="isRowSelectable"
             reserve-selection
           />
+          <el-table-column
+            v-if="showRowTaskColumn"
+            :width="MTV_TASK_COL_WIDTH"
+            align="center"
+            class-name="mtv-task-col"
+            label-class-name="mtv-task-col"
+          >
+            <template #default="{ row }">
+              <el-popover
+                v-if="rowTasksOf(row).length > 1"
+                placement="right-start"
+                trigger="click"
+                :width="260"
+                popper-class="mtv-task-popper"
+              >
+                <template #reference>
+                  <span
+                    class="mtv-task-flag"
+                    :title="t('mainTableView.myTasksOnRow', { count: rowTasksOf(row).length })"
+                    @click.stop
+                  >
+                    <el-icon><List /></el-icon>
+                  </span>
+                </template>
+                <p class="mtv-task-popper__title">{{ t('mainTableView.pickTaskToOpen') }}</p>
+                <ul class="mtv-task-popper__list">
+                  <li
+                    v-for="task in rowTasksOf(row)"
+                    :key="task.taskId"
+                  >
+                    <button
+                      type="button"
+                      class="mtv-task-popper__item"
+                      @click.stop="openRowTask(task)"
+                    >
+                      {{ task.taskName || t('mainTableView.unnamedTask') }}
+                    </button>
+                  </li>
+                </ul>
+              </el-popover>
+              <span
+                v-else-if="rowTasksOf(row).length === 1"
+                class="mtv-task-flag"
+                :title="t('mainTableView.openMyTask')"
+                @click.stop="openRowTask(rowTasksOf(row)[0])"
+              >
+                <el-icon><List /></el-icon>
+              </span>
+            </template>
+          </el-table-column>
           <el-table-column
             v-for="col in displayColumns"
             :key="col.fieldName"
@@ -417,6 +468,40 @@ const {
 
 <style lang="scss">
 @import '@/styles/listDataGrid.scss';
+
+/* Teleported to body, so it cannot be reached from the scoped block below. */
+.mtv-task-popper {
+  .mtv-task-popper__title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+  }
+
+  .mtv-task-popper__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .mtv-task-popper__item {
+    width: 100%;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--el-text-color-primary);
+    cursor: pointer;
+
+    &:hover { background: var(--el-fill-color-light); }
+    &:focus-visible { outline: 1px solid var(--el-color-primary); }
+  }
+}
 </style>
 
 <style scoped lang="scss">
@@ -585,6 +670,23 @@ const {
 }
 :deep(.el-table__row) {
   cursor: pointer;
+}
+
+/* Leading marker column: no header label, the icon carries the meaning. */
+.mtv-task-col {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.mtv-task-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--el-color-primary);
+  cursor: pointer;
+  font-size: 15px;
+
+  &:hover { opacity: 0.75; }
 }
 
 .mtv-fk-link {

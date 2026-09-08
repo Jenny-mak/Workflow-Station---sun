@@ -2,6 +2,7 @@ package com.portal.component;
 
 import com.portal.client.WorkflowEngineClient;
 import com.portal.dto.CompletedTaskQueryRequest;
+import com.portal.dto.MyTaskRef;
 import com.portal.dto.PageResponse;
 import com.portal.dto.PortalListPage;
 import com.portal.dto.TaskHistoryInfo;
@@ -21,7 +22,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -94,6 +97,16 @@ public class TaskQueryComponent {
 
     public List<TaskInfo> listMergedTodoTasks(String userId) {
         return todoListQueryComponent.listMergedTodoTasks(userId);
+    }
+
+    /**
+     * To Do tasks the user holds on each of the given process instances, for the Views grid's
+     * per-row task marker. Delegates to
+     * {@link TodoListQueryComponent#findMyTaskRefsByProcessInstance}.
+     */
+    public Map<String, List<MyTaskRef>> findMyTaskRefsByProcessInstance(
+            String userId, Collection<String> processInstanceIds) {
+        return todoListQueryComponent.findMyTaskRefsByProcessInstance(userId, processInstanceIds);
     }
 
     public void invalidateMineTaskListCache() {

@@ -74,6 +74,15 @@ public class TaskController {
         return ApiResponse.success(taskQueryComponent.queryTodoList(userId, request));
     }
 
+    @Operation(summary = "My To Do tasks on the given process instances (Views grid row marker)")
+    @PostMapping("/mine/by-process-instances")
+    public ApiResponse<Map<String, List<MyTaskRef>>> findMyTaskRefs(
+            @CurrentUserId String userId,
+            @RequestBody @Valid MyTaskRefsRequest request) {
+        return ApiResponse.success(
+                taskQueryComponent.findMyTaskRefsByProcessInstance(userId, request.processInstanceIds()));
+    }
+
     @Operation(summary = "Get task detail")
     @GetMapping("/{taskId}")
     public ApiResponse<TaskInfo> getTaskDetail(
