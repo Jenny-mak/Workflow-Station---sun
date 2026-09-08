@@ -3526,7 +3526,7 @@ CREATE TABLE IF NOT EXISTS dw_email_connections (
     host VARCHAR(255) NOT NULL,
     port INTEGER NOT NULL DEFAULT 587,
     username VARCHAR(255),
-    password_encrypted TEXT,
+    credential_encrypted TEXT,
     from_email VARCHAR(255) NOT NULL,
     from_name VARCHAR(100),
     use_tls BOOLEAN DEFAULT TRUE,
@@ -3560,7 +3560,7 @@ CREATE TABLE IF NOT EXISTS sys_email_connections (
     host VARCHAR(255) NOT NULL,
     port INTEGER NOT NULL DEFAULT 587,
     username VARCHAR(255),
-    password_encrypted TEXT,
+    credential_encrypted TEXT,
     from_email VARCHAR(255) NOT NULL,
     from_name VARCHAR(100),
     use_tls BOOLEAN DEFAULT TRUE,
@@ -4287,4 +4287,54 @@ SELECT gen_random_uuid()::text, t.id, t.function_unit_id, now(), 'system-migrati
 FROM rt_table_definitions t
 WHERE t.function_unit_id IS NOT NULL
 ON CONFLICT (relation_table_id, function_unit_id) DO NOTHING;
+
+-- =============================================================================
+-- 80-rename-email-connection-credential.sql
+-- Source file: deploy/init-scripts/00-schema/80-rename-email-connection-credential.sql
+-- GUI / existing copies may still have password_encrypted; rename then ADD IF NOT EXISTS.
+-- =============================================================================
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'dw_email_connections'
+          AND column_name = 'password_encrypted'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'dw_email_connections'
+          AND column_name = 'credential_encrypted'
+    ) THEN
+        ALTER TABLE dw_email_connections RENAME COLUMN password_encrypted TO credential_encrypted;
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'sys_email_connections'
+          AND column_name = 'password_encrypted'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'sys_email_connections'
+          AND column_name = 'credential_encrypted'
+    ) THEN
+        ALTER TABLE sys_email_connections RENAME COLUMN password_encrypted TO credential_encrypted;
+    END IF;
+END
+$$;
+
+ALTER TABLE dw_email_connections ADD COLUMN IF NOT EXISTS credential_encrypted TEXT;
+ALTER TABLE sys_email_connections ADD COLUMN IF NOT EXISTS credential_encrypted TEXT;
+
+COMMENT ON COLUMN dw_email_connections.credential_encrypted IS
+    'AES ciphertext of SMTP/IMAP auth secret (ENCRYPTION_SECRET_KEY)';
+COMMENT ON COLUMN sys_email_connections.credential_encrypted IS
+    'AES ciphertext of SMTP/IMAP auth secret synced from developer-workstation';
 

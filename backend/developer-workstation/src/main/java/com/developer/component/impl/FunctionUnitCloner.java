@@ -480,7 +480,7 @@ class FunctionUnitCloner {
                     .host(source.getHost() != null ? source.getHost() : "")
                     .port(source.getPort())
                     .username(source.getUsername())
-                    .passwordEncrypted(source.getPasswordEncrypted())
+                    .credentialEncrypted(source.getCredentialEncrypted())
                     .fromEmail(source.getFromEmail())
                     .fromName(source.getFromName())
                     .useTls(source.getUseTls())

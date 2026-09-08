@@ -176,7 +176,7 @@ INSERT INTO dw_process_definitions (id, function_unit_id, bpmn_xml, created_at, 
 -- ---------------------------------------------------------------------------
 INSERT INTO dw_email_connections (
   id, connection_uid, function_unit_id, name, connection_type, host, port,
-  username, password_encrypted, from_email, from_name, use_tls, enabled,
+  username, credential_encrypted, from_email, from_name, use_tls, enabled,
   created_at, updated_at, direction
 ) VALUES (
   1, '0475b6f7-b6dd-4d76-94b9-46dd18be52e1', 48, 'Demo QQ Mailbox', 'QQ',

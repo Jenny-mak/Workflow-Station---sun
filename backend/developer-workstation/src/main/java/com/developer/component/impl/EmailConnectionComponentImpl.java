@@ -96,7 +96,7 @@ public class EmailConnectionComponentImpl implements EmailConnectionComponent {
                 .host(endpoint.host())
                 .port(endpoint.port())
                 .username(username)
-                .passwordEncrypted(StringUtils.hasText(request.getPassword())
+                .credentialEncrypted(StringUtils.hasText(request.getPassword())
                         ? encryptionService.encrypt(request.getPassword())
                         : null)
                 .fromEmail(emailAddress)
@@ -150,9 +150,9 @@ public class EmailConnectionComponentImpl implements EmailConnectionComponent {
         connection.setImapPort(imap.port());
         connection.setImapUseSsl(imap.useSsl());
         if (!StringUtils.hasText(request.getUsername())) {
-            connection.setPasswordEncrypted(null);
+            connection.setCredentialEncrypted(null);
         } else if (StringUtils.hasText(request.getPassword())) {
-            connection.setPasswordEncrypted(encryptionService.encrypt(request.getPassword()));
+            connection.setCredentialEncrypted(encryptionService.encrypt(request.getPassword()));
         } else if (!StringUtils.hasText(connection.getUsername())) {
             throw new DeveloperBusinessException("VALIDATION_PASSWORD_REQUIRED",
                     i18nService.getMessage("email.connection.username_requires_password"));
@@ -343,8 +343,8 @@ public class EmailConnectionComponentImpl implements EmailConnectionComponent {
 
     private SmtpMailSender.SmtpConfig toSmtpConfig(EmailConnection connection, ResolvedSmtpEndpoint endpoint) {
         String password = null;
-        if (connection.getPasswordEncrypted() != null) {
-            password = encryptionService.decrypt(connection.getPasswordEncrypted());
+        if (connection.getCredentialEncrypted() != null) {
+            password = encryptionService.decrypt(connection.getCredentialEncrypted());
         }
         return new SmtpMailSender.SmtpConfig(
                 endpoint.host(),

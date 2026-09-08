@@ -46,6 +46,7 @@ import com.developer.repository.TableRelationRepository;
 import com.developer.util.FormConfigJsonBindingIdRewriter;
 import com.developer.util.FormConfigJsonOrphanBindingRepair;
 import com.developer.validation.DmnXmlParser;
+import com.platform.common.mail.EmailConnectionPortability;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -614,7 +615,7 @@ public class FunctionUnitImportWriter {
                 .host(connectionData.get("host") != null ? (String) connectionData.get("host") : "")
                 .port(connectionData.get("port") != null ? ((Number) connectionData.get("port")).intValue() : 587)
                 .username((String) connectionData.get("username"))
-                .passwordEncrypted((String) connectionData.get("passwordEncrypted"))
+                .credentialEncrypted(EmailConnectionPortability.readEncryptedCredential(connectionData))
                 .fromEmail((String) connectionData.get("fromEmail"))
                 .fromName((String) connectionData.get("fromName"))
                 .useTls(connectionData.get("useTls") != null ? (Boolean) connectionData.get("useTls") : true)

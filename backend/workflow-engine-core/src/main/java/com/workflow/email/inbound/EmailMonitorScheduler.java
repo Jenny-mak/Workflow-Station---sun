@@ -215,7 +215,7 @@ public class EmailMonitorScheduler {
 
         String username = StringUtils.hasText(connection.getMailboxAddress())
                 ? connection.getMailboxAddress() : connection.getUsername();
-        String password = decrypt(rule.getId(), connection.getPasswordEncrypted());
+        String password = decrypt(rule.getId(), connection.getCredentialEncrypted());
         if (!StringUtils.hasText(username) || password == null) {
             log.warn("[EMAIL-MONITOR] rule {} skipped: connection {} missing IMAP credentials (username/password)",
                     rule.getId(), rule.getConnectionUid());

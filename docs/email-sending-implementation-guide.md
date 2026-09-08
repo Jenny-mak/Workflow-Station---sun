@@ -51,7 +51,7 @@
 | Port | `port` |
 | Use TLS | `useTls` |
 | Username | `username`（留空表示无 SMTP 认证） |
-| Password | `passwordEncrypted`（加密存储） |
+| Password | `credentialEncrypted`（加密存储；库列 `credential_encrypted`） |
 | From Name | `fromName` |
 
 ### 3.3 认证规则
@@ -219,7 +219,7 @@ select id,
        port,
        use_tls,
        username,
-       (password_encrypted is not null) as has_password
+       (credential_encrypted is not null) as has_password
 from public.dw_email_connections
 order by id desc;
 ```
@@ -228,10 +228,12 @@ order by id desc;
 
 ```sql
 select id, name, host, port, use_tls, username,
-       (password_encrypted is not null) as has_password
+       (credential_encrypted is not null) as has_password
 from public.sys_email_connections
 order by id desc;
 ```
+
+**已有库列迁移（`password_encrypted` → `credential_encrypted`）**：Docker 首次 init 会自动跑 `00-schema/80-rename-email-connection-credential.sql`；已有 Postgres 卷需手工执行该脚本（或 `deploy/init-scripts/init-database.ps1` 会按列表执行）。K8s GUI 离线 schema（`deploy/k8s/init-data/init-platform-schema/all-in-one-for-gui.sql`）的 CREATE 已用新列名，文末含同一套幂等 RENAME/ADD，单独执行该文件即可，不必再手工跑 80。
 
 ## 11. 前端访问路径
 
