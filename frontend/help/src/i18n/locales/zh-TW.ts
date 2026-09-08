@@ -391,6 +391,20 @@ export default {
     extractFieldCatalogLead: '欄位目錄 — 監聽對話框「欄位對應」頁籤上的每一個控制項。',
     extractAttributeSample:
       '示例：來源選「寄件人 (From)」→ 主表 sender_email；執行時寫入 IMAP 回傳的原始 From 字串（可含顯示名稱與地址）。',
+    extractAttachmentsTitle: '欄位對應 — 儲存郵件附件',
+    extractAttachmentsBody:
+      '在欄位對應新增一列，來源選「附件」。目標必須是主表 FILE 欄。一封郵件的全部附件寫入該欄（1 個檔案=URL；多個=JSON [{url,name}]）。內嵌 CID 圖片仍在 HTML 內文，不當附件儲存。超過 50MB 或超過 10 個的檔案會略過並記錄；若勾選必填且結果為空，郵件進入人工審核。',
+    extractAttachmentsCatalogLead: '欄位目錄 — 欄位對應頁籤上的「附件」來源。',
+    fSourceAttachments:
+      '來源分組「附件」。把入站郵件的全部非內嵌附件寫入同一個 FILE 欄位。方式鎖定為直接對應（整值）。',
+    fAttachmentsTarget:
+      '目標下拉只列出主表 FILE 欄。儲存與 Deploy 會拒絕非 FILE 目標。清單為空時，請先在表設計中新增 FILE 欄。',
+    fAttachmentsMethod:
+      '方式為直接對應（整值）。整包附件一起儲存；本版本不依檔名或 MIME 拆分。',
+    fAttachmentsRequired:
+      '勾選後，沒有可用附件（沒有附件、全部超限或全部儲存失敗）的郵件會進入人工審核，不會自動發起流程。',
+    fSampleAttachments:
+      '樣例郵件中的可選檔名（逗號分隔），僅用於預覽。執行時使用真實附件；此框不會上傳檔案。',
     extractSubTableTitle: '子表（HTML 表格）頁籤',
     extractSubTableBody:
       '可選第三個頁籤。把郵件裡的一張 HTML 表對應到表單子表（一列一筆紀錄）。若綁定清單為空，請先在主流程表單新增子表。',

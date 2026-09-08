@@ -3444,15 +3444,15 @@
     未做：真实 ZIP 手测 Export→Import 覆盖。
 
 - id: "1606"
-  status: open
+  status: fixed
+  fixed_at: "2026-09-09"
   severity: minor
   category: quality
   summary: "EmailExtractionWizard.vue 756 行超 SFC 600 行硬上限，需拆分子组件"
   file: "frontend/developer-workstation/src/components/designer/email/EmailExtractionWizard.vue"
   note: |
-    2026-09-08 code review：DIRECT 邮件属性映射功能合并后文件 756 行（硬上限 600）。
-    建议拆分为 Sample 预览 / Field Mapping 表格 / Sub-table 段独立子组件或 composable。
-    本 PR 刻意不修，单独 refactor PR + 截图验证 wizard 行为不变。
+    Field Mapping 抽到 EmailFieldMappingTable.vue；wizard 现 472 行（硬上限 600）。
+    验证：DW Field Mapping 截图 2026-09-09_email-field-mapping-attachments.png。
 
 - id: "1607"
   status: fixed
@@ -3513,4 +3513,20 @@
     验证：FunctionUnitLifecycleValidateTest 修复前 DEPLOYED/VALIDATED 抛 AdminBusinessException，
     修复后 Tests run: 5 Failures: 0。admin-center 已 package + compose rebuild，Started。
     未手测 DW 一键发布端到端。
+
+- id: "1611"
+  status: fixed
+  fixed_at: "2026-09-09"
+  severity: major
+  category: bug
+  summary: "Email Monitor Field Mapping 无法把附件存进主表 FILE 字段"
+  file: "backend/workflow-engine-core/src/main/java/com/workflow/email/inbound/ImapInboundMailClient.java"
+  note: |
+    根因：IMAP extractParts 只留 text/html，附件 MIME 丢弃；EmailMessage 无 attachments；
+    Field Mapping 只能映射字符串。
+    修复：Source.ATTACHMENTS + DIRECT；跳过 inline CID；引擎 C-3 token POST DW /upload；
+    persistUploadValue（0="" / 1=url / ≥2=JSON）；无映射=旧行为；required+空附件→人工审核；
+    非 FILE 目标保存/Deploy 拒绝。
+    验证：engine/DW 单测绿；screenshot
+    frontend/developer-workstation/verification-screenshots/2026-09-09_email-field-mapping-attachments.png。
 

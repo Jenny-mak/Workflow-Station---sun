@@ -31,6 +31,7 @@ class EmailMonitorProcessorTest {
     private ProcessedEmailMessageRepository processedRepository;
     private EmailMonitorPortalSyncComponent portalSyncComponent;
     private AdminCenterClient adminCenterClient;
+    private EmailInboundAttachmentBinder attachmentBinder;
     private EmailMonitorProcessor processor;
 
     @BeforeEach
@@ -43,8 +44,11 @@ class EmailMonitorProcessorTest {
         PlatformTransactionManager txManager = mock(PlatformTransactionManager.class);
         when(txManager.getTransaction(any(TransactionDefinition.class)))
                 .thenReturn(new SimpleTransactionStatus());
+        attachmentBinder = mock(EmailInboundAttachmentBinder.class);
+        when(attachmentBinder.bind(any(), any())).thenReturn(EmailInboundAttachmentBinder.BindResult.empty());
         processor = new EmailMonitorProcessor(
-                processedRepository, portalSyncComponent, adminCenterClient, new ObjectMapper(), txManager);
+                processedRepository, portalSyncComponent, adminCenterClient,
+                attachmentBinder, new ObjectMapper(), txManager);
     }
 
     private SysEmailMonitorRule rule(Map<String, Object> extractionRules) {
@@ -143,6 +147,43 @@ class EmailMonitorProcessorTest {
         assertThat(status).isEqualTo(ProcessedEmailMessage.STATUS_FAILED);
         verify(portalSyncComponent, never()).startPortalProcess(any(), any(), any(), any(), any());
         verify(processedRepository).save(any());
+    }
+
+    @Test
+    void startsProcessWithUploadedAttachmentField() {
+        when(attachmentBinder.bind(any(), any())).thenReturn(new EmailInboundAttachmentBinder.BindResult(
+                Map.of("quote_files", "/api/v1/upload/files/a.pdf"),
+                List.of("a.pdf"),
+                List.of(),
+                List.of()));
+        SysEmailMonitorRule rule = rule(labelRule("case_number", "Case No: ", true));
+        EmailMessage email = new EmailMessage("m-file", "s", "a@b.com", "Case No: ABC-7", null, Map.of());
+        when(portalSyncComponent.startPortalProcess(any(), any(), any(), any(), any()))
+                .thenReturn(ProcessInstanceResult.builder()
+                        .processInstanceId("pi-att").success(true).build());
+
+        String status = processor.process(rule, email);
+
+        assertThat(status).isEqualTo(ProcessedEmailMessage.STATUS_STARTED);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> vars = ArgumentCaptor.forClass(Map.class);
+        verify(portalSyncComponent).startPortalProcess(any(), any(), any(), any(), vars.capture());
+        assertThat(vars.getValue()).containsEntry("quote_files", "/api/v1/upload/files/a.pdf");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inbound = (Map<String, Object>) vars.getValue().get("__inboundEmail__");
+        assertThat(inbound).containsEntry("attachmentNames", List.of("a.pdf"));
+    }
+
+    @Test
+    void requiredAttachmentsMissingRoutesToReview() {
+        SysEmailMonitorRule rule = rule(Map.of("fields", List.of(Map.of(
+                "target", "quote_files", "source", "ATTACHMENTS", "type", "DIRECT", "required", true))));
+        EmailMessage email = new EmailMessage("m-att", "s", "a@b.com", "body", null, Map.of());
+
+        String status = processor.process(rule, email);
+
+        assertThat(status).isEqualTo(ProcessedEmailMessage.STATUS_REVIEW);
+        verify(portalSyncComponent, never()).startPortalProcess(any(), any(), any(), any(), any());
     }
 
     @Test

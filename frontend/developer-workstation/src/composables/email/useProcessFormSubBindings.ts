@@ -14,6 +14,7 @@ export interface ProcessSubBindingOption {
 export interface SubTableFieldOption {
   fieldName: string
   displayName: string
+  dataType?: string
 }
 
 /** MI / runtime fields — not typically populated from inbound email extraction. */
@@ -45,6 +46,7 @@ export function extractMappableFields(
     .map((f) => ({
       fieldName: f.fieldName,
       displayName: f.displayName?.trim() || f.fieldName,
+      dataType: f.dataType,
     }))
     .sort((a, b) => a.displayName.localeCompare(b.displayName))
 }

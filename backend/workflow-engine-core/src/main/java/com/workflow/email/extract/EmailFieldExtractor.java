@@ -53,12 +53,25 @@ public final class EmailFieldExtractor {
             if (rule == null || !StringUtils.hasText(rule.getTarget())) {
                 continue;
             }
+            if (rule.getSource() == EmailExtractionSpec.Source.ATTACHMENTS) {
+                recordAttachmentsPresence(email, rule, result);
+                continue;
+            }
             String value = applyPostProcess(extractFieldValue(email, rule), rule.getPostProcess());
             if (StringUtils.hasText(value)) {
                 result.getFields().put(rule.getTarget(), value);
             } else if (rule.isRequired()) {
                 result.getMissingRequired().add(rule.getTarget());
             }
+        }
+    }
+
+    /** ATTACHMENTS values are uploaded later; this only gates {@code required} on presence. */
+    private static void recordAttachmentsPresence(
+            EmailMessage email, FieldRule rule, ExtractionResult result) {
+        boolean present = email.attachments() != null && !email.attachments().isEmpty();
+        if (!present && rule.isRequired()) {
+            result.getMissingRequired().add(rule.getTarget());
         }
     }
 
@@ -106,7 +119,7 @@ public final class EmailFieldExtractor {
             case DATE -> readHeader(email, "date");
             case MESSAGE_ID -> email.messageId();
             case SUBJECT -> email.subject();
-            default -> null;
+            case ATTACHMENTS, TEXT, HTML, TEXT_AND_HTML, HEADER, CONST -> null;
         };
     }
 
@@ -119,7 +132,7 @@ public final class EmailFieldExtractor {
             case FROM, TO, CC, REPLY_TO, DATE, MESSAGE_ID -> emailAttributeValue(email, source);
             case HTML -> htmlToText(email.html());
             case TEXT, TEXT_AND_HTML -> combinedTextAndHtml(email);
-            case HEADER, CONST -> truncate(email.text());
+            case HEADER, CONST, ATTACHMENTS -> truncate(email.text());
         };
     }
 

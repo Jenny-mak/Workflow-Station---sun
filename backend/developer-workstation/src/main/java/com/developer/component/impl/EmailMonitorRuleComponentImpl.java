@@ -1,5 +1,6 @@
 package com.developer.component.impl;
 
+import com.developer.component.EmailExtractionAttachmentRulesValidator;
 import com.developer.component.EmailMonitorRuleComponent;
 import com.developer.dto.EmailMonitorRuleRequest;
 import com.developer.dto.EmailMonitorRuleResponse;
@@ -32,6 +33,7 @@ public class EmailMonitorRuleComponentImpl implements EmailMonitorRuleComponent 
     private final EmailMonitorRuleRepository emailMonitorRuleRepository;
     private final EmailConnectionRepository emailConnectionRepository;
     private final FunctionUnitRepository functionUnitRepository;
+    private final EmailExtractionAttachmentRulesValidator attachmentRulesValidator;
     private final I18nService i18nService;
 
     @Override
@@ -80,6 +82,7 @@ public class EmailMonitorRuleComponentImpl implements EmailMonitorRuleComponent 
                 .orElseThrow(() -> new ResourceNotFoundException("FunctionUnit", functionUnitId));
 
         rejectTemplatePollution(request);
+        attachmentRulesValidator.validate(functionUnitId, request.getExtractionRules());
         if (emailMonitorRuleRepository.existsByFunctionUnitIdAndName(functionUnitId, request.getName())) {
             throw new DeveloperBusinessException("CONFLICT_RULE_NAME",
                     i18nService.getMessage("email.monitor.name_conflict", request.getName()));
@@ -105,6 +108,7 @@ public class EmailMonitorRuleComponentImpl implements EmailMonitorRuleComponent 
                     i18nService.getMessage("email.monitor.name_conflict", request.getName()));
         }
         rejectTemplatePollution(request);
+        attachmentRulesValidator.validate(functionUnitId, request.getExtractionRules());
         validateConnection(functionUnitId, request.getConnectionUid());
 
         applyTemplate(rule, request);

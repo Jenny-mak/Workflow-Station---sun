@@ -2,6 +2,7 @@ package com.workflow.email.inbound;
 
 import com.platform.common.mail.ImapTransportProperties;
 import com.platform.common.mail.MailDiagnostics;
+import com.workflow.email.extract.EmailAttachment;
 import com.workflow.email.extract.EmailMessage;
 import jakarta.mail.Address;
 import jakarta.mail.Folder;
@@ -12,6 +13,7 @@ import jakarta.mail.Session;
 import jakarta.mail.Store;
 import jakarta.mail.UIDFolder;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeUtility;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -134,7 +136,8 @@ public class ImapInboundMailClient implements InboundMailClient {
 
         StringBuilder text = new StringBuilder();
         StringBuilder html = new StringBuilder();
-        extractParts(message, text, html);
+        List<EmailAttachment> attachments = new ArrayList<>();
+        extractParts(message, text, html, attachments);
 
         Map<String, String> headers = new HashMap<>();
         if (from != null) {
@@ -154,7 +157,8 @@ public class ImapInboundMailClient implements InboundMailClient {
         return new EmailMessage(messageId, subject, from,
                 text.length() > 0 ? text.toString() : null,
                 html.length() > 0 ? html.toString() : null,
-                headers);
+                headers,
+                attachments);
     }
 
     private static void putHeader(Map<String, String> headers, String name, String value) {
@@ -189,23 +193,43 @@ public class ImapInboundMailClient implements InboundMailClient {
 
     /** Recursively collects text/plain and text/html bodies from a (possibly multipart) part. */
     void extractParts(Part part, StringBuilder text, StringBuilder html) throws Exception {
+        extractParts(part, text, html, new ArrayList<>());
+    }
+
+    void extractParts(
+            Part part,
+            StringBuilder text,
+            StringBuilder html,
+            List<EmailAttachment> attachments) throws Exception {
+        if (isInlineCid(part)) {
+            return;
+        }
+        if (isAttachmentPart(part)) {
+            collectAttachment(part, attachments);
+            return;
+        }
         Object content = part.getContent();
         if (content instanceof Multipart multipart) {
             for (int i = 0; i < multipart.getCount(); i++) {
-                extractParts(multipart.getBodyPart(i), text, html);
+                extractParts(multipart.getBodyPart(i), text, html, attachments);
             }
             return;
         }
         if (content instanceof Message nested) {
-            extractParts(nested, text, html);
+            extractParts(nested, text, html, attachments);
             return;
         }
         if (content instanceof InputStream inputStream && part.isMimeType("message/rfc822")) {
             Session nestedSession = Session.getDefaultInstance(new Properties());
             Message nestedMessage = new MimeMessage(nestedSession, inputStream);
-            extractParts(nestedMessage, text, html);
+            extractParts(nestedMessage, text, html, attachments);
             return;
         }
+        appendTextOrHtml(part, content, text, html);
+    }
+
+    private static void appendTextOrHtml(
+            Part part, Object content, StringBuilder text, StringBuilder html) throws Exception {
         String body = contentAsString(content);
         if (body == null) {
             return;
@@ -214,6 +238,69 @@ public class ImapInboundMailClient implements InboundMailClient {
             html.append(body);
         } else if (part.isMimeType("text/plain")) {
             text.append(body);
+        }
+    }
+
+    /** Inline CID images stay in HTML; they are not FILE attachments. */
+    static boolean isInlineCid(Part part) throws Exception {
+        String[] cids = part.getHeader("Content-ID");
+        if (cids == null || cids.length == 0 || !StringUtils.hasText(cids[0])) {
+            return false;
+        }
+        String disposition = part.getDisposition();
+        return !Part.ATTACHMENT.equalsIgnoreCase(disposition);
+    }
+
+    static boolean isAttachmentPart(Part part) throws Exception {
+        if (part.isMimeType("multipart/*") || part.isMimeType("message/rfc822")) {
+            return false;
+        }
+        String disposition = part.getDisposition();
+        if (Part.ATTACHMENT.equalsIgnoreCase(disposition)) {
+            return true;
+        }
+        String filename = decodeFilename(part.getFileName());
+        if (!StringUtils.hasText(filename)) {
+            return false;
+        }
+        return !part.isMimeType("text/plain") && !part.isMimeType("text/html");
+    }
+
+    private static void collectAttachment(Part part, List<EmailAttachment> attachments) throws Exception {
+        String filename = decodeFilename(part.getFileName());
+        if (!StringUtils.hasText(filename)) {
+            filename = "attachment";
+        }
+        byte[] bytes = readPartBytes(part);
+        if (bytes.length == 0) {
+            return;
+        }
+        attachments.add(new EmailAttachment(filename, part.getContentType(), bytes));
+    }
+
+    private static byte[] readPartBytes(Part part) throws Exception {
+        try (InputStream in = part.getInputStream()) {
+            return in.readAllBytes();
+        } catch (Exception streamFailed) {
+            Object content = part.getContent();
+            if (content instanceof byte[] raw) {
+                return raw;
+            }
+            if (content instanceof InputStream in) {
+                return in.readAllBytes();
+            }
+            throw streamFailed;
+        }
+    }
+
+    static String decodeFilename(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return raw;
+        }
+        try {
+            return MimeUtility.decodeText(raw);
+        } catch (Exception e) {
+            return raw;
         }
     }
 
