@@ -11,7 +11,7 @@ describe('parseStoredUserIds', () => {
   it('parses one and many user: tokens', () => {
     expect(parseStoredUserIds('user:u-a,user:u-b')).toEqual(['u-a', 'u-b'])
     expect(parseStoredUserIds('user:u-bob')).toEqual(['u-bob'])
-    expect(parseStoredUserIds('group:bu|role')).toEqual([])
+    expect(parseStoredUserIds('step:multi')).toEqual([])
     expect(parseStoredUserIds('')).toEqual([])
   })
 })

@@ -75,7 +75,7 @@
 - **不**用 Owner 控制 View 行可见性（「owned by me」、行级 ACL 另开）。
 - **不做**改 Owner 就转办 / 认领（单向：按办理规则取值 → 写入本字段，永不反向）。
 - **不**在每张表默认追加 Owner 列；**不**在保存表单时自动 `INSERT dw_field_definitions`。
-- **本期不做**表单内手改派、不做 BU+Role 组选择器（08-17 的 `allowGroup` / 选组 UI 退出 MVP；存量 `group:` 值仍须能只读展示）。
+- **本期不做**表单内手改派、不做 BU+Role 组选择器（08-17 的 `allowGroup` / 选组 UI 退出 MVP）。不读、不写、不展示 `group:`。
 - **不**在读路径用系统 Current Assignee 覆盖 Owner 列已写入的值。
 
 ### 2.1 与现有人员概念
@@ -118,7 +118,6 @@ Table Design **没有** `OWNER` 数据类型。Owner 只存在于 form-create ru
 - 读路径：`user:` 段才走 `parseStoredUserIds` + 现查；`step:` **整段当步骤名**，不要拆成 user。
 - `__display` 对 `user:` 只是缓存；对 `step:` 可原样存步骤名。展示以主值前缀为准。
 - 不存「待认领」等 UI 措辞。
-- 若读到存量 `group:<buCode>|<roleCode>`（仅 fork 旧数据）：只读展示组名；origin 新路径不写入 group。
 
 ### 3.2 source 下拉：两值，不是四值
 
@@ -149,7 +148,7 @@ Table Design **没有** `OWNER` 数据类型。Owner 只存在于 form-create ru
 
 主表 Case Handler 的终态见 §3.3.3（**清空**）。子表 MI Handler、Creator **不清空**。
 
-禁止：主值留空只写 `__display`；写成 JSON 数组；新路径写 `group:`；用系统实例列盖 Owner JSON。
+禁止：主值留空只写 `__display`；写成 JSON 数组；写成 `group:`；用系统实例列盖 Owner JSON。
 
 #### 3.3.1 主表 Create / 3.3.2 子表 Create（同一条规则）
 
@@ -185,7 +184,7 @@ Table Design **没有** `OWNER` 数据类型。Owner 只存在于 form-create ru
 | 进入 / 停留在普通用户任务 | 覆盖为任务 assignee（`user:`） |
 | 该普通任务 Complete | 覆盖为**实际操作人** |
 | 进入 / 停留在 MI | 覆盖为 `step:<外层框名>` |
-| 认领 / 转办 | 覆盖为新 assignee |
+| 认领 / 转办 / 领导改派 | 覆盖为新 assignee |
 | 委托（任务未 Complete） | **不改**（仍是 A） |
 | 流程终态 | 清空 |
 | 表单 Save（未 Complete） | 不因委托改成 B |
@@ -206,6 +205,8 @@ Table Design **没有** `OWNER` 数据类型。Owner 只存在于 form-create ru
 | 流程结束 | 保留最后一次写入 |
 
 **非 MI 子表（已确认：方案 B）：** 普通子表没有行级任务，**不自动写** Case Handler，不抄主表。列保持空 / `-`。该表若后来成为某次 MI 的 collection，再按上表写该行任务。离开 MI 之后不抄下一节点主流程办理人、不清空，**保留该行最后一次写入**。
+
+认领 / 取消认领 / 转办 / **领导改派**写该行时必须带任务自己的 `_currentItem`；对不上的行不要改。
 
 不要回写 MI `assigneeField`，不要改 `AssignmentConfig` / `shared.ts` merge。
 
@@ -357,7 +358,7 @@ Creator **不要**用 `startUserId` 覆盖 Save 时的字段值。
 
 ### 6.3 按办理规则回写 Owner 列（仅 `CASE_HANDLER`）
 
-任务认领 / 取消认领 / 转办 / 节点切换 / **普通任务或某条 MI 子任务 Complete**时，按 §3.3.3 / §3.3.4 重算并写进该实例上所有 `source=CASE_HANDLER` 的 Owner 列（主表 variables + 已有子表行）。可以挂在现有 `ProcessInstanceSyncComponent` 同类写点之后，但写入目标是 **Owner JSON**，不要改系统实例列的语义，也不要把系统列和 Owner 当成同一字段。
+任务认领 / 取消认领 / 转办 / **领导改派（BU Role 池）** / 节点切换 / **普通任务或某条 MI 子任务 Complete**时，按 §3.3.3 / §3.3.4 重算并写进该实例上所有 `source=CASE_HANDLER` 的 Owner 列（主表 variables + 已有子表行）。MI 内层任务必须带上该任务的 `_currentItem`，只改对上的 Participants 行。可以挂在现有 `ProcessInstanceSyncComponent` 同类写点之后，但写入目标是 **Owner JSON**，不要改系统实例列的语义，也不要把系统列和 Owner 当成同一字段。
 
 **委托（Delegate）与转办（Transfer）分开写：** 平台委托**不改**任务 `assignee`（单仍挂 A，B 代 A 办）。见 [portal-task-single-delegate.md](./portal-task-single-delegate.md)。
 

@@ -654,10 +654,6 @@ public class PortalMainTableViewServiceImpl implements PortalMainTableViewServic
         if (raw instanceof String step && step.startsWith("step:") && step.length() > 5) {
             return step.substring(5);
         }
-        if (raw instanceof String s && s.startsWith("group:")) {
-            Object display = source.get(field.fieldName() + "__display");
-            return display instanceof String d && !d.isBlank() ? display : raw;
-        }
         return raw;
     }
 

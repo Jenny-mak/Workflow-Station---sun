@@ -1,9 +1,8 @@
 <template>
   <span class="owner-chip" :class="[`is-${kind}`, { 'is-empty': empty }]">
     <span class="owner-chip-head" aria-hidden="true">
-      <el-icon v-if="empty || kind === 'group'" :size="iconSize">
-        <OfficeBuilding v-if="kind === 'group' && !empty" />
-        <UserFilled v-else />
+      <el-icon v-if="empty" :size="iconSize">
+        <UserFilled />
       </el-icon>
       <span v-else class="owner-chip-initial">{{ initial }}</span>
     </span>
@@ -15,7 +14,7 @@
 import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
-  kind?: 'user' | 'group'
+  kind?: 'user'
   label?: string
   empty?: boolean
   size?: number
@@ -57,10 +56,6 @@ const initial = computed(() => {
   font-weight: 600;
   line-height: 1;
   overflow: hidden;
-}
-
-.is-group .owner-chip-head {
-  background: var(--el-color-info, #909399);
 }
 
 .is-empty .owner-chip-head {

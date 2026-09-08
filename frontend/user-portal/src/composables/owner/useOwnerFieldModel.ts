@@ -1,11 +1,10 @@
 import { type Ref } from 'vue'
 
 export const OWNER_USER_PREFIX = 'user:'
-export const OWNER_GROUP_PREFIX = 'group:'
 export const OWNER_STEP_PREFIX = 'step:'
 
 export type OwnerSource = 'CREATOR' | 'CASE_HANDLER'
-export type OwnerChipKind = 'user' | 'group' | 'step'
+export type OwnerChipKind = 'user' | 'step'
 
 export type OwnerChipModel = {
   kind: OwnerChipKind
@@ -84,9 +83,6 @@ export function ownerChips(modelValue: string | null | undefined, display: strin
     return [{ kind: 'step', label: (display || '').trim() || step }]
   }
   const label = (display || '').trim()
-  if (value.startsWith(OWNER_GROUP_PREFIX)) {
-    return [{ kind: 'group', label: label || value }]
-  }
   const ids = parseStoredUserIds(value)
   if (ids.length > 0) {
     const labels = label

@@ -447,7 +447,7 @@ class OwnerFieldComponentTest {
                     .containsExactly("u-a", "u-b");
             assertThat(OwnerFieldComponent.parseStoredUserIds("user:" + ASSIGNEE))
                     .containsExactly(ASSIGNEE);
-            assertThat(OwnerFieldComponent.parseStoredUserIds("group:bu|role")).isEmpty();
+            assertThat(OwnerFieldComponent.parseStoredUserIds("step:multi")).isEmpty();
             assertThat(OwnerFieldComponent.parseStoredUserIds("")).isEmpty();
         }
 

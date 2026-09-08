@@ -25,7 +25,7 @@ final class OwnerFieldRowSupport {
     }
 
     static List<String> parseStoredUserIds(String value) {
-        if (value == null || value.isBlank() || value.startsWith(OwnerFieldComponent.GROUP_PREFIX)) {
+        if (value == null || value.isBlank()) {
             return List.of();
         }
         List<String> ids = new ArrayList<>();
@@ -44,8 +44,7 @@ final class OwnerFieldRowSupport {
 
     static boolean isStoredOwnerValue(String value) {
         return value != null && !value.isBlank()
-                && (value.startsWith(OwnerCaseHandlerCalculator.USER_PREFIX)
-                || value.startsWith(OwnerFieldComponent.GROUP_PREFIX));
+                && value.startsWith(OwnerCaseHandlerCalculator.USER_PREFIX);
     }
 
     static String scalar(Map<String, Object> record, String field) {

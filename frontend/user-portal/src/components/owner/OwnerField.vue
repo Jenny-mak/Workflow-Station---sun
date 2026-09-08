@@ -12,7 +12,6 @@
       >
         <OwnerChip
           v-if="chip.kind !== 'step'"
-          :kind="chip.kind"
           :label="chip.label"
           :size="22"
         />

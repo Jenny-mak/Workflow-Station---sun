@@ -33,13 +33,9 @@ public class OwnerFieldComponent {
     public static final String DISPLAY_SUFFIX = "__display";
     static final String USER_PREFIX = OwnerCaseHandlerCalculator.USER_PREFIX;
     static final String STEP_PREFIX = OwnerCaseHandlerCalculator.STEP_PREFIX;
-    static final String GROUP_PREFIX = "group:";
-    static final String GROUP_SEPARATOR = "|";
-    static final String GROUP_DISPLAY_SEPARATOR = " / ";
     static final String SOURCE_CREATOR = OwnerCaseHandlerCalculator.SOURCE_CREATOR;
     static final String SOURCE_CASE_HANDLER = OwnerCaseHandlerCalculator.SOURCE_CASE_HANDLER;
 
-    private final JdbcTemplate jdbcTemplate;
     private final UserDisplayNameResolver userDisplayNameResolver;
     private final I18nService i18nService;
     private final OwnerFieldMetadataCatalog metadataCatalog;
@@ -47,7 +43,6 @@ public class OwnerFieldComponent {
     public OwnerFieldComponent(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
                                UserDisplayNameResolver userDisplayNameResolver, I18nService i18nService,
                                PortalPrimaryKeyAllocationComponent portalPrimaryKeyAllocationComponent) {
-        this.jdbcTemplate = jdbcTemplate;
         this.userDisplayNameResolver = userDisplayNameResolver;
         this.i18nService = i18nService;
         this.metadataCatalog = new OwnerFieldMetadataCatalog(
@@ -399,10 +394,6 @@ public class OwnerFieldComponent {
             record.put(meta.field() + DISPLAY_SUFFIX, value.substring(STEP_PREFIX.length()));
             return;
         }
-        if (value.startsWith(GROUP_PREFIX)) {
-            record.put(meta.field() + DISPLAY_SUFFIX, displayForLeftoverGroup(value));
-            return;
-        }
         List<String> ids = parseStoredUserIds(value);
         if (ids.isEmpty()) {
             return;
@@ -457,16 +448,13 @@ public class OwnerFieldComponent {
 
     /**
      * Parses {@code user:<id>} or {@code user:<id1>,user:<id2>} into user ids.
-     * Group leftovers and blank values return an empty list.
+     * Blank values and non-{@code user:} prefixes return an empty list.
      */
     public static List<String> parseStoredUserIds(String value) {
         return OwnerFieldRowSupport.parseStoredUserIds(value);
     }
 
     private String displayForStored(OwnerFieldMeta meta, String value) {
-        if (value.startsWith(GROUP_PREFIX)) {
-            return displayForLeftoverGroup(value);
-        }
         List<String> ids = parseStoredUserIds(value);
         if (ids.isEmpty()) {
             throw ownerError("portal.owner.invalid_format", meta.field());
@@ -477,28 +465,6 @@ public class OwnerFieldComponent {
                     .orElseThrow(() -> ownerError("portal.owner.user_not_found", id)));
         }
         return String.join(UserDisplayNameResolver.MULTI_ASSIGNEE_DISPLAY_SEPARATOR, names);
-    }
-
-    private String displayForLeftoverGroup(String value) {
-        String rest = value.substring(GROUP_PREFIX.length());
-        int sep = rest.indexOf(GROUP_SEPARATOR);
-        if (sep <= 0 || sep != rest.lastIndexOf(GROUP_SEPARATOR) || sep == rest.length() - 1) {
-            return value;
-        }
-        String buName = queryNameByCode("sys_business_units", rest.substring(0, sep).trim());
-        String roleName = queryNameByCode("sys_roles", rest.substring(sep + 1).trim());
-        if (buName == null || roleName == null) {
-            return value;
-        }
-        return buName + GROUP_DISPLAY_SEPARATOR + roleName;
-    }
-
-    private String queryNameByCode(String table, String code) {
-        List<String> names = jdbcTemplate.query(
-                "SELECT name FROM " + table + " WHERE code = ?",
-                (rs, rowNum) -> rs.getString(1),
-                code);
-        return names.isEmpty() ? null : names.get(0);
     }
 
     private PortalException ownerError(String messageKey, String arg) {

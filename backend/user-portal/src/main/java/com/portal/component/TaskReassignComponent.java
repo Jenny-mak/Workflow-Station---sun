@@ -64,10 +64,16 @@ public class TaskReassignComponent {
         TaskInfo task = taskQueryComponent.getTaskById(taskId)
                 .orElseThrow(() -> new PortalException("404", "Task not found: " + taskId));
         processInstanceSyncComponent.updateProcessInstanceAssignee(task.getProcessInstanceId(), target, null,
-                task.getTaskName());
+                task.getTaskName(), taskScopedCurrentItem(task));
         taskQueryComponent.invalidateMineTaskListCache();
         taskAssignmentHistoryRecorder.record(taskBefore, userId, ChangeType.REASSIGN, target);
         log.info("Task {} reassigned by {} to {}", taskId, userId, target);
         return task;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> taskScopedCurrentItem(TaskInfo task) {
+        Object item = OwnerFieldComponent.taskScopedCurrentItem(task == null ? null : task.getVariables());
+        return item instanceof Map<?, ?> map ? (Map<String, Object>) map : null;
     }
 }
