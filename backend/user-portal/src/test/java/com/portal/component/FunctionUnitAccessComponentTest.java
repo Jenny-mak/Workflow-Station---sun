@@ -125,6 +125,24 @@ class FunctionUnitAccessComponentTest {
     }
 
     @Test
+    void resolveAlignedWithActiveCatalog_invalidatesStaleProcessKeyCache() {
+        String encoded = java.net.URLEncoder.encode(FU_CODE, StandardCharsets.UTF_8);
+        String oldId = "4687c5b3-6d06-4fae-be02-449925ae014c";
+        String newId = "ce946f29-09b8-497e-ba85-839ab45fa663";
+        when(restTemplate.exchange(
+                contains("/function-units/by-process-key/" + encoded),
+                eq(HttpMethod.GET),
+                isNull(),
+                any(ParameterizedTypeReference.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("id", oldId)))
+                .thenReturn(ResponseEntity.ok(Map.of("id", newId)));
+
+        assertThat(component.resolveFunctionUnitId(FU_CODE)).isEqualTo(oldId);
+        assertThat(component.resolveFunctionUnitIdAlignedWithActiveCatalog(FU_CODE, newId))
+                .isEqualTo(newId);
+    }
+
+    @Test
     void resolveNewRequestRoleKeys_includesIdAndCodeForActiveRole() {
         mockPortalRoles(USER_ID, List.of(
                 Map.of("id", "role-x-id", "code", "ROLE_X"),

@@ -311,7 +311,8 @@ public class ProcessStartComponent {
         }
         ActiveCatalogPin pin = activePinOpt.get();
 
-        String resolvedFunctionUnitId = functionUnitAccessComponent.resolveFunctionUnitId(processKey);
+        String resolvedFunctionUnitId = functionUnitAccessComponent
+                .resolveFunctionUnitIdAlignedWithActiveCatalog(processKey, pin.catalogId());
         if (!pin.catalogId().equals(resolvedFunctionUnitId)) {
             throw new FunctionUnitAccessComponent.FunctionUnitAccessDeniedException(
                     "Portal startable version mismatch. Please refresh the process list and try again");

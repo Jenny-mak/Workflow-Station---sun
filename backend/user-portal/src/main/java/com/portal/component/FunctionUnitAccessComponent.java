@@ -334,6 +334,27 @@ public class FunctionUnitAccessComponent {
         }
         return functionUnitId;
     }
+
+    /**
+     * Aligns the process-key cache with Admin {@code active-for-start}. Import/redeploy
+     * changes the enabled catalog id while this cache can still hold the previous id
+     * for up to {@link #CACHE_TTL}; Email Monitor and Portal start must not wait for
+     * TTL or a user-portal restart.
+     */
+    public String resolveFunctionUnitIdAlignedWithActiveCatalog(String processKey, String activeCatalogId) {
+        String resolved = resolveFunctionUnitId(processKey);
+        if (activeCatalogId != null && activeCatalogId.equals(resolved)) {
+            return resolved;
+        }
+        if (!mayResolveViaProcessKeyCache(processKey)) {
+            return resolved;
+        }
+        log.info(
+                "Active catalog {} differs from resolved {}; invalidating process-key cache for [{}]",
+                activeCatalogId, resolved, processKey);
+        clearProcessKeyCache(processKey);
+        return resolveFunctionUnitId(processKey);
+    }
     
     /**
      * Function unit disabled exception

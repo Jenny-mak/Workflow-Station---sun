@@ -470,6 +470,10 @@ public class FunctionUnitImportComponent {
 
     private void saveImportedActions(String functionUnitId, List<Map<String, Object>> actions) {
         actionDefinitionRepository.deleteByFunctionUnitId(functionUnitId);
+        // Hibernate otherwise flushes INSERTs before this DELETE, colliding with
+        // uk_sys_action_name_fu when DW delete → re-import → Deploy overwrites the
+        // same Admin catalog (code + version) that already has Mark Complete.
+        actionDefinitionRepository.flush();
         if (actions == null || actions.isEmpty()) {
             return;
         }

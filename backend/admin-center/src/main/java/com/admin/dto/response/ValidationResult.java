@@ -70,7 +70,7 @@ public class ValidationResult {
     private String functionUnitId;
 
     /**
-     * Resulting FunctionUnit status after validation ({@code DRAFT} or {@code VALIDATED}).
+     * Resulting FunctionUnit status after validation ({@code DRAFT}, {@code VALIDATED}, or {@code DEPLOYED}).
      */
     private String status;
     

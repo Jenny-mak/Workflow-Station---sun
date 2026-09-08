@@ -3465,5 +3465,52 @@
     根因：syncMonitorRules deleteByFunctionUnitId + insert 不保留 lastSyncCursor/lastSyncedAt；
     deploy 后 IMAP baseline 跳过高 UID 邮件（dev 实测 UID 3480 被跳过）。
     修复：按 ruleUid upsert，同 id 保留 cursor；删除 payload 中已移除的 stale binding。
-    验证：EmailMonitorSyncComponentImplTest（含 preservesLastSyncCursorForSameRuleUid）pass。
+    2026-09-08 运行时复验：仅按 functionUnitId 查旧规则不足（deploy 后 FU UUID 会变），
+    增补 findById(ruleUid) 回退；deploy 后 cursor=3482 保留，引擎日志 cursor=3482 非 null。
+    验证：EmailMonitorSyncComponentImplTest（含 preservesLastSyncCursor + FU id 变更场景）pass。
+
+- id: "1608"
+  status: fixed
+  fixed_at: "2026-09-08"
+  severity: major
+  category: bug
+  summary: "Re-import FU then email start failed: stale processKey cache + leftover monitor rules"
+  file: "backend/user-portal/src/main/java/com/portal/component/FunctionUnitAccessComponent.java"
+  note: |
+    根因1：Portal processKeyCache TTL 5min，active-for-start 已是新 catalog，resolve 仍返回旧 id，
+    start 抛 Portal startable version mismatch（不重启 user-portal 则失败）。
+    根因2：re-import 新 catalog UUID，旧 sys_email_monitor_rules 仍 enabled，双规则 poll。
+    修复：resolveFunctionUnitIdAlignedWithActiveCatalog 不一致则清 cache 再解析；
+    EmailMonitorSync 删除同 FU code 的旧 catalog 规则。
+    验证：FunctionUnitAccessComponentTest + EmailMonitorSyncComponentImplTest sibling delete。
+
+- id: "1609"
+  status: fixed
+  fixed_at: "2026-09-09"
+  severity: major
+  category: bug
+  summary: "DW delete FU then re-import Deploy failed on uk_sys_action_name_fu Mark Complete"
+  file: "backend/admin-center/src/main/java/com/admin/component/FunctionUnitImportComponent.java"
+  note: |
+    路径：DW 删除 Function Unit → 再导入 MCY → Deploy。Admin 仍保留同 code+version catalog
+    （如 ce946f29 1.0.138），ZIP import overwrite 默认覆盖写入。saveImportedActions
+    delete 后未 flush，Hibernate INSERT 先于 DELETE，撞 uk_sys_action_name_fu。
+    修复：deleteByFunctionUnitId 后 flush 再 insert。
+    验证：FunctionUnitImportActionFlushTest pass。
+
+- id: "1610"
+  status: fixed
+  fixed_at: "2026-09-09"
+  severity: major
+  category: bug
+  summary: "DW Deploy over overwrite of DEPLOYED catalog failed at 55% validate INVALID_STATUS"
+  file: "backend/admin-center/src/main/java/com/admin/component/FunctionUnitLifecycleComponent.java"
+  note: |
+    根因：同 code+version 覆盖导入不改 status；DW 一键发布仍 POST /validate；
+    isValidatable 仅 DRAFT，已 DEPLOYED 抛 INVALID_STATUS。人工 Disable 不是状态机步骤。
+    修复：DRAFT 仍 markAsValidated；VALIDATED/DEPLOYED 只做内容校验、不改 status；
+    ARCHIVED/DEPRECATED 仍拒绝。
+    验证：FunctionUnitLifecycleValidateTest 修复前 DEPLOYED/VALIDATED 抛 AdminBusinessException，
+    修复后 Tests run: 5 Failures: 0。admin-center 已 package + compose rebuild，Started。
+    未手测 DW 一键发布端到端。
 
