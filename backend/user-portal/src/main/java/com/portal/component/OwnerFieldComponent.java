@@ -205,8 +205,12 @@ public class OwnerFieldComponent {
         projectSubRowDisplays(variables, metadata);
     }
 
-    /** Execution-scoped MI loop variable; never persist on process-wide variables. */
-    public static Object taskScopedCurrentItem(Map<String, Object> source) {
+    /**
+     * Execution-scoped MI loop variable; never persist on process-wide variables.
+     * Claim / Unclaim / Transfer / leader Reassign all read this same helper.
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> taskScopedCurrentItem(Map<String, Object> source) {
         if (source == null) {
             return null;
         }
@@ -214,7 +218,7 @@ public class OwnerFieldComponent {
         if (!(item instanceof Map)) {
             item = source.get(CURRENT_ITEM_ALIAS);
         }
-        return item instanceof Map ? item : null;
+        return item instanceof Map<?, ?> map ? (Map<String, Object>) map : null;
     }
 
     public static void stripProcessWideCurrentItem(Map<String, Object> variables) {

@@ -197,8 +197,8 @@ public class TaskApprovalCompletionComponent {
 
                 if (ownerFieldComponent != null) {
                     if (OwnerFieldComponent.taskScopedCurrentItem(mergedVars) == null) {
-                        Object fromTask = OwnerFieldComponent.taskScopedCurrentItem(task.getVariables());
-                        if (fromTask instanceof Map) {
+                        Map<String, Object> fromTask = OwnerFieldComponent.taskScopedCurrentItem(task.getVariables());
+                        if (fromTask != null) {
                             mergedVars.put("_currentItem", fromTask);
                         }
                     }
