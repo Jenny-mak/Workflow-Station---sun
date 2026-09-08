@@ -10,6 +10,14 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 @DisplayName("Task approval sub-table change-history baselines")
 class TaskApprovalCompletionChangeHistoryTest {
+
+    /**
+     * The table's DESIGNER primary key, as production resolves and passes it per slice
+     * ({@code dw_field_definitions.is_primary_key}). Rows below are keyed by {@code row_id}, so
+     * that is this fixture's configured key — it identifies rows because the table declares it,
+     * not because the platform assumes columns of that name are identities.
+     */
+    private static final List<String> PK = List.of("row_id");
     @Test
     @DisplayName("uses the pre-completion process state")
     void usesPreSyncSubTables() {
@@ -57,7 +65,8 @@ class TaskApprovalCompletionChangeHistoryTest {
     void sameRowIdWithChangedFieldIsUpdate() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
                 List.of(Map.of("row_id", "corr-1", "channel", "Email", "assignee", "user-a")),
-                List.of(Map.of("row_id", "corr-1", "channel", "Email", "assignee", "user-b")));
+                List.of(Map.of("row_id", "corr-1", "channel", "Email", "assignee", "user-b")),
+                PK);
         assertEquals(1, changes.size());
         assertEquals("ROW_UPDATE", changes.get(0).getChangeType());
         assertEquals("corr-1", changes.get(0).getRowIdentifier());
@@ -97,7 +106,8 @@ class TaskApprovalCompletionChangeHistoryTest {
     void singletonReplacementWithFieldChangeIsUpdate() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
                 List.of(Map.of("row_id", "uuid-A", "channel", "Email")),
-                List.of(Map.of("row_id", "uuid-B", "channel", "SMS")));
+                List.of(Map.of("row_id", "uuid-B", "channel", "SMS")),
+                PK);
         assertEquals(1, changes.size());
         assertEquals("ROW_UPDATE", changes.get(0).getChangeType());
         assertEquals("uuid-A", changes.get(0).getRowIdentifier());

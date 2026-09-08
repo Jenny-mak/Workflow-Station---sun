@@ -15,8 +15,68 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class ChangeHistorySubmissionFilterTest {
-    private final ChangeHistorySubmissionFilter filter = new ChangeHistorySubmissionFilter(mock(JdbcTemplate.class),
-            new ObjectMapper());
+
+    /**
+     * Form id used by {@link #formDefinition}. Production always has one — all three
+     * {@code queryFormDefinition} SQL statements select {@code fd.id AS form_id} — and the binding
+     * contract (editability per binding, and each binding's DESIGNER primary key) is resolved from
+     * it. A fixture without a form id would silently skip that resolution and test a state
+     * production never reaches.
+     */
+    private static final long FORM_ID = 320L;
+
+    private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    private final ChangeHistorySubmissionFilter filter =
+            new ChangeHistorySubmissionFilter(jdbcTemplate, new ObjectMapper());
+
+    /**
+     * Answer the binding-contract query with one EDITABLE sub-table binding whose designer primary
+     * key is {@code id} — mirroring {@code dw_field_definitions.is_primary_key}.
+     *
+     * <p>Row identity is read from that configured key. It is deliberately not inferred from the
+     * column's name: {@code id} is an identity here because this table declares it as its primary
+     * key, not because the platform assumes columns called {@code id} identify rows.
+     */
+    @org.junit.jupiter.api.BeforeEach
+    void stubBindingContract() {
+        // Any form id these fixtures use resolves to the same contract: the bindings they exercise
+        // are EDITABLE, and each declares `id` as its designer primary key.
+        when(jdbcTemplate.queryForList(anyString(), org.mockito.ArgumentMatchers.any(Long.class)))
+                .thenReturn(List.of(
+                        binding("participants", "participants", "Participants"),
+                        binding("50030", "people", "People"),
+                        binding("50069", "subtable", "Sub task")));
+    }
+
+    private static Map<String, Object> binding(String bindingId, String tableName, String displayName) {
+        return Map.of(
+                "id", bindingId,
+                "binding_type", "SUB",
+                "binding_mode", "EDITABLE",
+                "table_name", tableName,
+                "table_display_name", displayName,
+                // Both names are this table's configured primary key in these fixtures; rows are
+                // keyed by one or the other. Identity comes from that configuration, not from an
+                // assumption that columns named `id` / `row_id` identify rows.
+                "primary_key_fields", pkArray("id", "row_id"));
+    }
+
+    /** A {@code text[]} column as JDBC hands it back. */
+    private static java.sql.Array pkArray(String... fields) {
+        return new java.sql.Array() {
+            @Override public Object getArray() { return fields; }
+            @Override public String getBaseTypeName() { return "text"; }
+            @Override public int getBaseType() { return java.sql.Types.VARCHAR; }
+            @Override public Object getArray(Map<String, Class<?>> map) { return fields; }
+            @Override public Object getArray(long index, int count) { return fields; }
+            @Override public Object getArray(long index, int count, Map<String, Class<?>> map) { return fields; }
+            @Override public java.sql.ResultSet getResultSet() { return null; }
+            @Override public java.sql.ResultSet getResultSet(Map<String, Class<?>> map) { return null; }
+            @Override public java.sql.ResultSet getResultSet(long index, int count) { return null; }
+            @Override public java.sql.ResultSet getResultSet(long index, int count, Map<String, Class<?>> map) { return null; }
+            @Override public void free() { }
+        };
+    }
 
     @Test
     void retainsSubmittedEditableBusinessFieldRegardlessOfItsName() {
@@ -224,11 +284,26 @@ class ChangeHistorySubmissionFilterTest {
                 .thenReturn(List.of());
         when(jdbcTemplate.queryForList(anyString(), eq(String.class), eq("process-1")))
                 .thenReturn(List.of(encoded));
-        when(jdbcTemplate.queryForList(anyString(), eq(50193L))).thenReturn(List.of(Map.of(
-                "config_json", "{\"rule\":[],\"subForms\":{\"transactions\":{\"rule\":["
-                        + "{\"field\":\"assignee_id\"},{\"field\":\"assignee_display_name\",\"readonly\":true}]}}}",
-                "field_permissions", "{}",
-                "read_only", false)));
+        when(jdbcTemplate.queryForList(
+                argThat(sql -> sql != null && !sql.contains("WHERE form.id = ?")), eq(50193L)))
+                .thenReturn(List.of(Map.of(
+                        "form_id", "50193",
+                        "config_json", "{\"rule\":[],\"subForms\":{\"transactions\":{\"rule\":["
+                                + "{\"field\":\"assignee_id\"},{\"field\":\"assignee_display_name\",\"readonly\":true}]}}}",
+                        "field_permissions", "{}",
+                        "read_only", false)));
+        // The binding contract: `transactions` is EDITABLE and declares `row_id` as its primary
+        // key, which is what preserves that column through the readonly filter. The binding id
+        // matches the slice key the submission uses, so the alias resolves.
+        when(jdbcTemplate.queryForList(
+                argThat(sql -> sql != null && sql.contains("WHERE form.id = ?")), eq(50193L)))
+                .thenReturn(List.of(Map.of(
+                        "id", "transactions",
+                        "binding_type", "SUB",
+                        "binding_mode", "EDITABLE",
+                        "table_name", "transactions",
+                        "table_display_name", "Transactions",
+                        "primary_key_fields", pkArray("row_id"))));
         Map<String, Object> submitted = Map.of("__subTables__", Map.of("transactions", List.of(Map.of(
                 "row_id", "ROW-1",
                 "assignee_id", "user-2",
@@ -370,6 +445,7 @@ class ChangeHistorySubmissionFilterTest {
         // the main-table's own bare "name" field must stay editable — this is exactly the
         // collision the composite-key format exists to prevent.
         Map<String, Object> form = Map.of(
+                "formId", String.valueOf(FORM_ID),
                 "configJson", Map.of(
                         "rule", List.of(rule("name", false)),
                         "subForms", Map.of("participants", Map.of("rule", List.of(
@@ -475,7 +551,10 @@ class ChangeHistorySubmissionFilterTest {
                 argThat(sql -> sql != null && sql.contains("WHERE form.id = ?")), eq(50193L)))
                 .thenReturn(List.of(
                         bindingRow(50549L, "PRIMARY", "EDITABLE", "main", "Meeting", 50549L),
-                        bindingRow(50627L, "SUB", "EDITABLE", "subtable", "Participants", 50627L),
+                        // The MI participants table declares `id_idw` as its primary key — that is
+                        // why the column survives filtering, not because of how it is spelled.
+                        bindingRow(50627L, "SUB", "EDITABLE", "subtable", "Participants", 50627L,
+                                "id_idw"),
                         bindingRow(50553L, "SUB", "EDITABLE", "attachment", "Attachment", 50553L)));
         Map<String, Object> submitted = new java.util.LinkedHashMap<>();
         submitted.put("I", "1");
@@ -517,7 +596,10 @@ class ChangeHistorySubmissionFilterTest {
             Map<String, Object> subForms) {
         return Map.of(
                 "configJson", Map.of("rule", rules, "subForms", subForms),
-                "fieldPermissions", Map.of());
+                "fieldPermissions", Map.of(),
+                // Present in every production form definition; without it the binding contract —
+                // including each binding's designer primary key — is never resolved.
+                "formId", String.valueOf(FORM_ID));
     }
 
     private static Map<String, Object> rule(String field, boolean readonly) {
@@ -526,12 +608,26 @@ class ChangeHistorySubmissionFilterTest {
 
     private static Map<String, Object> bindingRow(long id, String type, String mode,
             String tableName, String displayName, long siblingId) {
+        return bindingRow(id, type, mode, tableName, displayName, siblingId, "id", "row_id");
+    }
+
+    /**
+     * @param primaryKeyFields the table's DESIGNER primary key
+     *                         ({@code dw_field_definitions.is_primary_key}), which is what row
+     *                         identity is resolved from. The default names both {@code id} and
+     *                         {@code row_id} because these fixtures key rows by either — in
+     *                         production that is a real configured key, not an assumption about
+     *                         what columns with those names mean.
+     */
+    private static Map<String, Object> bindingRow(long id, String type, String mode,
+            String tableName, String displayName, long siblingId, String... primaryKeyFields) {
         return Map.of(
                 "id", id,
                 "binding_type", type,
                 "binding_mode", mode,
                 "table_name", tableName,
                 "table_display_name", displayName,
-                "sibling_id", siblingId);
+                "sibling_id", siblingId,
+                "primary_key_fields", pkArray(primaryKeyFields));
     }
 }

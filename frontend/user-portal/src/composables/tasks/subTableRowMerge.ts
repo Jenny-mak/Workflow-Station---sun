@@ -9,6 +9,7 @@ import {
   resolveMiDashboardFieldNames,
   type MiDashboardFieldNames,
 } from './subTableBindingKinds'
+import { PLATFORM_ROW_UUID_FIELD } from '@/utils/subTableRowIdentity'
 
 const ROW_KEY_MERGE_SEP = '\u001f'
 
@@ -95,21 +96,27 @@ function rowValueForPkFieldSingle(row: Record<string, unknown>, field: string, p
     if (v != null) return v
   }
 
+  /**
+   * `id` ⇄ `id_idw`：**同一物理行在两种表示间的已知别名**，不是「猜主键叫什么」。
+   *
+   * <p>我曾把它当作猜名字删掉，被 MI 门禁挡下（`mergeSubTableRowsMiMerge` /
+   * `mergeMiCollectionSubTableRows`）。它编码的是一个真实运行时形态：同一行由两个来源送达，
+   * MI collection 展开侧暴露 `id_idw`、hydrate 侧只暴露 `id`
+   * （实测 `{id_idw: 1123}` 与 `{id: 1123}` 是同一行），删掉后两者合不到一起、行重复。
+   *
+   * <p>与被删掉的那些名单的区别：**这里 `f` 已经是配置主键**（上面按 `f` 查过了），
+   * 本段只在配置主键恰好叫 `id`/`id_idw` 时，去另一种表示里找**同一个值**；
+   * 而被删的那些是在完全不知道主键叫什么时拿名字去撞。
+   */
   const fl = f.toLowerCase()
-  if (fl === 'id') {
-    v = getRowValueIgnoreCase(row, 'id_idw')
+  if (fl === 'id' || fl === 'id_idw') {
+    const alias = fl === 'id' ? 'id_idw' : 'id'
+    v = getRowValueIgnoreCase(row, alias)
     if (v != null) return v
     if (rk && typeof rk === 'object' && !Array.isArray(rk)) {
-      v = getRowValueIgnoreCase(rk as Record<string, unknown>, 'id_idw')
+      v = getRowValueIgnoreCase(rk as Record<string, unknown>, alias)
+      if (v != null) return v
     }
-    if (v != null) return v
-  } else if (fl === 'id_idw') {
-    v = getRowValueIgnoreCase(row, 'id')
-    if (v != null) return v
-    if (rk && typeof rk === 'object' && !Array.isArray(rk)) {
-      v = getRowValueIgnoreCase(rk as Record<string, unknown>, 'id')
-    }
-    if (v != null) return v
   }
 
   return undefined
@@ -168,10 +175,20 @@ export function sameSubTableRow(
     const kb = compositePkMergeKey(rb, pkCols)
     if (ka != null && kb != null) return ka === kb
   }
-  // No resolvable designer PK on both sides: fall back to the platform row identifiers, then to the
-  // canonical `rowKey`. Returns false when neither side carries any identity — "cannot tell" must
-  // not read as "same row", or a caller pruning stale copies would drop a row it cannot identify.
-  for (const idField of ['id', 'row_id', 'rowId']) {
+  // No resolvable designer PK on both sides: fall back to the platform-generated row identity, then
+  // to the canonical `rowKey`. Returns false when neither side carries any identity — "cannot tell"
+  // must not read as "same row", or a caller pruning stale copies would drop a row it cannot
+  // identify.
+  //
+  // This step used to try `['id', 'row_id', 'rowId']` — guesses at what a designer might have named
+  // their key. Measured in dev: 13 tables declare a business column called `id` and NOT ONE of them
+  // declares it as the primary key (Loan Application, Applicant Information, Collateral Details, …),
+  // and all 13 configure no primary key at all — so they land in exactly this branch and two rows
+  // whose unrelated business `id` values collide were silently merged into one. `row_id` was doubly
+  // wrong: the doc block below already says there is "deliberately NO `row_id` step" because it is a
+  // per-snapshot value that differs between the engine-variables copy and the portal copy of the
+  // same physical row, which merged one MI participant's row over another's.
+  for (const idField of [PLATFORM_ROW_UUID_FIELD]) {
     const va = scalarForMergeKey(getRowValueIgnoreCase(ra, idField))
     const vb = scalarForMergeKey(getRowValueIgnoreCase(rb, idField))
     if (va != null && vb != null) return va === vb
@@ -191,15 +208,18 @@ export function sameSubTableRow(
  * 1. Designer primary key columns (`pkFieldNames`) when present and all parts are resolvable
  *    (from top-level row and/or nested `rowKey`). This must beat raw `rowKey` so My Request
  *    merges snapshots that use only `id` with ones that attach a full `rowKey` map.
- * 2. Legacy `id` / `rowId` when no designer PK list — before bare `rowKey`, so mixed payloads dedupe.
+ * 2. The platform-generated row identity (`platformRowUuid`) when no designer PK list — before bare
+ *    `rowKey`, so mixed payloads dedupe.
  * 3. Flowable / platform `rowKey` object canonical string.
  * 4. Stable content fingerprint — when PK values are missing so rows are not dropped.
  *
- * There is deliberately NO `row_id` step: `row_id` is a per-snapshot frontend value, so the same
- * physical row carries different ones in the engine-variables copy and the portal `subTableData`
- * copy, and keying on it merged one MI participant's row over another's and submitted the wrong
- * row. A table whose designer PK genuinely IS `row_id` (e.g. ATM_Transaction) still keys on it —
- * through `pkFieldNames` like any other PK, not through a hardcoded column name.
+ * There is deliberately NO step keyed on a guessed column name — not `id`, `rowId`, nor `row_id`.
+ * Which column identifies a row is configuration, and it arrives as `pkFieldNames`; a name match
+ * proves nothing about what the value means. `row_id` was doubly wrong even as a guess: it is a
+ * per-snapshot frontend value, so the same physical row carries different ones in the
+ * engine-variables copy and the portal `subTableData` copy, and keying on it merged one MI
+ * participant's row over another's and submitted the wrong row. A table whose designer PK genuinely
+ * IS `row_id` (e.g. ATM_Transaction) still keys on it — through `pkFieldNames` like any other PK.
  */
 export function mergeSubTableRowsByRowId(
   existing: any[] | undefined,

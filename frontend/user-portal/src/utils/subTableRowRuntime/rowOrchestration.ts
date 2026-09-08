@@ -11,6 +11,7 @@ import {
   resolveForeignKeyValues,
 } from '../tableFkRuntime'
 import { applyFkPresentationToDialogColumns } from './columnPresentation'
+import { ensureRowIdentity } from '../subTableRowIdentity'
 import {
   allocateChildRowAutoPrimaryKeys,
   ensureParentRowsForChildAdd,
@@ -233,6 +234,18 @@ export async function prepareSubTableAddRow(options: {
       miParticipantRowId: options.miParticipantRowId,
     })
   }
+
+  // 配置优先：`ensureRowIdentity` 先按这张表配置的主键查，有值就原样返回不动它
+  // （`deferPkAllocationUntilSave` 关掉时上面刚分配的 `Corr-000005` 正是这种情况）；
+  // 只有**这张表根本没配主键**时才盖一个平台 UUID。
+  //
+  // dev 实测 24 张表里 13 张未配主键（Loan Application / Applicant Information /
+  // Collateral Details …），这些表的行之间原本没有任何可区分的东西，消费方只好去猜
+  // `id` / `row_id` 这类列名——而那 13 张表恰恰都有一个非主键的业务 `id` 列，两行业务 id
+  // 相同就被静默合并成一行。在行**诞生的这一刻**给它身份，是让下游不必再猜的前提。
+  //
+  // 放在 PK 分配之后：顺序反了会先盖 UUID，再让配置主键变成第二身份。
+  ensureRowIdentity(row, options.primaryKeyFields)
 
   return {
     ok: true,

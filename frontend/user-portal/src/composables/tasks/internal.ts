@@ -34,9 +34,49 @@ export const MI_LINK_CHILD_SCALAR_KEYS = new Set([
   'parent_id'
 ])
 
+/**
+ * @deprecated 判据是**值的形状**，不是配置——已知在 `prefixedSequence` 主键上判错。
+ *
+ * <p>调用方真正想问的是「这个值是这一行自己被分配的主键，还是从 participant id 抄过来的」。
+ * 用 UUID 正则回答，等于假设「分配出来的主键一定长得像 UUID」。实测 dev 里 8 张配了主键的表
+ * 有 5 张用 `prefixedSequence`（`Corr-000004` / `ATM-DC-PW-TRANS-000004` / `Test-000017`），
+ * 全部通不过这个正则 → 一律被判成「不是已分配主键」。**MI 参与者表 `subtable` 正是
+ * `prefixedSequence`**，所以这条判据在最关键的那张表上恒假。
+ *
+ * <p>这与最初 ACQ Correspondence 无法新增的根因是同一个模式（`miLinkChildRows` 曾用同一个正则
+ * 判「有没有已分配主键」）。新代码请用 {@link rowValueIsOwnAllocatedPrimaryKey}，它按配置判定。
+ */
 export function isAllocatedUuidPrimaryKey(value: unknown): boolean {
   const s = value == null ? '' : String(value).trim()
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+}
+
+/**
+ * 这个值是不是「这一行自己被分配的主键」——按**配置**判定，不看值长什么样。
+ *
+ * <p>判据：该值等于这一行在其**配置主键列**上的取值，且不等于 participant id。
+ * 主键列名来自 binding 配置（`primaryKeyFields` / `isPrimaryKey` 字段定义），
+ * 所以 `Corr-000004`、`Test-000017` 这类 `prefixedSequence` 主键与 UUID 主键一视同仁。
+ *
+ * <p>配置取不到主键列时返回 `null` = **判不出**，调用方必须自行决定保守方向，
+ * 不能把「判不出」当成「不是」（那正是形状判据的失效方式）。
+ */
+export function rowValueIsOwnAllocatedPrimaryKey(
+  value: unknown,
+  row: Record<string, unknown> | null | undefined,
+  primaryKeyColumns: readonly string[] | null | undefined,
+  participantId?: unknown,
+): boolean | null {
+  const cols = (primaryKeyColumns ?? []).map(c => String(c ?? '').trim()).filter(Boolean)
+  if (cols.length === 0 || !row) return null
+  const v = value == null ? '' : String(value).trim()
+  if (v === '') return false
+  const pid = participantId == null ? '' : String(participantId).trim()
+  if (pid !== '' && v === pid) return false
+  return cols.some(col => {
+    const own = row[col]
+    return own != null && String(own).trim() === v
+  })
 }
 
 export function normalizeMiLinkMatchId(v: unknown): string | null {

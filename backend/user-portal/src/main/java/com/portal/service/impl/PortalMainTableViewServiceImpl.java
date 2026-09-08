@@ -1142,7 +1142,11 @@ public class PortalMainTableViewServiceImpl implements PortalMainTableViewServic
         Map<String, Object> nested = PortalMainTableViewNestedSubTables.forParentRow(
                 row.subRow(),
                 row.instance().getVariables(),
-                view.nestedSubBindings());
+                view.nestedSubBindings(),
+                // The parent's identity columns come from Table Design, not from a list of likely
+                // names: this view's parent may be keyed by `correspondence_id`, `case_number`, or
+                // anything else the designer chose.
+                designerPrimaryKeyFields(view.mainTableId()));
         if (!nested.isEmpty()) {
             values.put(PortalMainTableViewNestedSubTables.STORE_KEY, nested);
         }
@@ -1219,6 +1223,27 @@ public class PortalMainTableViewServiceImpl implements PortalMainTableViewServic
                 Boolean.TRUE.equals(row.get("restrict_to_involved_users")),
                 loadAccessRules(viewId),
                 loadNestedSubBindings(detailRow ? detailFormId : null));
+    }
+
+    /**
+     * A table's designer primary key columns, in configured order. Empty when the table declares
+     * none — callers then rely on the platform-generated row key, never on a guessed column name.
+     */
+    private List<String> designerPrimaryKeyFields(Long tableId) {
+        if (tableId == null) {
+            return List.of();
+        }
+        try {
+            return jdbcTemplate.queryForList("""
+                    SELECT field_name
+                    FROM dw_field_definitions
+                    WHERE table_id = ? AND COALESCE(is_primary_key, false) = true
+                    ORDER BY sort_order NULLS LAST, id
+                    """, String.class, tableId);
+        } catch (RuntimeException ex) {
+            log.warn("Could not resolve primary key for table {}: {}", tableId, ex.getMessage());
+            return List.of();
+        }
     }
 
     private List<NestedBinding> loadNestedSubBindings(Long detailFormId) {

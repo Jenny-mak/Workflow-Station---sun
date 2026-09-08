@@ -107,7 +107,11 @@ class MainTableViewSubRowQuerySqlTest {
         assertThat(sql)
                 .as("an instance can still carry the same row identity twice after a bad merge, "
                         + "and it should be shown once")
-                .contains("DISTINCT ON (pi.id, COALESCE(expanded.elem->>'row_id'");
+                // The identity key list is owned by SubTableRowIdentity; naming its first entry
+                // here as a literal asserts today's key rather than "the query de-duplicates by
+                // row identity", and broke on a rename that kept the behaviour intact.
+                .contains("DISTINCT ON (pi.id, COALESCE(expanded.elem->>'"
+                        + com.platform.common.jdbc.SubTableRowIdentity.IDENTITY_FIELDS.get(0) + "'");
     }
 
     @Test

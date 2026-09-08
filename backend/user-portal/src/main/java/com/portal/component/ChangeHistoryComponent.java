@@ -1169,6 +1169,20 @@ public class ChangeHistoryComponent {
 
     @SuppressWarnings("unchecked")
     static Map<String, List<Map<String, Object>>> normalizeSubTableRowsByHistoryName(Object subTablesObj) {
+        return normalizeSubTableRowsByHistoryName(subTablesObj, sliceKey -> List.of());
+    }
+
+    /**
+     * @param primaryKeyResolver maps a slice key to that table's DESIGNER primary key columns. The
+     *                           cross-key dedup below compares row identities, and a table's key can
+     *                           be named anything — {@code correspondence_id}, {@code case_number},
+     *                           … — so it must come from configuration. The no-arg overload resolves
+     *                           nothing and therefore dedups on the platform key alone, which is all
+     *                           a caller without a binding in scope can honestly do.
+     */
+    static Map<String, List<Map<String, Object>>> normalizeSubTableRowsByHistoryName(
+            Object subTablesObj,
+            java.util.function.Function<String, List<String>> primaryKeyResolver) {
         if (!(subTablesObj instanceof Map<?, ?> rawMap)) {
             return Map.of();
         }
@@ -1200,7 +1214,8 @@ public class ChangeHistoryComponent {
                     // key aliases (binding ID, table name, normalized name).
                     // Keep only the first occurrence so diff output doesn't
                     // contain mirror records for each alias.
-                    String rowId = resolveRowIdentifier(typedRow);
+                    String rowId = resolveRowIdentifier(typedRow,
+                            primaryKeyResolver.apply(stringOrNull(entry.getKey())));
                     if (rowId != null && !seenRowIds.add(rowId)) {
                         continue;
                     }
@@ -1222,7 +1237,62 @@ public class ChangeHistoryComponent {
      * @return a displayable row identifier, or {@code null}
      */
     public static String resolveRowIdentifier(Map<String, Object> row) {
-        String field = SubTableRowIdentity.identityFieldOf(row);
+        return resolveRowIdentifier(row, null);
+    }
+
+    /**
+     * The designer primary key of the table a {@code __subTables__} slice belongs to.
+     *
+     * <p>Accepts either a canonical {@code dw:<name>} / {@code rt:<name>} key or a bare binding id,
+     * since audit slices arrive under both. Returns empty when it cannot be resolved — callers then
+     * fall back to the platform-generated row key, never to a guessed column name.
+     */
+    public List<String> designerPrimaryKeyFieldsForSliceKey(String sliceKey) {
+        if (sliceKey == null || sliceKey.isBlank()) {
+            return List.of();
+        }
+        // Deliberately uncached: this bean is a singleton, so a cache here would outlive the
+        // designer edit that changes a table's primary key and keep serving the old one — the same
+        // "stored a copy of configuration and it went stale silently" failure this class was changed
+        // to stop doing. A save resolves a handful of slices; callers hoist it out of row loops.
+        String tableName = com.platform.common.subtable.SubTableStoreKeys.tableNameOf(sliceKey);
+        try {
+            if (tableName != null && !tableName.isBlank()) {
+                return jdbcTemplate.queryForList("""
+                        SELECT f.field_name
+                        FROM dw_field_definitions f
+                        JOIN dw_table_definitions t ON t.id = f.table_id
+                        WHERE lower(t.table_name) = lower(?)
+                          AND COALESCE(f.is_primary_key, false) = true
+                        ORDER BY f.sort_order NULLS LAST, f.id
+                        """, String.class, tableName);
+            }
+            if (sliceKey.chars().allMatch(Character::isDigit)) {
+                return jdbcTemplate.queryForList("""
+                        SELECT f.field_name
+                        FROM dw_form_table_bindings b
+                        JOIN dw_field_definitions f ON f.table_id = b.table_id
+                        WHERE b.id = ? AND COALESCE(f.is_primary_key, false) = true
+                        ORDER BY f.sort_order NULLS LAST, f.id
+                        """, String.class, Long.valueOf(sliceKey));
+            }
+        } catch (RuntimeException ex) {
+            log.warn("Could not resolve primary key for sub-table slice {}: {}",
+                    sliceKey, ex.getMessage());
+        }
+        return List.of();
+    }
+
+    /**
+     * @param designerPrimaryKeyFields this table's configured primary key
+     *                                 ({@code dw_field_definitions.is_primary_key}). Supplying it
+     *                                 is what lets a row keyed by {@code correspondence_id} — or
+     *                                 any other name a designer chose — be matched at all; without
+     *                                 it only the platform-generated key is recognised.
+     */
+    public static String resolveRowIdentifier(Map<String, Object> row,
+            List<String> designerPrimaryKeyFields) {
+        String field = SubTableRowIdentity.identityFieldOf(row, designerPrimaryKeyFields);
         if (field == null) {
             return null;
         }

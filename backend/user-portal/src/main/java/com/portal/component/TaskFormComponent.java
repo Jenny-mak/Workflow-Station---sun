@@ -797,6 +797,11 @@ public class TaskFormComponent {
             if (!(rowsObj instanceof List)) {
                 continue;
             }
+            // Identity columns survive the readonly filter so the next save can still match this
+            // row. Resolved per binding from designer config — a fixed name list cannot name a key
+            // such as `correspondence_id`, and would treat a business column called `id` as one.
+            List<String> identityFields = changeHistorySubmissionFilter()
+                    .rowIdentityFieldsForBinding(processInstanceId, stageId, bindingId);
             List<Object> filteredRows = new ArrayList<>();
             for (Object rowObj : (List<?>) rowsObj) {
                 if (!(rowObj instanceof Map)) {
@@ -807,7 +812,7 @@ public class TaskFormComponent {
                 Map<String, Object> filteredRow = new HashMap<>();
                 for (Map.Entry<String, Object> field : row.entrySet()) {
                     if (!readonlyFields.contains(field.getKey())
-                            || ChangeHistorySubmissionFilter.ROW_IDENTITY_FIELDS.contains(field.getKey())
+                            || identityFields.contains(field.getKey())
                             || SystemAuditFields.isAuditField(field.getKey())) {
                         filteredRow.put(field.getKey(), field.getValue());
                     }

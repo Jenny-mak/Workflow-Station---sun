@@ -215,7 +215,19 @@ export function isMiPlaceholderKey(lowerKey: string): boolean {
     || (!!currentNodeField && lowerKey === currentNodeField.toLowerCase())
 }
 
-/** FK / MI keys that must not satisfy {@link subTableRowsLackSavedFieldPayload} alone (sub_task_id without age still blank). */
+/**
+ * FK / MI keys that must not satisfy {@link subTableRowsLackSavedFieldPayload} alone (sub_task_id
+ * without age still blank).
+ *
+ * <p><b>本文件是这份名单的唯一定义处</b>，`applicationDetail/subTableRowHelpers` 从这里 re-export。
+ * 两处曾各自维护一份**同名同注释**的副本，并且已经漂移：那一份少了 `'id'` 和 `'main_id'`，
+ * 于是同一行在 To Do 页被判「只有结构字段、算空行」、在 My Request 页却判「有业务数据」。
+ *
+ * <p>注意这**不是**行身份判定：它回答的是「这一列算不算用户填的业务数据」，没有单一配置源
+ * （结构外键列名由各表自己定义，而这里要覆盖所有表的通用形态）。判宽判窄只影响
+ * 「这行算不算空」，不会把两行错配成同一行——所以这里保留名单是合理的，
+ * 与身份链路上按名字猜主键不是一回事。
+ */
 export const SUB_TABLE_STRUCTURAL_FK_KEYS = new Set([
   'sub_task_id',
   'sub_taskid',

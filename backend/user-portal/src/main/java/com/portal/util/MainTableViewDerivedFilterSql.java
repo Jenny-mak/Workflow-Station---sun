@@ -26,6 +26,22 @@ public final class MainTableViewDerivedFilterSql {
     static final long SYSTEM_USER_TABLE_ID = -1_000_000_001L;
     private static final Set<String> SYSTEM_USER_COLUMNS = Set.of(
             "id", "username", "display_name", "full_name", "email", "employee_id", "status", "language");
+    /**
+     * Guessed referenced-PK column names, used only when a FK field carries no
+     * {@code ref_primary_key_fields}.
+     *
+     * <p><b>Known guess, kept deliberately.</b> Which column an FK points at is configuration; these
+     * two names are the historical defaults and match no table whose PK is called anything else
+     * (dev generates names like {@code id_idwxwcxmw} / {@code correspondence_id}). All 8 FK fields
+     * in dev do carry {@code ref_primary_key_fields}, so this path is currently unreachable.
+     *
+     * <p>Left in place because the failure is cosmetic and self-limiting: {@link #fkDisplayExpr}
+     * uses it only to decide whether the FK value matches the referenced row, and a miss falls
+     * through to {@code COALESCE(..., fk)} — the raw key is shown instead of its label. No row is
+     * dropped, merged, or mis-scoped. Replacing it means threading the referenced table's PK into
+     * this SQL builder, which is worth doing together with the other derived-filter work rather
+     * than as an untested edit to filter SQL.
+     */
     private static final List<String> FK_FALLBACK_PKS = List.of("id", "id_idw");
     private static final ListColumnMeta TEXT_LABEL = ListColumnMeta.displayMapped("label", "label");
 

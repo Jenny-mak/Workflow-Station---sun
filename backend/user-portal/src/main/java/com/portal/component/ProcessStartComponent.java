@@ -900,7 +900,11 @@ public class ProcessStartComponent {
                                 continue;
                             @SuppressWarnings("unchecked")
                             Map<String, Object> rowMap = (Map<String, Object>) row;
-                            String rowId = ChangeHistoryComponent.resolveRowIdentifier(rowMap);
+                            // Identity comes from the key this slice's table declares, resolved per
+                            // slice — a table keyed by `correspondence_id` is matched by no list of
+                            // likely column names.
+                            String rowId = ChangeHistoryComponent.resolveRowIdentifier(rowMap,
+                                    changeHistoryComponent.designerPrimaryKeyFieldsForSliceKey(subTableKey));
                             if (rowId != null && seen.add(rowId)) {
                                 allChanges.add(SubTableChange.builder()
                                         .changeType("ROW_ADD")
@@ -933,8 +937,11 @@ public class ProcessStartComponent {
         if (rows.isEmpty())
             return;
         List<SubTableChange> changes = new ArrayList<>();
+        // Resolved once per slice: identity is the primary key this table declares, not a column
+        // whose name happens to look like one.
+        List<String> pkFields = changeHistoryComponent.designerPrimaryKeyFieldsForSliceKey(subTableKey);
         for (Map<String, Object> row : rows) {
-            String rowId = ChangeHistoryComponent.resolveRowIdentifier(row);
+            String rowId = ChangeHistoryComponent.resolveRowIdentifier(row, pkFields);
             changes.add(SubTableChange.builder()
                     .changeType("ROW_ADD")
                     .rowIdentifier(rowId)

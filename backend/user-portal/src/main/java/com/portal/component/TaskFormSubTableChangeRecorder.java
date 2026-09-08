@@ -29,14 +29,19 @@ public class TaskFormSubTableChangeRecorder {
         }
         try {
             Map<String, List<Map<String, Object>>> oldRowsByTable =
-                    ChangeHistoryComponent.normalizeSubTableRowsByHistoryName(oldSubTablesObj);
+                    ChangeHistoryComponent.normalizeSubTableRowsByHistoryName(oldSubTablesObj,
+                            changeHistoryComponent::designerPrimaryKeyFieldsForSliceKey);
             Map<String, List<Map<String, Object>>> newRowsByTable =
-                    ChangeHistoryComponent.normalizeSubTableRowsByHistoryName(newSubTablesObj);
+                    ChangeHistoryComponent.normalizeSubTableRowsByHistoryName(newSubTablesObj,
+                            changeHistoryComponent::designerPrimaryKeyFieldsForSliceKey);
             for (Map.Entry<String, List<Map<String, Object>>> subTableEntry : newRowsByTable.entrySet()) {
                 String subTableKey = subTableEntry.getKey();
                 List<Map<String, Object>> newRows = subTableEntry.getValue();
                 List<Map<String, Object>> oldRows = oldRowsByTable.getOrDefault(subTableKey, Collections.emptyList());
-                List<SubTableChange> changes = SubTableChangeHistoryDiff.compute(oldRows, newRows);
+                // Pair rows by the identity this table declares, resolved per slice from Table
+                // Design — never by assuming a column name means "identity".
+                List<SubTableChange> changes = SubTableChangeHistoryDiff.compute(oldRows, newRows,
+                        changeHistoryComponent.designerPrimaryKeyFieldsForSliceKey(subTableKey));
                 if (!changes.isEmpty()) {
                     changeHistoryComponent.recordSubTableChanges(
                             context, subTableKey, changes);

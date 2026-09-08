@@ -4,6 +4,7 @@ import com.admin.dto.response.FormContentDTO;
 import com.admin.dto.response.TableBindingDTO;
 import com.admin.dto.response.TableFieldDefinitionDTO;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.platform.common.jdbc.SubTableRowIdentity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -148,8 +149,58 @@ public class FormTableBindingLoader {
                 .tableDisplayName(rs.getString("table_display_name"))
                 .tableType(rs.getString("table_type"))
                 .tableDescription(rs.getString("table_description"))
+                // Designer PK as configured; the generated-identity fallback for tables that declare
+                // none is applied in enrichBindingsWithFieldDefinitions, where this table's field
+                // names are known (needed for the collision guard).
                 .primaryKeyFields(readTextArrayColumn(rs, "primary_key_fields"))
                 .build();
+    }
+
+    /**
+     * The row-identity columns runtime code may key a row by.
+     *
+     * <p>Designer-declared primary keys win. When a table declares none — the majority of them:
+     * measured 13 of 24 in dev, including PRIMARY (main) bindings and every RELATED one, since the
+     * PK subquery only ever reads {@code dw_field_definitions} — this reports the identity the
+     * platform generates instead.
+     *
+     * <p><b>What that identity is.</b> A generated <b>UUID</b>. It is not a designer column and
+     * carries no business meaning: {@link SubTableRowIdentity#ensureIdentity} puts
+     * {@code UUID.randomUUID()} on any row persisted without an identity, driven from
+     * {@code ProcessInstance}'s {@code @PrePersist}/{@code @PreUpdate}, so every stored row of a
+     * PK-less table has one. The name of the key it lives under is deliberately taken from
+     * {@link SubTableRowIdentity#CANONICAL_FIELD} rather than written out here: the reader must name
+     * whatever the writer chose, and spelling it as a literal is exactly how the two halves drift
+     * apart. Renaming the constant moves both sides at once.
+     *
+     * <p><b>Why this exists.</b> The write side handed each row a UUID while the read side told the
+     * client the table had no primary key, so every consumer that needs to tell two rows apart
+     * invented its own rule — hardcoded {@code 'id'} / {@code 'row_id'} column names, or "does this
+     * value look like a UUID" shape tests. Each silently answers wrong on some Function Unit; the
+     * shape test in particular reads a real {@code prefixedSequence} key such as {@code Corr-000004}
+     * as "not a primary key".
+     *
+     * <p><b>Collision guard.</b> A designer is free to create a business column that happens to be
+     * named like the platform key (three tables in dev already have a field called {@code row_id},
+     * all of them declared as the primary key, which is the harmless case). If such a column exists
+     * but is NOT the primary key, the generated identity would be indistinguishable from that
+     * business value, so no identity is reported at all — callers then treat the table as
+     * unidentifiable rather than keying rows by an unrelated business column.
+     */
+    private List<String> resolveRowIdentityFields(
+            List<String> designerPrimaryKeyFields, Set<String> designerFieldNames) {
+        if (designerPrimaryKeyFields != null && !designerPrimaryKeyFields.isEmpty()) {
+            return designerPrimaryKeyFields;
+        }
+        String generated = SubTableRowIdentity.CANONICAL_FIELD;
+        boolean shadowedByBusinessColumn = designerFieldNames != null
+                && designerFieldNames.stream().anyMatch(name -> generated.equalsIgnoreCase(name));
+        if (shadowedByBusinessColumn) {
+            log.warn("Table declares a business column named '{}' but no primary key; "
+                    + "reporting no row identity rather than keying rows by that column", generated);
+            return List.of();
+        }
+        return List.of(generated);
     }
 
     private void enrichBindingsWithFieldDefinitions(List<TableBindingDTO> bindings) {
@@ -176,11 +227,28 @@ public class FormTableBindingLoader {
                 binding.setFieldDefinitions(Collections.emptyList());
                 continue;
             }
-            if ("RELATION".equalsIgnoreCase(binding.getTableType())) {
-                binding.setFieldDefinitions(rtFields.getOrDefault(binding.getTableId(), Collections.emptyList()));
-            } else {
-                binding.setFieldDefinitions(dwFields.getOrDefault(binding.getTableId(), Collections.emptyList()));
+            List<TableFieldDefinitionDTO> fields = "RELATION".equalsIgnoreCase(binding.getTableType())
+                    ? rtFields.getOrDefault(binding.getTableId(), Collections.emptyList())
+                    : dwFields.getOrDefault(binding.getTableId(), Collections.emptyList());
+            binding.setFieldDefinitions(fields);
+
+            // A RELATED binding's PK never came from the SQL above (that subquery only reads
+            // dw_field_definitions), so resolve it from the field definitions just attached before
+            // falling back — otherwise every relation table would report the generated identity even
+            // when it declares a perfectly good primary key of its own.
+            List<String> declared = binding.getPrimaryKeyFields();
+            if (declared == null || declared.isEmpty()) {
+                declared = fields.stream()
+                        .filter(f -> Boolean.TRUE.equals(f.getIsPrimaryKey()))
+                        .map(TableFieldDefinitionDTO::getFieldName)
+                        .filter(Objects::nonNull)
+                        .toList();
             }
+            Set<String> fieldNames = fields.stream()
+                    .map(TableFieldDefinitionDTO::getFieldName)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            binding.setPrimaryKeyFields(resolveRowIdentityFields(declared, fieldNames));
         }
     }
 

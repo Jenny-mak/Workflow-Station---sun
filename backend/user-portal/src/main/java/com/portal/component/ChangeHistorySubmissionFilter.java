@@ -29,9 +29,43 @@ import java.util.Set;
 @Component
 @RequiredArgsConstructor
 public class ChangeHistorySubmissionFilter {
-    /** Row-identity field names preserved through any field-level filtering so row matching on
-     *  subsequent saves keeps working even when the identity field itself is not user-editable. */
-    public static final List<String> ROW_IDENTITY_FIELDS = SubTableRowIdentity.IDENTITY_FIELDS;
+    /**
+     * Row-identity field names for one binding, preserved through any field-level filtering so row
+     * matching on subsequent saves keeps working even when the identity field is not user-editable.
+     *
+     * <p>The platform key plus the binding's DESIGNER primary key columns. This used to be a
+     * constant list of likely names ({@code row_id}, {@code id}, {@code id_idw}, …), which both
+     * missed real keys — nothing in it can name {@code correspondence_id} — and matched business
+     * columns that merely happen to be called {@code id} or {@code row_id}.
+     *
+     * @param bindingId numeric binding id as it appears in {@code __subTables__}
+     */
+    public List<String> rowIdentityFieldsForBinding(String processInstanceId, String stageId,
+            String bindingId) {
+        List<String> designerPk = List.of();
+        try {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                    """
+                            SELECT f.field_name
+                            FROM dw_form_table_bindings b
+                            JOIN dw_field_definitions f ON f.table_id = b.table_id
+                            WHERE b.id = ? AND COALESCE(f.is_primary_key, false) = true
+                            ORDER BY f.sort_order NULLS LAST, f.id
+                            """, Long.valueOf(bindingId));
+            List<String> names = new ArrayList<>();
+            for (Map<String, Object> row : rows) {
+                String name = stringValue(row.get("field_name"));
+                if (name != null)
+                    names.add(name);
+            }
+            designerPk = names;
+        } catch (RuntimeException ex) {
+            // Unresolvable configuration means "platform key only" — the same conservative answer
+            // as a table that declares no primary key. Never fall back to guessed column names.
+            log.warn("Could not resolve primary key for binding {}: {}", bindingId, ex.getMessage());
+        }
+        return SubTableRowIdentity.identityFieldsFor(designerPk);
+    }
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
@@ -196,13 +230,18 @@ public class ChangeHistorySubmissionFilter {
             if (bestPriority != null && priority >= bestPriority)
                 continue;
             List<?> enrichedRows = findRows(enrichedTables, rawKey, bindingId, aliases);
+            // This binding's row identity: the platform key plus the DESIGNER's primary key
+            // columns. Reading it from configuration is what lets a table keyed by
+            // `correspondence_id` be matched at all — a fixed list of likely column names cannot
+            // name it, and would read a business column called `id` as an identity.
+            List<String> pkFields = aliases.primaryKeyFieldsByBinding().get(bindingId);
             List<Map<String, Object>> filteredRows = new ArrayList<>();
             for (int i = 0; i < submittedRows.size(); i++) {
                 if (!(submittedRows.get(i) instanceof Map<?, ?> submittedRow))
                     continue;
-                Map<?, ?> enrichedRow = findEnrichedRow(submittedRow, enrichedRows, i);
+                Map<?, ?> enrichedRow = findEnrichedRow(submittedRow, enrichedRows, i, pkFields);
                 Map<String, Object> filteredRow = new LinkedHashMap<>();
-                for (String identityField : SubTableRowIdentity.IDENTITY_FIELDS) {
+                for (String identityField : SubTableRowIdentity.identityFieldsFor(pkFields)) {
                     Object identity = enrichedRow.containsKey(identityField)
                             ? enrichedRow.get(identityField)
                             : submittedRow.get(identityField);
@@ -254,12 +293,14 @@ public class ChangeHistorySubmissionFilter {
         return aliases.aliasPriorities().getOrDefault(normalizeAlias(rawKey), Integer.MAX_VALUE);
     }
 
-    private Map<?, ?> findEnrichedRow(Map<?, ?> submittedRow, List<?> enrichedRows, int fallbackIndex) {
-        Set<String> submittedIdentities = rowIdentities(submittedRow);
+    private Map<?, ?> findEnrichedRow(Map<?, ?> submittedRow, List<?> enrichedRows, int fallbackIndex,
+            List<String> designerPrimaryKeyFields) {
+        Set<String> submittedIdentities = rowIdentities(submittedRow, designerPrimaryKeyFields);
         if (!submittedIdentities.isEmpty()) {
             for (Object candidate : enrichedRows) {
                 if (candidate instanceof Map<?, ?> row
-                        && !java.util.Collections.disjoint(submittedIdentities, rowIdentities(row))) {
+                        && !java.util.Collections.disjoint(submittedIdentities,
+                                rowIdentities(row, designerPrimaryKeyFields))) {
                     return row;
                 }
             }
@@ -271,7 +312,35 @@ public class ChangeHistorySubmissionFilter {
     }
 
     private Set<String> rowIdentities(Map<?, ?> row) {
-        return SubTableRowIdentity.identityValuesOf(SubTableRowKeySupport.normalizeStringKeyMap(row));
+        return rowIdentities(row, null);
+    }
+
+    /** @param designerPrimaryKeyFields this binding's configured primary key; null when unknown */
+    private Set<String> rowIdentities(Map<?, ?> row, List<String> designerPrimaryKeyFields) {
+        return SubTableRowIdentity.identityValuesOf(
+                SubTableRowKeySupport.normalizeStringKeyMap(row), designerPrimaryKeyFields);
+    }
+
+    /** A {@code text[]} column as a list; empty when the column is null or not an array. */
+    private static List<String> textArrayValue(Object raw) {
+        if (raw instanceof java.sql.Array sqlArray) {
+            try {
+                Object value = sqlArray.getArray();
+                if (value instanceof Object[] items) {
+                    List<String> out = new ArrayList<>();
+                    for (Object item : items) {
+                        String text = stringValue(item);
+                        if (text != null)
+                            out.add(text);
+                    }
+                    return out;
+                }
+            } catch (java.sql.SQLException ignored) {
+                // Treated as "no configured primary key" — the caller then relies on the platform
+                // key alone, which is the same conservative path as a table that declares none.
+            }
+        }
+        return List.of();
     }
 
     private BindingAliases resolveBindingContract(Map<String, Object> formDefinition,
@@ -280,20 +349,25 @@ public class ChangeHistorySubmissionFilter {
         Map<String, String> aliasToBinding = new HashMap<>();
         Map<String, String> bindingToHistoryName = new HashMap<>();
         Map<String, Integer> aliasPriorities = new HashMap<>();
+        Map<String, List<String>> primaryKeyFieldsByBinding = new HashMap<>();
         editableByBinding.keySet().forEach(id -> {
             aliasToBinding.put(normalizeAlias(id), id);
             aliasPriorities.put(normalizeAlias(id), 0);
         });
         String formId = stringValue(formDefinition.get("formId"));
         if (formId == null)
-            return new BindingAliases(aliasToBinding, bindingToHistoryName, aliasPriorities);
+            return new BindingAliases(aliasToBinding, bindingToHistoryName, aliasPriorities, primaryKeyFieldsByBinding);
         try {
             List<Map<String, Object>> bindings = jdbcTemplate.queryForList(
                     """
                             SELECT binding.id, binding.binding_type, binding.binding_mode,
                                 COALESCE(td.table_name, rt.table_name) AS table_name,
                                 COALESCE(td.table_display_name, rt.display_name) AS table_display_name,
-                                sibling.id AS sibling_id
+                                sibling.id AS sibling_id,
+                                (SELECT array_agg(f.field_name ORDER BY f.sort_order NULLS LAST, f.id)
+                                 FROM dw_field_definitions f
+                                 WHERE f.table_id = binding.table_id
+                                   AND COALESCE(f.is_primary_key, false) = true) AS primary_key_fields
                             FROM dw_form_definitions form
                             INNER JOIN dw_form_table_bindings binding ON binding.form_id = form.id
                             LEFT JOIN dw_table_definitions td ON td.id = binding.table_id
@@ -328,6 +402,9 @@ public class ChangeHistorySubmissionFilter {
                 String tableName = stringValue(binding.get("table_name"));
                 if (tableName != null)
                     bindingToHistoryName.putIfAbsent(bindingId, tableName);
+                List<String> pkFields = textArrayValue(binding.get("primary_key_fields"));
+                if (!pkFields.isEmpty())
+                    primaryKeyFieldsByBinding.putIfAbsent(bindingId, pkFields);
             }
         } catch (RuntimeException ex) {
             // Form binding metadata is authoritative. If it cannot be read, fail closed
@@ -338,7 +415,7 @@ public class ChangeHistorySubmissionFilter {
             topLevelEditable.clear();
             editableByBinding.clear();
         }
-        return new BindingAliases(aliasToBinding, bindingToHistoryName, aliasPriorities);
+        return new BindingAliases(aliasToBinding, bindingToHistoryName, aliasPriorities, primaryKeyFieldsByBinding);
     }
 
     private List<?> findRows(Map<?, ?> enrichedTables,
@@ -635,6 +712,14 @@ public class ChangeHistorySubmissionFilter {
 
     private record BindingAliases(Map<String, String> aliasToBinding,
             Map<String, String> bindingToHistoryName,
-            Map<String, Integer> aliasPriorities) {
+            Map<String, Integer> aliasPriorities,
+            /**
+             * Designer primary key columns per binding id, from
+             * {@code dw_field_definitions.is_primary_key}. Row identity is resolved from this —
+             * never from a list of likely column names, which cannot name a key such as
+             * {@code correspondence_id} and would read a business column called {@code id} or
+             * {@code row_id} as an identity.
+             */
+            Map<String, List<String>> primaryKeyFieldsByBinding) {
     }
 }

@@ -433,13 +433,15 @@ public class TaskApprovalCompletionComponent {
         }
         try {
             Map<String, List<Map<String, Object>>> oldRowsByTable =
-                    ChangeHistoryComponent.normalizeSubTableRowsByHistoryName(oldSubTablesObj);
+                    ChangeHistoryComponent.normalizeSubTableRowsByHistoryName(oldSubTablesObj,
+                            changeHistoryComponent::designerPrimaryKeyFieldsForSliceKey);
 
             // Build newRows from ALL keys (including numeric binding IDs that normalizeSubTableRowsByHistoryName skips).
             Map<String, List<Map<String, Object>>> newRowsByTable = new HashMap<>();
             // First pass: use the normal normalization (text-key aliases)
             Map<String, List<Map<String, Object>>> normalizedNew =
-                    ChangeHistoryComponent.normalizeSubTableRowsByHistoryName(newSubTablesObj);
+                    ChangeHistoryComponent.normalizeSubTableRowsByHistoryName(newSubTablesObj,
+                            changeHistoryComponent::designerPrimaryKeyFieldsForSliceKey);
             newRowsByTable.putAll(normalizedNew);
 
             // Collect rows from numeric (binding ID) keys
@@ -473,9 +475,13 @@ public class TaskApprovalCompletionComponent {
                             String key = entry.getKey() != null ? entry.getKey().toString() : "";
                             if (!key.matches("\\d+")) continue;
                             if (!(entry.getValue() instanceof List<?> rows)) continue;
+                            // Identity per slice, from the key that slice's table declares.
+                            List<String> oldPk =
+                                    changeHistoryComponent.designerPrimaryKeyFieldsForSliceKey(key);
                             for (Object row : rows) {
                                 if (!(row instanceof Map<?, ?> rowMap)) continue;
-                                Object rowId = ChangeHistoryComponent.resolveRowIdentifier((Map<String, Object>) rowMap);
+                                Object rowId = ChangeHistoryComponent.resolveRowIdentifier(
+                                        (Map<String, Object>) rowMap, oldPk);
                                 if (rowId != null && seenOld.add(rowId)) {
                                     mergedOldRows.add((Map<String, Object>) rowMap);
                                 }
@@ -485,8 +491,10 @@ public class TaskApprovalCompletionComponent {
 
                     // Collect new numeric rows (dedup by rowId)
                     for (Map.Entry<String, List<Map<String, Object>>> entry : numericNewRows.entrySet()) {
+                        List<String> newPk = changeHistoryComponent
+                                .designerPrimaryKeyFieldsForSliceKey(entry.getKey());
                         for (Map<String, Object> row : entry.getValue()) {
-                            Object rowId = ChangeHistoryComponent.resolveRowIdentifier(row);
+                            Object rowId = ChangeHistoryComponent.resolveRowIdentifier(row, newPk);
                             if (rowId != null && seenNew.add(rowId)) {
                                 mergedNewRows.add(row);
                             }
@@ -500,12 +508,19 @@ public class TaskApprovalCompletionComponent {
                 } else {
                     // Match numeric-key rows to old table groups by row ID
                     for (Map.Entry<String, List<Map<String, Object>>> entry : numericNewRows.entrySet()) {
+                        List<String> newPk = changeHistoryComponent
+                                .designerPrimaryKeyFieldsForSliceKey(entry.getKey());
                         for (Map<String, Object> row : entry.getValue()) {
-                            Object rowId = ChangeHistoryComponent.resolveRowIdentifier(row);
+                            Object rowId = ChangeHistoryComponent.resolveRowIdentifier(row, newPk);
                             if (rowId == null) continue;
                             for (Map.Entry<String, List<Map<String, Object>>> oldEntry : oldRowsByTable.entrySet()) {
+                                // The old side is keyed by ITS own table's primary key, which need
+                                // not be the same column as the new slice's.
+                                List<String> oldPk = changeHistoryComponent
+                                        .designerPrimaryKeyFieldsForSliceKey(oldEntry.getKey());
                                 for (Map<String, Object> oldRow : oldEntry.getValue()) {
-                                    if (java.util.Objects.equals(rowId, ChangeHistoryComponent.resolveRowIdentifier(oldRow))) {
+                                    if (java.util.Objects.equals(rowId,
+                                            ChangeHistoryComponent.resolveRowIdentifier(oldRow, oldPk))) {
                                         newRowsByTable.computeIfAbsent(oldEntry.getKey(), k -> new ArrayList<>()).add(row);
                                         break;
                                     }
@@ -525,7 +540,9 @@ public class TaskApprovalCompletionComponent {
                 String subTableKey = subTableEntry.getKey();
                 List<Map<String, Object>> newRows = subTableEntry.getValue();
                 List<Map<String, Object>> oldRows = oldRowsByTable.getOrDefault(subTableKey, List.of());
-                List<SubTableChange> changes = computeSubTableRowChanges(oldRows, newRows);
+                // Pair rows by the identity this table actually declares, resolved per slice.
+                List<SubTableChange> changes = computeSubTableRowChanges(oldRows, newRows,
+                        changeHistoryComponent.designerPrimaryKeyFieldsForSliceKey(subTableKey));
                 log.debug("  table={}: oldRows={}, newRows={}, changes={}",
                         subTableKey, oldRows.size(), newRows.size(), changes.size());
                 totalChanges += changes.size();
@@ -544,7 +561,19 @@ public class TaskApprovalCompletionComponent {
     static List<SubTableChange> computeSubTableRowChanges(
             List<Map<String, Object>> oldRows,
             List<Map<String, Object>> newRows) {
-        return SubTableChangeHistoryDiff.compute(oldRows, newRows);
+        return computeSubTableRowChanges(oldRows, newRows, null);
+    }
+
+    /**
+     * @param designerPrimaryKeyFields the table's configured primary key, so rows are paired by the
+     *                                 identity the designer declared rather than by a guessed
+     *                                 column name
+     */
+    static List<SubTableChange> computeSubTableRowChanges(
+            List<Map<String, Object>> oldRows,
+            List<Map<String, Object>> newRows,
+            List<String> designerPrimaryKeyFields) {
+        return SubTableChangeHistoryDiff.compute(oldRows, newRows, designerPrimaryKeyFields);
     }
 
     /**

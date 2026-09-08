@@ -10,6 +10,7 @@ import {
   miChildFkConfigOfBinding,
 } from '@/composables/tasks/shared'
 import { readSubTableRows, type SubTableStoreBindingLike } from '@/composables/tasks/subTableStore'
+import { SUB_TABLE_STRUCTURAL_FK_KEYS } from '@/composables/taskDetail/subTableRowUtils'
 import type { MiKindFieldDef } from '@/composables/tasks/miBindingKindFromConfig'
 import { getActiveMiFieldNames } from '@/composables/tasks/useMiConfig'
 import { USER_ID_KEY, USER_KEY } from '@/api/auth'
@@ -280,15 +281,12 @@ export function isMiPlaceholderKey(lowerKey: string): boolean {
     || (!!currentNodeField && lowerKey === currentNodeField.toLowerCase())
 }
 
-/** FK / MI keys that must not satisfy {@link subTableRowsLackSavedFieldPayload} alone (sub_task_id without age still blank). */
-export const SUB_TABLE_STRUCTURAL_FK_KEYS = new Set([
-  'sub_task_id',
-  'sub_taskid',
-  'id_idw',
-  'participant_id',
-  'parent_id',
-  'row_id',
-])
+/**
+ * 从 `taskDetail/subTableRowUtils` re-export —— 这里曾有一份**同名同注释的手抄副本**，
+ * 且已漂移：少了 `'id'` 和 `'main_id'`，导致同一行在 My Request 页与 To Do 页
+ * 对「算不算空行」给出相反答案。名单只应有一处定义。
+ */
+export { SUB_TABLE_STRUCTURAL_FK_KEYS }
 
 export function pickSubTableRowValueIgnoreKeyCase(o: Record<string, unknown>, key: string): unknown {
   if (Object.prototype.hasOwnProperty.call(o, key)) return o[key]

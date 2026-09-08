@@ -56,6 +56,12 @@ public class SubTableChangeHistoryPropertyTest {
                 userRepository = mock(UserRepository.class);
                 workflowEngineClient = mock(WorkflowEngineClient.class);
                 jdbcTemplate = mock(JdbcTemplate.class);
+                // These fixtures key rows by `row_id`, so that is the designer primary key their
+                // tables declare. Row identity is resolved from this configuration lookup — a
+                // column identifies a row because Table Design says so, not because of its name.
+                when(jdbcTemplate.queryForList(anyString(), eq(String.class),
+                                org.mockito.ArgumentMatchers.<Object>any()))
+                                .thenReturn(List.of("row_id"));
                 when(changeHistoryRepository.saveAll(anyList()))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
                 changeHistoryComponent = new ChangeHistoryComponent(
@@ -120,8 +126,16 @@ public class SubTableChangeHistoryPropertyTest {
                 row.put("arn", "1");
                 row.put("row_id", "ATM-DC-PW-TRANS-000010");
                 row.put("card_number", "12");
-                assertThat(ChangeHistoryComponent.resolveRowIdentifier(row))
+                // The identity is the column this table DECLARES as its primary key. Both `id` and
+                // `row_id` are present here and either could look like an identity by name; only
+                // configuration says which one actually is. This used to assert a fixed precedence
+                // between the two names, which answered wrong for any table keyed by something
+                // else — `correspondence_id`, say — and treated a business column called `id` as an
+                // identity on tables that never declared it.
+                assertThat(ChangeHistoryComponent.resolveRowIdentifier(row, List.of("row_id")))
                                 .isEqualTo("ATM-DC-PW-TRANS-000010");
+                assertThat(ChangeHistoryComponent.resolveRowIdentifier(row, List.of("id")))
+                                .isEqualTo("business-id");
         }
 
         @Example
@@ -495,6 +509,10 @@ public class SubTableChangeHistoryPropertyTest {
         @Label("Sub-table diff treats space and underscore aliases as one table")
         void subTableDiffMatchesAliasesByNormalizedNameAndRowId() {
                 ChangeHistoryComponent mockedHistory = mock(ChangeHistoryComponent.class);
+                // These rows are keyed by `row_id`, so that is the primary key their table declares.
+                // Identity comes from this configuration lookup, not from the column's name.
+                when(mockedHistory.designerPrimaryKeyFieldsForSliceKey(anyString()))
+                                .thenReturn(List.of("row_id"));
                 TaskFormSubTableChangeRecorder recorder = new TaskFormSubTableChangeRecorder(mockedHistory);
                 ChangeHistoryContext context = ChangeHistoryContext.builder()
                                 .processInstanceId("process-1")

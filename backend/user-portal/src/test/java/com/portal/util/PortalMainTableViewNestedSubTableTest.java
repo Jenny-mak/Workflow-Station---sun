@@ -14,6 +14,14 @@ class PortalMainTableViewNestedSubTableTest {
     private static final NestedBinding CORRESPONDENCE = new NestedBinding(
             "atm_correspondence", "related_transaction_id");
 
+    /**
+     * The parent table's DESIGNER primary key, exactly as production resolves and passes it (from
+     * {@code dw_field_definitions.is_primary_key}). ATM_Transaction really is keyed by
+     * {@code row_id} — naming it here is configuration reaching the code under test, not a guess
+     * at a likely column name.
+     */
+    private static final List<String> PARENT_PK = List.of("row_id");
+
     @Test
     void siblingInstanceRowsAreScopedByConfiguredForeignKey() {
         Map<String, Object> parent = Map.of("row_id", "ATM-DC-PW-TRANS-000025");
@@ -28,7 +36,7 @@ class PortalMainTableViewNestedSubTableTest {
                                         "related_transaction_id", "ATM-DC-PW-TRANS-000026"))));
 
         Map<String, Object> store = PortalMainTableViewNestedSubTables.forParentRow(
-                parent, instance, List.of(CORRESPONDENCE));
+                parent, instance, List.of(CORRESPONDENCE), PARENT_PK);
 
         assertThat(store).containsOnlyKeys("dw:atm_correspondence");
         assertThat(correspondenceIds(store)).containsExactly("Corr-000027");
@@ -45,7 +53,7 @@ class PortalMainTableViewNestedSubTableTest {
                         "dw:atm_correspondence", List.of(Map.of("correspondence_id", "instance"))));
 
         Map<String, Object> store = PortalMainTableViewNestedSubTables.forParentRow(
-                parent, instance, List.of(CORRESPONDENCE));
+                parent, instance, List.of(CORRESPONDENCE), PARENT_PK);
 
         assertThat(correspondenceIds(store)).containsExactly("nested");
     }
@@ -63,7 +71,7 @@ class PortalMainTableViewNestedSubTableTest {
                                         "related_transaction_id", "ATM-DC-PW-TRANS-000030"))));
 
         Map<String, Object> store = PortalMainTableViewNestedSubTables.forParentRow(
-                parent, instance, List.of(CORRESPONDENCE));
+                parent, instance, List.of(CORRESPONDENCE), PARENT_PK);
 
         assertThat(correspondenceIds(store)).isEmpty();
     }
@@ -77,7 +85,7 @@ class PortalMainTableViewNestedSubTableTest {
                         "dw:atm_correspondence", List.of(Map.of("correspondence_id", "Corr-000027"))));
 
         Map<String, Object> store = PortalMainTableViewNestedSubTables.forParentRow(
-                parent, instance, List.of(noFk));
+                parent, instance, List.of(noFk), PARENT_PK);
 
         assertThat(correspondenceIds(store)).isEmpty();
     }

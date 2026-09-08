@@ -93,6 +93,10 @@ async function mountInline(props: Record<string, unknown> = {}) {
   const wrapper = mount(SubTableInlineForm, {
     props: {
       fields: financialFields(),
+      // These fixtures identify rows by `id`, so the table must SAY that `id` is its primary key.
+      // Without it the rows are anonymous by design: `id` is a business column on 13 tables in dev
+      // and the primary key on none of them, so a bare `id` no longer counts as identity.
+      primaryKeyFields: ['id'],
       currentRow: { id: 'row-1', merchant_credit: 'N' },
       ...props,
     } as never,

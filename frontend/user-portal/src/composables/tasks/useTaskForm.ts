@@ -150,7 +150,14 @@ export function useTaskForm(options: {
      *
      * <p>补上那个 emit 后两份数据由同一次事件同时更新，天然一致，不需要任何权威判定。
      */
-    flattenNestedSubTableRowsIntoPayload(subTables as Record<string, unknown>)
+    // 每个 slice key 对应那张表配置的主键列——「删到空」分支要靠它解析父行标识，
+    // 否则主键不叫 row_id/id_idw/id 的表删不掉最后一行（刷新后复活）。
+    const pkBySliceKey: Record<string, readonly string[] | undefined> = {}
+    for (const b of options.subTableBindings.value) {
+      const key = subTableStoreKey(b)
+      if (key) pkBySliceKey[key] = b?.primaryKeyFields ?? undefined
+    }
+    flattenNestedSubTableRowsIntoPayload(subTables as Record<string, unknown>, 8, pkBySliceKey)
     let miParentIdIdw: string | number | null = null
     let miCollectionSliceKeys: Set<string> | null = null
     if (options.isMiSubTaskMode.value) {

@@ -10,6 +10,7 @@ import {
   type DialogColumnWithEvents,
 } from '@/composables/subTableAddDialog/useSubTableDialogComponentEvents'
 import { isEffectivelyRequired } from '@/utils/formCreateEventRuntime'
+import { PLATFORM_ROW_UUID_FIELD } from '@/utils/subTableRowIdentity'
 
 /**
  * Sub-table form rendered inline: the bound sub-table's designed form, laid out
@@ -107,15 +108,24 @@ const { t } = useI18n()
 const rowModel = ref<Record<string, unknown>>({})
 
 /**
- * 行身份候选键的**顺序有意义**：先业务键（`row_id` / `sub_task_id`），再设计器主键。
- * 因为 PK 是保存时才分配的，若先用 PK，分配动作会改变身份字符串 → 重新 bootstrap →
- * 复制父快照 → 正在编辑的值丢失。
+ * 行身份候选键：配置主键与平台标识优先，其后保留 `row_id` / `sub_task_id` / `id` / `id_idw`
+ * 作为**本地**兜底。
  *
- * <p>设计器主键从 `primaryKeyFields` 读取（不写死）；末尾保留 `id` / `id_idw` 作为兜底。
+ * <p><b>为什么这里的兜底不能删（与 `subTableRowMerge` 不同）。</b>平台行标识目前只在
+ * **提交时**盖（`useTaskActions` → `ensureSubTableMapIdentities`），加载和新增行时都不盖；
+ * 而本组件的两个生产调用点（`FormRendererFields.vue` 的两处 `<SubTableInlineForm>`）
+ * 根本没传 `primary-key-fields`。也就是说一行未保存的新行在这里**既无配置主键、也无平台标识**，
+ * 删掉兜底会让任意两行的身份字符串同为 `''`，watch 源不变 → 切换行时上一行的可见性与
+ * 正在编辑的值原样残留。
+ *
+ * <p>这里的身份只用于「要不要重新 bootstrap 表单」这一个本地判断，判错的后果是多重置或少重置
+ * 一次表单，**不会跨行合并或覆盖数据**——与合并链路上按名字猜主键的风险不是一回事。
+ * 真正的修法是让平台标识在加载/新增时就盖上，并把 `primaryKeyFields` 透传给这两个调用点，
+ * 那之后这里的兜底才可以安全删除。
  */
 const inlineRowIdentityKeys = computed<string[]>(() => {
   const pk = (props.primaryKeyFields ?? []).map(f => String(f ?? '').trim()).filter(Boolean)
-  return [...new Set(['row_id', 'sub_task_id', ...pk, 'id', 'id_idw'])]
+  return [...new Set([...pk, PLATFORM_ROW_UUID_FIELD, 'sub_task_id'])]
 })
 
 function identityKeyValue(row: Record<string, unknown>, key: string): string | null {
@@ -222,6 +232,11 @@ const {
  */
 let lastBoundRow: Record<string, unknown> | null = null
 
+/**
+ * 触发源必须是身份**字符串**而不是 `currentRow` 引用：`resolveInlineSubFormRow` 每次都返回
+ * `{ ...target }`（新对象），watch 引用会在父组件每次重渲染时触发，把用户正在编辑的值冲掉
+ * ——「同一行被父级用陈旧快照重渲染」正是下面几个测试锁定的不变量。
+ */
 watch(
   () => inlineFormRowIdentity(props.currentRow),
   (_nextId, prevId) => {

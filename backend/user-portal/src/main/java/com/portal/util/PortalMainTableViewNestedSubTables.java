@@ -42,12 +42,29 @@ public final class PortalMainTableViewNestedSubTables {
             Map<String, Object> parentRow,
             Map<String, Object> instanceVariables,
             List<NestedBinding> nestedBindings) {
+        return forParentRow(parentRow, instanceVariables, nestedBindings, null);
+    }
+
+    /**
+     * @param parentPrimaryKeyFields the PARENT table's designer primary key columns
+     *                               ({@code dw_field_definitions.is_primary_key}). Child rows are
+     *                               matched to this parent by its identity, and the parent's key
+     *                               can be named anything — {@code correspondence_id},
+     *                               {@code case_number}, … — so it has to come from configuration.
+     *                               Null/empty falls back to the platform-generated key alone,
+     *                               which is all a row of a table with no configured PK carries.
+     */
+    public static Map<String, Object> forParentRow(
+            Map<String, Object> parentRow,
+            Map<String, Object> instanceVariables,
+            List<NestedBinding> nestedBindings,
+            List<String> parentPrimaryKeyFields) {
         if (nestedBindings == null || nestedBindings.isEmpty()) {
             return Map.of();
         }
         Map<String, Object> nestedOnParent = storeOf(parentRow);
         Map<String, Object> instanceStore = storeOf(instanceVariables);
-        Set<String> parentIds = SubTableRowIdentity.identityValuesOf(parentRow);
+        Set<String> parentIds = SubTableRowIdentity.identityValuesOf(parentRow, parentPrimaryKeyFields);
 
         Map<String, Object> out = new LinkedHashMap<>();
         for (NestedBinding binding : nestedBindings) {

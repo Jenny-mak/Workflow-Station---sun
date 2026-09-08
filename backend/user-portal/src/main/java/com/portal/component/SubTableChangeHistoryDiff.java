@@ -20,8 +20,23 @@ final class SubTableChangeHistoryDiff {
     static List<SubTableChange> compute(
             List<Map<String, Object>> oldRows,
             List<Map<String, Object>> newRows) {
-        List<HeldRow> oldHeld = hold(oldRows);
-        List<HeldRow> newHeld = hold(newRows);
+        return compute(oldRows, newRows, null);
+    }
+
+    /**
+     * @param designerPrimaryKeyFields this table's configured primary key
+     *                                 ({@code dw_field_definitions.is_primary_key}). Rows are
+     *                                 paired by identity, and a table's key can be named anything
+     *                                 — {@code correspondence_id}, {@code case_number}, … — so it
+     *                                 has to come from configuration, not from a list of likely
+     *                                 column names.
+     */
+    static List<SubTableChange> compute(
+            List<Map<String, Object>> oldRows,
+            List<Map<String, Object>> newRows,
+            List<String> designerPrimaryKeyFields) {
+        List<HeldRow> oldHeld = hold(oldRows, designerPrimaryKeyFields);
+        List<HeldRow> newHeld = hold(newRows, designerPrimaryKeyFields);
         boolean[] pairedOld = new boolean[oldHeld.size()];
         boolean[] pairedNew = new boolean[newHeld.size()];
         List<SubTableChange> changes = new ArrayList<>();
@@ -134,12 +149,14 @@ final class SubTableChangeHistoryDiff {
         return fp;
     }
 
-    private static List<HeldRow> hold(List<Map<String, Object>> rows) {
+    private static List<HeldRow> hold(List<Map<String, Object>> rows,
+            List<String> designerPrimaryKeyFields) {
         List<HeldRow> held = new ArrayList<>();
         if (rows == null) return held;
         for (Map<String, Object> row : rows) {
             if (row == null) continue;
-            held.add(new HeldRow(ChangeHistoryComponent.resolveRowIdentifier(row), row));
+            held.add(new HeldRow(
+                    ChangeHistoryComponent.resolveRowIdentifier(row, designerPrimaryKeyFields), row));
         }
         return held;
     }

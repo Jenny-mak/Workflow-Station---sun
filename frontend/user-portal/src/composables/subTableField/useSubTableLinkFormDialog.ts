@@ -1,4 +1,5 @@
 import { computed, ref, unref, type Ref } from 'vue'
+import { PLATFORM_ROW_UUID_FIELD } from '@/utils/subTableRowIdentity'
 import { mergeSubTableRowsByRowId, stripLinkFormDesignerTableLabel } from '@/composables/tasks/shared'
 import type { Column, SubTableBinding, SubTableFieldEmit, SubTableFieldProps, SubTableFieldT } from './subTableFieldTypes'
 import {
@@ -179,12 +180,16 @@ export function useSubTableLinkFormDialog(
   }
 
   /**
-   * 行标识：平台行标识优先，其次设计器主键。取不到返回 null（= 判不出身份）。
+   * 行标识：**先配置主键**，其次平台生成的行标识。取不到返回 null（= 判不出身份）。
+   *
+   * <p>原来是 `['row_id', 'id_idw', ...pk, 'id']` —— 把猜的名字排在配置主键前面。这三个字面量
+   * 都已删除：`id` 在 dev 是 13 张表的业务列且无一是主键，`row_id` 在有些表是配置主键、
+   * 另一些表是普通列，`id_idw` 在当前库里 0 行存在。判不出身份就返回 null，不猜。
    */
   function linkFormRowIdentity(row: Record<string, any> | null | undefined): string | null {
     if (!row || typeof row !== 'object') return null
     const pk = selectedLinkBinding.value?.primaryKeyFields ?? []
-    for (const k of ['row_id', 'id_idw', ...pk, 'id']) {
+    for (const k of [...pk, PLATFORM_ROW_UUID_FIELD]) {
       const name = String(k ?? '').trim()
       if (!name) continue
       const v = normalizeFkIdForMatch(row[name])

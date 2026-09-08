@@ -22,12 +22,32 @@ function isDigitsKey(key: string): boolean {
   return /^\d+$/.test(key)
 }
 /**
+ * 每个 slice key 对应的设计器主键列（来自 binding.primaryKeyFields）。
+ *
+ * <p>身份判定必须读配置：一张以 `correspondence_id` 为主键的表，不匹配任何「像主键的列名」名单。
+ * 有了它，已带主键值的行不会被再盖一个平台 UUID。
+ */
+function primaryKeyFieldsBySliceKey(
+  bindings: any[] | null | undefined,
+): Record<string, readonly string[] | undefined> {
+  const out: Record<string, readonly string[] | undefined> = {}
+  for (const b of bindings ?? []) {
+    const key = subTableStoreKey(b)
+    if (key) out[key] = b?.primaryKeyFields ?? undefined
+  }
+  return out
+}
+
+/**
  * Canonicalize __subTables__ slices for persistence:
  * if numeric bindingId keys exist, keep only numeric keys to avoid alias fan-out.
  * Stamp row identity on the kept slices so deserialized alias copies cannot
  * receive a second UUID after submit.
  */
-function canonicalizeSubTablesForSubmit(input: Record<string, any>): Record<string, any> {
+function canonicalizeSubTablesForSubmit(
+  input: Record<string, any>,
+  bindings?: any[] | null,
+): Record<string, any> {
   const keys = Object.keys(input)
   if (keys.length === 0) return {}
   // 规范 key 优先：dw:/rt: 不是数字，若沿用「有数字就只留数字」会把真实数据丢掉。
@@ -38,7 +58,7 @@ function canonicalizeSubTablesForSubmit(input: Record<string, any>): Record<stri
     const keep = hasCanonical ? isCanonicalStoreKey(k) : (!hasNumeric || isDigitsKey(k))
     if (keep) out[k] = input[k]
   }
-  ensureSubTableMapIdentities(out)
+  ensureSubTableMapIdentities(out, primaryKeyFieldsBySliceKey(bindings))
   return out
 }
 export function useTaskActions(options: {
@@ -160,9 +180,10 @@ export function useTaskActions(options: {
         currentFormData[key] = options.formData.value[key]
       }
     }
-    const mergedSub: Record<string, any> = canonicalizeSubTablesForSubmit({
-      ...(options.formData.value.__subTables__ || {})
-    })
+    const mergedSub: Record<string, any> = canonicalizeSubTablesForSubmit(
+      { ...(options.formData.value.__subTables__ || {}) },
+      options.subTableBindings.value,
+    )
     // One canonical key per designer table (`dw:<name>` / `rt:<name>`). Writing per-binding keys
     // here would reintroduce the divergence this structure exists to prevent: Approve/Complete goes
     // through the same `__subTables__` the backend row-merges, so a second copy of a row under a
@@ -227,7 +248,8 @@ export function useTaskActions(options: {
         : buildLegacyCompleteFormData()
       const engineFormData: Record<string, any> = { ...built }
       engineFormData.__subTables__ = canonicalizeSubTablesForSubmit(
-        (built.__subTables__ as Record<string, any>) || {}
+        (built.__subTables__ as Record<string, any>) || {},
+        options.subTableBindings.value,
       )
       const submittedFormData = buildUserSubmittedFormData(engineFormData)
       Object.assign(variables, engineFormData)

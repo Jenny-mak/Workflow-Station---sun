@@ -3,12 +3,14 @@
  * flattening into the top-level variables map before submit / after load.
  */
 
-import { isAllocatedUuidPrimaryKey, MI_LINK_CHILD_SCALAR_KEYS } from './internal'
+import { isAllocatedUuidPrimaryKey, MI_LINK_CHILD_SCALAR_KEYS, rowValueIsOwnAllocatedPrimaryKey } from './internal'
+import { PLATFORM_ROW_UUID_FIELD } from '@/utils/subTableRowIdentity'
 import { subTableFieldValueKey } from './subTableCore'
 import { mergeSubTableRowsByRowId } from './subTableRowMerge'
 import type { MiChildFkConfig } from './miLinkChildIdentity'
 import { stripForeignParticipantIdIdwFromLinkChildRow,
   miChildFkConfigOfBinding,
+  resolveMiChildPrimaryKeyColumns,
 } from './miLinkChildIdentity'
 
 /**
@@ -84,7 +86,11 @@ export function scrubMiCorruptLinkChildRowsForParent(
       const cid = normalizeFkIdForMatchLocal(rec.id)
       if (!isCollectionSlice && cidw === key && cid != null && cid !== key) {
         if (miLinkChildRowHasFormPayload(rec)) {
-          if (isAllocatedUuidPrimaryKey(rec.id)) {
+          // 按配置判「这是不是本行自己被分配的主键」；配置取不到才退回 UUID 形状判据。
+          // 形状判据对 `prefixedSequence` 主键（Corr-000004 / Test-000017）恒假。
+          if (rowValueIsOwnAllocatedPrimaryKey(
+            rec.id, rec, resolveMiChildPrimaryKeyColumns(sliceFkConfig), key,
+          ) ?? isAllocatedUuidPrimaryKey(rec.id)) {
             const cleaned = { ...rec }
             delete cleaned.id_idw
             const nest = cleaned.__subTables__
@@ -189,18 +195,42 @@ function absorbNestedSubTablesIntoFlatRow(
 }
 
 /**
- * 父行的标识：平台行标识 `row_id` 优先，其次 `id_idw` / `id`。
+ * 父行的标识。**当前实现是按列名猜的，已知在主键不叫这三个名字的表上失效。**
  *
- * <p>子表的结构外键存的就是这个值（实测 `related_transaction_id = 'ATM-DC-PW-TRANS-000007'`
- * 正是父行的 `row_id`）。设计器主键在这里拿不到（flatten 只看到裸 JSON、没有 binding），
- * 所以用平台自己的行标识——它由平台写入，不是靠猜业务列名。
+ * <p><b>原注释是错的</b>，说「`row_id` 是平台行标识，由平台写入，不是猜业务列名」。实测不成立：
+ * `ATM_Transaction` 的 `row_id` 是**设计器配置的主键**（`is_primary_key=true`，策略
+ * `prefixedSequence`），值形如 `ATM-DC-PW-TRANS-000004`；同一行另有真正的平台键
+ * `platformRowUuid`。也就是说这里读到的一直是配置主键，只是碰巧那张表的主键就叫 `row_id`，
+ * 于是被误认为读的是平台键。
+ *
+ * <p><b>已知缺陷。</b>子表的结构外键存的是父行**配置主键**的值（实测
+ * `related_transaction_id = 'ATM-DC-PW-TRANS-000004'`）。父表主键若叫 `correspondence_id`、
+ * `case_number` 等，这三个名字一个都不匹配 → 返回 null → 下面「删到空」的分支直接 `continue`，
+ * **父行下最后一行删不掉、刷新后复活**。这与 `miLinkChildRows` 当年用 UUID 正则判主键、
+ * 导致所有 `prefixedSequence` 主键的表集体失效是同一族问题。
+ *
+ * <p><b>已修。</b>{@link flattenNestedSubTableRowsIntoPayload} 现在收「slice key → 该表配置主键」
+ * 的映射，持有 binding 的调用方（`useProcessStartSubTables` / `useTaskForm`）已透传，
+ * 本函数按配置主键 → 平台标识的顺序解析；两者都取不到就返回 null（判不出，不猜）。
  */
-function resolveFlattenParentKey(parentRow: Record<string, unknown>): string | null {
-  for (const k of ['row_id', 'id_idw', 'id']) {
-    const v = normalizeFkIdForMatchLocal(parentRow[k])
+function resolveFlattenParentKey(
+  parentRow: Record<string, unknown>,
+  primaryKeyFields?: readonly string[] | null,
+): string | null {
+  // 配置优先：主键叫什么由设计器决定（`correspondence_id` / `case_number` / …）。
+  for (const pk of primaryKeyFields ?? []) {
+    const name = String(pk ?? '').trim()
+    if (!name) continue
+    const v = normalizeFkIdForMatchLocal(parentRow[name])
     if (v != null) return v
   }
-  return null
+  // 平台生成的行标识：未配主键的表靠它。两者都取不到 = 判不出父行身份，返回 null，
+  // 调用方（「删到空」分支）据此跳过，不动任何行——保守侧。
+  //
+  // 这里曾有一段 `['row_id','id_idw','id']` 兜底。已删除：主键列名是配置、按表生成，
+  // 写死三个拼法只对碰巧叫这些名字的表有效，对 `correspondence_id`、`case_number` 等
+  // 一律解析不出——而它给人的错觉是「已经兜住了」，反而掩盖了缺陷。
+  return normalizeFkIdForMatchLocal(parentRow[PLATFORM_ROW_UUID_FIELD])
 }
 
 /**
@@ -220,10 +250,22 @@ function flattenRowBelongsToParent(row: unknown, parentKey: string): boolean {
   return false
 }
 
-export function flattenNestedSubTableRowsIntoPayload(subTables: Record<string, unknown>, maxPasses = 8): void {
+/**
+ * @param primaryKeyFieldsBySliceKey 每个 slice key 对应那张表**配置的主键列**。
+ *        给了它，{@link resolveFlattenParentKey} 才能按配置解析父行标识，而不是猜
+ *        `row_id` / `id_idw` / `id` 三个名字——主键叫 `correspondence_id`、`case_number`
+ *        的表在猜名字下解析不出父行标识，「删到空」分支直接跳过，
+ *        表现为**父行下最后一行删不掉、刷新后复活**。
+ *        不传时保持旧的猜名字行为（调用方手上没有 binding 时的退路）。
+ */
+export function flattenNestedSubTableRowsIntoPayload(
+  subTables: Record<string, unknown>,
+  maxPasses = 8,
+  primaryKeyFieldsBySliceKey?: Readonly<Record<string, readonly string[] | null | undefined>> | null,
+): void {
   for (let pass = 0; pass < maxPasses; pass++) {
     let touched = false
-    for (const val of Object.values(subTables)) {
+    for (const [parentSliceKey, val] of Object.entries(subTables)) {
       if (!Array.isArray(val)) continue
       for (const row of val) {
         if (!row || typeof row !== 'object') continue
@@ -244,7 +286,10 @@ export function flattenNestedSubTableRowsIntoPayload(subTables: Record<string, u
           if (Array.isArray(childVal) && childVal.length === 0) {
             const prevTop = subTables[childKey]
             if (!Array.isArray(prevTop) || prevTop.length === 0) continue
-            const parentKey = resolveFlattenParentKey(row as Record<string, unknown>)
+            const parentKey = resolveFlattenParentKey(
+              row as Record<string, unknown>,
+              primaryKeyFieldsBySliceKey?.[parentSliceKey],
+            )
             if (parentKey == null) continue
             const kept = (prevTop as any[]).filter(
               r => !flattenRowBelongsToParent(r, parentKey),

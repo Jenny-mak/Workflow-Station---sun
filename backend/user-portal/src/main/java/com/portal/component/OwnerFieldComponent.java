@@ -3,6 +3,7 @@ package com.portal.component;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.common.i18n.I18nService;
 import com.platform.common.jdbc.SubTableRowIdentity;
+import com.platform.common.subtable.SubTableStoreKeys;
 import com.portal.exception.PortalException;
 import com.portal.service.ProcessAssigneeSnapshot;
 import com.portal.service.UserDisplayNameResolver;
@@ -167,10 +168,15 @@ public class OwnerFieldComponent {
                 continue;
             }
             List<Map<String, Object>> previousRows = previousSliceRows(previousSlices, slice.getKey());
+            // Matching a row to its previous version needs that table's identity columns. They come
+            // from Table Design, not from a list of likely names — a table keyed by
+            // `correspondence_id` matches no such list, and a business column called `id` is not an
+            // identity just because of its name.
+            List<String> pkFields = designerPrimaryKeyFieldsForSlice(slice.getKey());
             for (Object row : rows) {
                 if (row instanceof Map<?, ?> rowMap) {
                     Map<String, Object> typed = (Map<String, Object>) rowMap;
-                    Map<String, Object> previousRow = matchPreviousRow(previousRows, typed);
+                    Map<String, Object> previousRow = matchPreviousRow(previousRows, typed, pkFields);
                     for (OwnerFieldMeta meta : metas) {
                         applyToRecord(typed, meta, ctx, false, previousRow);
                     }
@@ -407,17 +413,57 @@ public class OwnerFieldComponent {
         return typed;
     }
 
+    /**
+     * The designer primary key of the table a {@code dw:<name>} / {@code rt:<name>} slice belongs
+     * to. Empty when the key cannot be resolved — the caller then matches on the platform-generated
+     * row key alone, which is what a table with no configured primary key carries anyway.
+     */
+    private List<String> designerPrimaryKeyFieldsForSlice(String sliceKey) {
+        if (sliceKey == null || sliceKey.isBlank() || jdbcTemplate == null) {
+            return List.of();
+        }
+        // Slices arrive keyed either canonically (`dw:<name>` / `rt:<name>`) or by bare binding id,
+        // so both are resolvable back to the table whose primary key we need.
+        String tableName = SubTableStoreKeys.tableNameOf(sliceKey);
+        try {
+            if (tableName != null && !tableName.isBlank()) {
+                return jdbcTemplate.queryForList("""
+                        SELECT f.field_name
+                        FROM dw_field_definitions f
+                        JOIN dw_table_definitions t ON t.id = f.table_id
+                        WHERE lower(t.table_name) = lower(?)
+                          AND COALESCE(f.is_primary_key, false) = true
+                        ORDER BY f.sort_order NULLS LAST, f.id
+                        """, String.class, tableName);
+            }
+            if (sliceKey.chars().allMatch(Character::isDigit)) {
+                return jdbcTemplate.queryForList("""
+                        SELECT f.field_name
+                        FROM dw_form_table_bindings b
+                        JOIN dw_field_definitions f ON f.table_id = b.table_id
+                        WHERE b.id = ? AND COALESCE(f.is_primary_key, false) = true
+                        ORDER BY f.sort_order NULLS LAST, f.id
+                        """, String.class, Long.valueOf(sliceKey));
+            }
+        } catch (RuntimeException ex) {
+            log.warn("Could not resolve primary key for slice {}: {}", sliceKey, ex.getMessage());
+        }
+        return List.of();
+    }
+
     private static Map<String, Object> matchPreviousRow(List<Map<String, Object>> previousRows,
-                                                        Map<String, Object> row) {
+                                                        Map<String, Object> row,
+                                                        List<String> designerPrimaryKeyFields) {
         if (previousRows == null || previousRows.isEmpty()) {
             return null;
         }
-        Set<String> identities = SubTableRowIdentity.identityValuesOf(row);
+        Set<String> identities = SubTableRowIdentity.identityValuesOf(row, designerPrimaryKeyFields);
         if (identities.isEmpty()) {
             return null;
         }
         for (Map<String, Object> previous : previousRows) {
-            Set<String> previousIds = SubTableRowIdentity.identityValuesOf(previous);
+            Set<String> previousIds =
+                    SubTableRowIdentity.identityValuesOf(previous, designerPrimaryKeyFields);
             previousIds.retainAll(identities);
             if (!previousIds.isEmpty()) {
                 return previous;

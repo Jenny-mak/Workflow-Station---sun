@@ -7,6 +7,7 @@ import {
   isAllocatedUuidPrimaryKey,
   MI_LINK_CHILD_SCALAR_KEYS,
   normalizeMiLinkMatchId,
+  rowValueIsOwnAllocatedPrimaryKey,
 } from './internal'
 
 /**
@@ -53,6 +54,29 @@ export function resolveMiChildPrimaryKeyColumns(config?: MiChildFkConfig | null)
     .filter(f => f?.isPrimaryKey)
     .map(f => String(f?.fieldName ?? '').trim())
     .filter(Boolean)
+}
+
+/**
+ * 「这个值是这一行自己被分配的主键吗」——**先读配置**，配置取不到才退回形状判据。
+ *
+ * <p>原来这里直接调 {@link isAllocatedUuidPrimaryKey}（UUID 正则）。dev 实测 8 张配了主键的表
+ * 有 5 张用 `prefixedSequence`（`Corr-000004` / `Test-000017`），全都通不过正则；而 MI 参与者表
+ * `subtable` 恰恰就是 `prefixedSequence`，等于这条判据在最关键的表上恒假。
+ *
+ * <p>配置解析得出主键列时按配置回答（`Corr-000004` 与 UUID 一视同仁）；解析不出时保留旧的
+ * 形状判据，**不改变既有行为**——本模块多处逻辑依赖它的返回值分支，静默翻转比判错更危险。
+ */
+function isOwnAllocatedPrimaryKey(
+  value: unknown,
+  row: Record<string, unknown> | null | undefined,
+  config?: MiChildFkConfig | null,
+  participantId?: unknown,
+): boolean {
+  const byConfig = rowValueIsOwnAllocatedPrimaryKey(
+    value, row, resolveMiChildPrimaryKeyColumns(config), participantId,
+  )
+  if (byConfig !== null) return byConfig
+  return isAllocatedUuidPrimaryKey(value)
 }
 
 /** Count designer business columns filled on a link-child row (excludes id/FK/MI meta). */
@@ -206,8 +230,8 @@ export function repairMisassignedLinkChildStructuralFk(
   const childIdIdw = normalizeMiLinkMatchId(row.id_idw)
   const legacyId = normalizeMiLinkMatchId(row.id)
   const rowKeyedToParticipant =
-    (childIdIdw === pid && !isAllocatedUuidPrimaryKey(childIdIdw))
-    || (legacyId === pid && !isAllocatedUuidPrimaryKey(legacyId))
+    (childIdIdw === pid && !isOwnAllocatedPrimaryKey(childIdIdw, row, config, pid))
+    || (legacyId === pid && !isOwnAllocatedPrimaryKey(legacyId, row, config, pid))
 
   if (!rowKeyedToParticipant) return row
 
@@ -244,7 +268,7 @@ export function linkChildRowIsForeignParticipantPlaceholder(
   if (structuralFk) return structuralFk !== pid
   const idIdw = normalizeMiLinkMatchId(row.id_idw)
   // No structural FK yet: a participant-style id_idw pointing at someone else marks a foreign placeholder.
-  return !!idIdw && idIdw !== pid && !isAllocatedUuidPrimaryKey(idIdw)
+  return !!idIdw && idIdw !== pid && !isOwnAllocatedPrimaryKey(idIdw, row, config, pid)
 }
 
 /**
@@ -263,16 +287,24 @@ export function stripForeignParticipantIdIdwFromLinkChildRow(
   if (!pid) return row
   const idIdw = normalizeMiLinkMatchId(row.id_idw)
   if (!idIdw || idIdw === pid) return row
-  if (isAllocatedUuidPrimaryKey(idIdw)) return row
+  if (isOwnAllocatedPrimaryKey(idIdw, row, config, pid)) return row
   const structuralFk = resolveMiChildStructuralParentFk(row, config)
   if (structuralFk !== pid) return row
-  if (!isAllocatedUuidPrimaryKey(normalizeMiLinkMatchId(row.id))) return row
+  if (!isOwnAllocatedPrimaryKey(normalizeMiLinkMatchId(row.id), row, config, pid)) return row
   const out = { ...row }
   delete out.id_idw
   return out
 }
 
-/** Prefer rows with backend-allocated PK (UUID) over legacy rows where {@code id} was copied from participant id. */
+/**
+ * Prefer rows with a properly allocated PK over legacy rows where {@code id} was copied from the
+ * participant id.
+ *
+ * <p>「有没有正确分配的主键」按**配置**判定。这里曾内联一份 UUID 正则（与
+ * `isAllocatedUuidPrimaryKey` 同款、当时漏改），于是 `prefixedSequence` 主键
+ * （`Corr-000004` / `Test-000017`）拿不到 100 分只能拿 40 —— 同一参与者的两行比较时，
+ * 真正带分配主键的那行可能输给一行垃圾数据。
+ */
 export function scoreMiLinkChildRowQuality(
   row: Record<string, unknown>,
   config?: MiChildFkConfig | null,
@@ -281,7 +313,7 @@ export function scoreMiLinkChildRowQuality(
   const structuralFk = resolveMiChildStructuralParentFk(row, config)
   const id = normalizeMiLinkMatchId(row.id)
   if (id) {
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    if (isOwnAllocatedPrimaryKey(id, row, config, structuralFk)) {
       score += 100
     } else if (structuralFk && id !== structuralFk) {
       score += 40
@@ -383,22 +415,22 @@ export function miLinkChildRowBelongsToParticipant(
       if (
         childIdIdw
         && childIdIdw !== structuralFk
-        && !isAllocatedUuidPrimaryKey(childIdIdw)
-        && (isAllocatedUuidPrimaryKey(legacyId) || legacyId === childIdIdw)
+        && !isOwnAllocatedPrimaryKey(childIdIdw, row, config, pid)
+        && (isOwnAllocatedPrimaryKey(legacyId, row, config, pid) || legacyId === childIdIdw)
       ) {
         return false
       }
       return true
     }
-    if (childIdIdw === pid && !isAllocatedUuidPrimaryKey(childIdIdw)) {
-      if (isAllocatedUuidPrimaryKey(legacyId) || legacyId === pid) return true
+    if (childIdIdw === pid && !isOwnAllocatedPrimaryKey(childIdIdw, row, config, pid)) {
+      if (isOwnAllocatedPrimaryKey(legacyId, row, config, pid) || legacyId === pid) return true
       return false
     }
     return false
   }
 
   if (childIdIdw === pid) return true
-  if (legacyId === pid && !isAllocatedUuidPrimaryKey(legacyId)) return true
+  if (legacyId === pid && !isOwnAllocatedPrimaryKey(legacyId, row, config, pid)) return true
 
   // 刚在弹窗里新增、还没保存过的行：没有结构 FK（FK 是保存时才种下的），也没有指向任何人的
   // id_idw —— 它**只可能**属于正在编辑的这个参与者，因为别人的行不会出现在我的表单里。
@@ -414,7 +446,7 @@ export function miLinkChildRowBelongsToParticipant(
   // 同样表现为"无标识"而被放行，所以调用方**不能**拿它当唯一归属依据——findMiIsolatedParentRow
   // 就为此把本函数限定在真有结构 FK 时才用，其余情况回落到按设计器主键排他判定。
   const hasAnyParticipantMark =
-    childIdIdw != null && !isAllocatedUuidPrimaryKey(childIdIdw)
+    childIdIdw != null && !isOwnAllocatedPrimaryKey(childIdIdw, row, config, pid)
   if (!hasAnyParticipantMark) return true
 
   return false

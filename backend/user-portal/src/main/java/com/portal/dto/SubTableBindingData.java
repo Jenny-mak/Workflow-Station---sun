@@ -26,7 +26,18 @@ public class SubTableBindingData {
     private Long subListViewId;
     private List<Map<String, Object>> columns;
     private List<Map<String, Object>> data;
-    /** Primary key field names from dw_field_definitions.is_primary_key. */
+    /**
+     * The columns that identify a row of this table.
+     *
+     * <p>Normally the designer's primary key ({@code dw_field_definitions.is_primary_key}). When the
+     * table declares none — the majority of them — this carries the platform's generated identity
+     * key instead ({@code SubTableRowIdentity.CANONICAL_FIELD}), because such rows still each get a
+     * UUID on persist and consumers must be able to tell them apart. It is empty only when the table
+     * is genuinely unidentifiable.
+     *
+     * <p>So read this as "how to identify a row here", not as "what the user declared as the primary
+     * key": the two differ precisely for PK-less tables.
+     */
     private List<String> primaryKeyFields;
     /**
      * {@code dw_form_table_bindings.relation_table_id} when this binding targets a RELATION table

@@ -19,6 +19,13 @@ export interface SnapshotSubTableBindingSource {
   tableType?: string
   bindingType?: string
   columns?: SnapshotSubTableColumnSource[]
+  /**
+   * 这张表配置的主键列（`dw_field_definitions.is_primary_key`）。
+   *
+   * <p>快照行与实时行按身份配对，而身份是配置：以 `correspondence_id` 为主键的表，
+   * 不匹配任何「像主键的列名」名单。缺省时只认平台生成键。
+   */
+  primaryKeyFields?: string[] | null
 }
 
 export interface SnapshotSubTableTarget {

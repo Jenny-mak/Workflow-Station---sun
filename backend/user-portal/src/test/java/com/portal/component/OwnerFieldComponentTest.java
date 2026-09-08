@@ -76,6 +76,12 @@ class OwnerFieldComponentTest {
                 i18nService, primaryKeyAllocationComponent);
         when(primaryKeyAllocationComponent.resolveFunctionUnitIdForAllocation(anyString()))
                 .thenReturn(10L);
+        // Matching a row to its previous version uses the identity its table declares. These
+        // fixtures key rows by `row_id`, so that is their configured primary key — read from Table
+        // Design, not assumed from the column's name.
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class),
+                org.mockito.ArgumentMatchers.<Object>any()))
+                .thenReturn(List.of("row_id"));
         when(i18nService.getMessage(anyString(), any(Object[].class))).thenAnswer(inv -> inv.getArgument(0));
         when(i18nService.getMessage(anyString())).thenAnswer(inv -> inv.getArgument(0));
         when(userDisplayNameResolver.resolveIfExists(START)).thenReturn(Optional.of("Initiator"));

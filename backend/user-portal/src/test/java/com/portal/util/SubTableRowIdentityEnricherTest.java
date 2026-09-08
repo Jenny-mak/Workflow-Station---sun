@@ -1,5 +1,7 @@
 package com.portal.util;
 
+import com.platform.common.jdbc.SubTableRowIdentity;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -31,15 +33,41 @@ class SubTableRowIdentityEnricherTest {
         return subTables;
     }
 
+    /**
+     * Every row without the platform key gets one — including a row that already carries a designer
+     * column such as {@code id_idw}.
+     *
+     * <p>This used to assert the opposite, because {@code id_idw} was one of several likely column
+     * names treated as an identity. That is exactly the guess this class no longer makes: a column
+     * called {@code id_idw} (or {@code id}, or {@code row_id}) is business data whose meaning comes
+     * from Table Design, and this enricher has no binding in scope to consult. Stamping the
+     * platform key is harmless — the designer's own value is untouched, and code that DOES know the
+     * binding still resolves identity from the configured primary key.
+     */
     @Test
-    void anonymousRowsGetAnIdentityAndIdentifiedRowsAreLeftAlone() {
+    void everyRowWithoutThePlatformKeyGetsOneAndDesignerValuesAreUntouched() {
         Map<String, Object> anonymous = row("card_number", "4111", "merchant_name", "ACME");
-        Map<String, Object> allocated = row("id_idw", 5001, "card_number", "4222");
-        Map<String, Object> variables = variablesWith(slices("50533", List.of(anonymous, allocated)));
+        Map<String, Object> withDesignerColumn = row("id_idw", 5001, "card_number", "4222");
+        Map<String, Object> variables =
+                variablesWith(slices("50533", List.of(anonymous, withDesignerColumn)));
 
-        assertThat(SubTableRowIdentityEnricher.ensureRowIdentities(variables)).isEqualTo(1);
-        assertThat(String.valueOf(anonymous.get("row_id"))).isNotBlank();
-        assertThat(allocated).doesNotContainKey("row_id");
+        assertThat(SubTableRowIdentityEnricher.ensureRowIdentities(variables)).isEqualTo(2);
+        assertThat(String.valueOf(anonymous.get(SubTableRowIdentity.CANONICAL_FIELD))).isNotBlank();
+        assertThat(String.valueOf(withDesignerColumn.get(SubTableRowIdentity.CANONICAL_FIELD)))
+                .isNotBlank();
+        // The designer's column keeps its value — the platform key is added beside it, not over it.
+        assertThat(withDesignerColumn.get("id_idw")).isEqualTo(5001);
+    }
+
+    /** A row that already carries the platform key is left exactly as it is. */
+    @Test
+    void rowsThatAlreadyCarryThePlatformKeyAreLeftAlone() {
+        Map<String, Object> identified =
+                row(SubTableRowIdentity.CANONICAL_FIELD, "existing-uuid", "card_number", "4333");
+        Map<String, Object> variables = variablesWith(slices("50533", List.of(identified)));
+
+        assertThat(SubTableRowIdentityEnricher.ensureRowIdentities(variables)).isZero();
+        assertThat(identified.get(SubTableRowIdentity.CANONICAL_FIELD)).isEqualTo("existing-uuid");
     }
 
     @Test
@@ -49,7 +77,7 @@ class SubTableRowIdentityEnricherTest {
         Map<String, Object> variables = variablesWith(slices("b1", List.of(first, second)));
 
         assertThat(SubTableRowIdentityEnricher.ensureRowIdentities(variables)).isEqualTo(2);
-        assertThat(first.get("row_id")).isNotEqualTo(second.get("row_id"));
+        assertThat(first.get(SubTableRowIdentity.CANONICAL_FIELD)).isNotEqualTo(second.get(SubTableRowIdentity.CANONICAL_FIELD));
     }
 
     @Test
@@ -60,7 +88,7 @@ class SubTableRowIdentityEnricherTest {
         Map<String, Object> variables = variablesWith(slices("parent-binding", List.of(parent)));
 
         assertThat(SubTableRowIdentityEnricher.ensureRowIdentities(variables)).isEqualTo(2);
-        assertThat(String.valueOf(child.get("row_id"))).isNotBlank();
+        assertThat(String.valueOf(child.get(SubTableRowIdentity.CANONICAL_FIELD))).isNotBlank();
     }
 
     @Test
@@ -80,8 +108,8 @@ class SubTableRowIdentityEnricherTest {
         Map<String, Object> variables = variablesWith(subTables);
 
         assertThat(SubTableRowIdentityEnricher.ensureRowIdentities(variables)).isEqualTo(1);
-        assertThat(String.valueOf(canonical.get("row_id"))).isNotBlank();
-        assertThat(aliasCopy).doesNotContainKey("row_id");
+        assertThat(String.valueOf(canonical.get(SubTableRowIdentity.CANONICAL_FIELD))).isNotBlank();
+        assertThat(aliasCopy).doesNotContainKey(SubTableRowIdentity.CANONICAL_FIELD);
     }
 
     @Test
@@ -90,7 +118,7 @@ class SubTableRowIdentityEnricherTest {
         Map<String, Object> variables = variablesWith(slices("ACQ Correspondence", List.of(anonymous)));
 
         assertThat(SubTableRowIdentityEnricher.ensureRowIdentities(variables)).isEqualTo(1);
-        assertThat(String.valueOf(anonymous.get("row_id"))).isNotBlank();
+        assertThat(String.valueOf(anonymous.get(SubTableRowIdentity.CANONICAL_FIELD))).isNotBlank();
     }
 
     @Test

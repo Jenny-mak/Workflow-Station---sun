@@ -54,6 +54,18 @@ public final class SubTableRowKeySupport {
     /**
      * When {@code id}/{@code id_idw} holds a designer placeholder (non-numeric) but DW surrogate / {@code rowId} carries the
      * bigint PK, substitute so MI overlay keys ({@code id=8778}) and fuzzy PK parsing succeed.
+     *
+     * <p><b>On the {@code id} ⇄ {@code id_idw} substitutions in this class.</b> They look like the
+     * guessed column-name lists deleted elsewhere in this change, but they are not, and removing
+     * them breaks real merges (the frontend twin of this logic is covered by the MI regression gate,
+     * which caught exactly that). The difference: the column being resolved is ALREADY the
+     * configured primary key — the caller passed {@code pkCols} from
+     * {@code dw_field_definitions.is_primary_key} — and these branches only look up the SAME row's
+     * value under the other spelling of that one key, because one physical row reaches us from two
+     * sources that spell it differently (the MI collection expansion exposes {@code id_idw}, the
+     * hydrated row exposes {@code id}; runtime shows {@code {id_idw: 1123}} and {@code {id: 1123}}
+     * are one row). A deleted name list, by contrast, guessed what the key was called when nothing
+     * had told us. Keep these; do not "clean them up" without a passing MI regression run.
      */
     private static void substituteNumericPkIfPlaceholder(
             Map<String, Object> rowKey, Map<String, Object> row, Map<String, Object> nestedNorm, List<String> pkCols) {

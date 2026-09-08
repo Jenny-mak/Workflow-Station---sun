@@ -19,6 +19,26 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class MainTableViewInvolvementChecker {
 
+    /**
+     * Column names a participant reference may appear under.
+     *
+     * <p><b>Known gap: this is a hardcoded list where the answer is configuration.</b> A Function
+     * Unit names its participant column in Sub-Task Config ({@code assigneeField}); every FU in dev
+     * happens to use {@code assignee_user_id}, which is why the list currently works. An FU that
+     * names it anything else — {@code handler_id}, {@code owner} — matches nothing here.
+     *
+     * <p><b>Why it has not simply been replaced.</b> This method GRANTS view access, so the failure
+     * is fail-closed: an unlisted column means a genuine participant is denied their own rows, never
+     * that a stranger is shown someone else's. It is a visibility bug, not a leak. Fixing it means
+     * resolving {@code assigneeField} per process definition on this path (the BPMN is not in scope
+     * here today) and re-verifying the SQL pre-filter invariant documented on
+     * {@link #isMiParticipant}: that pre-filter is a substring match over the {@code __subTables__}
+     * JSON and must stay a SUPERSET of what this method accepts, so widening the accepted key set
+     * without re-checking it could start dropping rows the filter never passed through.
+     *
+     * <p>Until then the list stays and this comment is the record: do not read it as "these are the
+     * participant columns", read it as "these are the ones we happen to recognise".
+     */
     private static final Set<String> MI_PARTICIPANT_KEY_HINTS = Set.of(
             "assignee", "assignee_user_id", "participant_id", "participant", "id_idw");
 

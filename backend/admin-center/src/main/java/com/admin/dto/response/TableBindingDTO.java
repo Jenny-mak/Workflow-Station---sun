@@ -38,8 +38,17 @@ public class TableBindingDTO {
     private String tableType;
     private String tableDescription;
     /**
-     * Primary-key column names from dw_field_definitions (is_primary_key), ordered by sort_order.
-     * Used by portals to merge / identify sub-table rows without hardcoding {@code id}/{@code rowId}.
+     * The columns that identify a row of this table, for portals to merge / identify sub-table rows
+     * without hardcoding {@code id} / {@code rowId}.
+     *
+     * <p>Normally the designer's primary key from {@code dw_field_definitions} ({@code is_primary_key},
+     * ordered by {@code sort_order}). When the table declares none — the majority of them, including
+     * every RELATED binding — {@code FormTableBindingLoader} substitutes the platform's generated
+     * identity key ({@code SubTableRowIdentity.CANONICAL_FIELD}), since rows of a PK-less table each
+     * still receive a UUID on persist. Empty only when the table is genuinely unidentifiable.
+     *
+     * <p>So read this as "how to identify a row here", not as "what the user declared as the primary
+     * key": the two differ precisely for PK-less tables.
      */
     private List<String> primaryKeyFields;
     /**

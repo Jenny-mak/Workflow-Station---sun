@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
+import { PLATFORM_ROW_UUID_FIELD } from '@/utils/subTableRowIdentity'
 const pushMock = vi.fn()
 const completeTaskMock = vi.fn(async () => ({}))
 vi.mock('vue-router', () => ({
@@ -73,7 +74,7 @@ describe('useTaskActions submitApprove __subTables__ canonicalization', () => {
     expect(subTables.subtable2).toBeUndefined()
     expect(Object.keys(payload?.variables?.__subTables__ ?? {}).sort()).toEqual(['dw:participants', 'dw:subtable2'])
   })
-  it('stamps row_id on anonymous canonical rows and leaves alias copies out', async () => {
+  it('stamps the platform row uuid on anonymous canonical rows and leaves alias copies out', async () => {
     const anonymous = { channel: 'Email' }
     const taskActions = useTaskActions({
       taskId: 'task-1',
@@ -104,7 +105,7 @@ describe('useTaskActions submitApprove __subTables__ canonicalization', () => {
     const payload = completeTaskMock.mock.calls[0]?.[1]
     const subTables = payload?.variables?.__subTables__ ?? {}
     expect(Object.keys(subTables)).toEqual(['dw:acq correspondence'])
-    expect(String(subTables['dw:acq correspondence'][0].row_id)).not.toBe('')
+    expect(String(subTables['dw:acq correspondence'][0][PLATFORM_ROW_UUID_FIELD])).not.toBe('')
     expect(subTables['ACQ Correspondence']).toBeUndefined()
   })
   it('uses buildFormPayloadForComplete when provided (Save parity path)', async () => {
@@ -202,6 +203,12 @@ describe('useTaskActions submitApprove __subTables__ canonicalization', () => {
     await taskActions.submitApprove()
     const payload = completeTaskMock.mock.calls[0]?.[1]
     expect(payload?.formData?.__subTables__).toBeUndefined()
-    expect(payload?.variables?.__subTables__).toEqual({ 'dw:participants': [{ id: 1 }] })
+    // `id` is a business column, not an identity: no binding declared it as the primary key here,
+    // so the row is anonymous and receives the platform's generated key. Asserting the row is
+    // unchanged would be asserting that a name match counts as identity.
+    const participants = payload?.variables?.__subTables__?.['dw:participants']
+    expect(participants).toHaveLength(1)
+    expect(participants[0].id).toBe(1)
+    expect(String(participants[0][PLATFORM_ROW_UUID_FIELD] ?? '')).not.toBe('')
   })
 })

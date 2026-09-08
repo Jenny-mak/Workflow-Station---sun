@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import { writeSubTableRows } from '@/composables/tasks/subTableStore'
+import { writeSubTableRows, subTableStoreKey } from '@/composables/tasks/subTableStore'
 import {
   flattenNestedSubTableRowsIntoPayload,
   normalizeSubTableRowsForBinding,
@@ -72,11 +72,15 @@ export function createProcessStartSubTables(deps: {
   /** Match task detail / autosave: key __subTables__ by binding id and table display name so downstream forms with new bindingIds can resolve rows. */
   function buildStartFormSubTablesPayload(): Record<string, unknown> {
     const subTables: Record<string, unknown> = {}
+    // 每个 slice key 对应那张表配置的主键列——flatten 的「删到空」分支要靠它解析父行标识。
+    const pkBySliceKey: Record<string, readonly string[] | undefined> = {}
     for (const b of subTableBindings.value) {
       const rows = normalizeSubTableRowsForBinding(Array.isArray(b.data) ? b.data : [])
       writeSubTableRows(subTables, b, rows)
+      const key = subTableStoreKey(b)
+      if (key) pkBySliceKey[key] = (b as { primaryKeyFields?: string[] }).primaryKeyFields ?? undefined
     }
-    flattenNestedSubTableRowsIntoPayload(subTables)
+    flattenNestedSubTableRowsIntoPayload(subTables, 8, pkBySliceKey)
     return subTables
   }
 

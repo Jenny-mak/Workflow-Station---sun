@@ -144,6 +144,10 @@ describe('snapshotDiffSubTables', () => {
           tableId: 50310,
           tableName: 'ATM Correspondence',
           bindingType: 'SUB',
+          // This table really is keyed by `row_id` in Table Design. Snapshot and live rows pair by
+          // the identity the table DECLARES; a bare column named `row_id` is a business value until
+          // configuration says it is the key.
+          primaryKeyFields: ['row_id'],
           columns: [
             { field: 'comment', label: 'Comment', type: 'input' },
             { field: 'type', label: 'Type', type: 'lookup' },
