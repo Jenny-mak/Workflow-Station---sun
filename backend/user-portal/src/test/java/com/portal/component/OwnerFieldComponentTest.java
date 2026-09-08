@@ -334,6 +334,41 @@ class OwnerFieldComponentTest {
         }
 
         @Test
+        @DisplayName("submit matches MI Case Handler by designer PK, not a coincidental id column")
+        void submitMatchesSubHandlerByDesignerPrimaryKey() {
+            when(jdbcTemplate.queryForList(anyString(), eq(String.class),
+                    org.mockito.ArgumentMatchers.<Object>any()))
+                    .thenReturn(List.of("correspondence_id"));
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", "same-as-other");
+            row.put("correspondence_id", "Test-000012");
+            Map<String, Object> variables = variablesWithCanonicalSubRows(row);
+            variables.put("_currentItem", Map.of("correspondence_id", "Test-000012", "id", "other"));
+
+            component.applyOnSubmit(FU, approvalContext(null), variables);
+
+            assertThat(canonicalSubRows(variables).get(0).get("row_handler"))
+                    .isEqualTo("user:" + ASSIGNEE);
+        }
+
+        @Test
+        @DisplayName("submit does not match MI row on a non-PK id column")
+        void submitDoesNotMatchSubHandlerOnNonPrimaryKeyId() {
+            when(jdbcTemplate.queryForList(anyString(), eq(String.class),
+                    org.mockito.ArgumentMatchers.<Object>any()))
+                    .thenReturn(List.of("correspondence_id"));
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", "same");
+            row.put("correspondence_id", "Test-000012");
+            Map<String, Object> variables = variablesWithCanonicalSubRows(row);
+            variables.put("_currentItem", Map.of("id", "same"));
+
+            component.applyOnSubmit(FU, approvalContext(null), variables);
+
+            assertThat(canonicalSubRows(variables).get(0).get("row_handler")).isNull();
+        }
+
+        @Test
         @DisplayName("applyAssigneeSnapshot writes MAIN people and does not paint unmatched sub rows")
         void snapshotWritesMainNotUnmatchedSub() {
             Map<String, Object> variables = variablesWithSubRows(new HashMap<>(Map.of("qty", 1)));

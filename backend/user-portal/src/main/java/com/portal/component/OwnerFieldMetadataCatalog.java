@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.common.i18n.I18nService;
 import com.platform.common.subtable.SubTableStoreKeys;
 import com.portal.exception.PortalException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
 
@@ -18,6 +19,7 @@ import java.util.Map;
 /**
  * Loads {@code type:"owner"} declarations from {@code dw_form_definitions}.
  */
+@Slf4j
 final class OwnerFieldMetadataCatalog {
 
     private static final long EXISTENCE_TTL_MS = 30_000L;
@@ -279,7 +281,8 @@ final class OwnerFieldMetadataCatalog {
                         """, String.class, Long.valueOf(sliceKey));
             }
         } catch (RuntimeException ex) {
-            // FALLBACK(external): origin PK identity — unresolved key matches platformRowUuid only
+            // FALLBACK(external|#047012f1c): unresolved PK → platformRowUuid only, never guessed names
+            log.warn("Could not resolve primary key for owner slice {}: {}", sliceKey, ex.getMessage());
             return List.of();
         }
         return List.of();
