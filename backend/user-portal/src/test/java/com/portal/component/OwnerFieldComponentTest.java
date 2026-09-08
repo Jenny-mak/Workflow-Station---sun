@@ -2,9 +2,13 @@ package com.portal.component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.common.i18n.I18nService;
+import com.portal.client.WorkflowEngineClient;
 import com.portal.component.OwnerFieldComponent.OwnerWriteContext;
+import com.portal.entity.ProcessInstance;
 import com.portal.exception.PortalException;
+import com.portal.repository.ProcessInstanceRepository;
 import com.portal.service.UserDisplayNameResolver;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -34,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -225,15 +230,56 @@ class OwnerFieldComponentTest {
     class CaseHandler {
 
         @Test
-        @DisplayName("submit overwrites Current Assignee from the snapshot")
-        void submitOverwritesFromSnapshot() {
+        @DisplayName("submit does not write the current-task assignee onto MAIN Case Handler")
+        void submitDoesNotPaintMainFromTaskAssignee() {
             Map<String, Object> variables = new HashMap<>();
             variables.put("current_handler", "user:forged");
 
             component.applyOnSubmit(FU, new OwnerWriteContext(ACTOR, START, ASSIGNEE, null, Map.of()), variables);
 
-            assertThat(variables.get("current_handler")).isEqualTo("user:" + ASSIGNEE);
-            assertThat(variables.get("current_handler__display")).isEqualTo("Name-" + ASSIGNEE);
+            assertThat(variables.get("current_handler")).isEqualTo("");
+        }
+
+        @Test
+        @DisplayName("MI inner Save keeps previous MAIN step: and does not write the inner assignee")
+        void submitKeepsMainStepAndIgnoresInnerAssignee() {
+            Map<String, Object> previous = new HashMap<>();
+            previous.put("current_handler", "step:multi");
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("current_handler", "user:" + ASSIGNEE);
+
+            component.applyOnSubmit(FU, new OwnerWriteContext(ACTOR, START, ASSIGNEE, null, previous), variables);
+
+            assertThat(variables.get("current_handler")).isEqualTo("step:multi");
+            assertThat(variables.get("current_handler__display")).isEqualTo("multi");
+        }
+
+        @Test
+        @DisplayName("MI inner lookup writes MAIN step: even when previous is empty")
+        void submitWritesMainStepFromInnerLookup() {
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("current_handler", "user:" + ASSIGNEE);
+
+            component.applyOnSubmit(FU, new OwnerWriteContext(
+                    ACTOR, START, ASSIGNEE, null, Map.of(),
+                    MiOuterStepResolver.OuterLookup.known("multi")), variables);
+
+            assertThat(variables.get("current_handler")).isEqualTo("step:multi");
+            assertThat(variables.get("current_handler__display")).isEqualTo("multi");
+        }
+
+        @Test
+        @DisplayName("ordinary submit keeps the previous MAIN person and ignores the current-task assignee")
+        void submitKeepsPreviousMainPerson() {
+            Map<String, Object> previous = new HashMap<>();
+            previous.put("current_handler", "user:" + START);
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("current_handler", "user:" + ASSIGNEE);
+
+            component.applyOnSubmit(FU, new OwnerWriteContext(ACTOR, START, ASSIGNEE, null, previous), variables);
+
+            assertThat(variables.get("current_handler")).isEqualTo("user:" + START);
+            assertThat(variables.get("current_handler__display")).isEqualTo("Name-" + START);
         }
 
         @Test
@@ -518,6 +564,48 @@ class OwnerFieldComponentTest {
         when(rs.getLong("binding_id")).thenReturn((Long) row[0]);
         when(rs.getString("table_name")).thenReturn((String) row[1]);
         return rs;
+    }
+
+    @Nested
+    @DisplayName("withdraw")
+    class Withdraw {
+
+        @Test
+        @DisplayName("withdrawProcess clears MAIN Case Handler on the instance variables")
+        void withdrawClearsMainCaseHandler() {
+            ProcessInstance instance = new ProcessInstance();
+            instance.setId("pi-1");
+            instance.setStartUserId(START);
+            instance.setStatus("RUNNING");
+            instance.setFunctionUnitCode(FU);
+            instance.setVariables(new HashMap<>(Map.of("current_handler", "user:" + ASSIGNEE)));
+
+            ProcessInstanceRepository repo = mock(ProcessInstanceRepository.class);
+            when(repo.findById("pi-1")).thenReturn(Optional.of(instance));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            WorkflowEngineClient engine = mock(WorkflowEngineClient.class);
+            when(engine.isAvailable()).thenReturn(false);
+
+            ProcessComponent processComponent = new ProcessComponent(
+                    mock(com.portal.repository.FavoriteProcessRepository.class),
+                    repo,
+                    mock(com.portal.repository.ActionDefinitionRepository.class),
+                    mock(FunctionUnitAccessComponent.class),
+                    engine,
+                    mock(ProcessDraftComponent.class),
+                    mock(org.springframework.web.client.RestTemplate.class),
+                    mock(JdbcTemplate.class),
+                    i18nService,
+                    mock(ProcessStartComponent.class),
+                    mock(ProcessApplicationQueryComponent.class),
+                    mock(SubTableEnrichmentComponent.class));
+            ReflectionTestUtils.setField(processComponent, "ownerFieldComponent", component);
+
+            assertThat(processComponent.withdrawProcess(START, "pi-1", "n/a")).isTrue();
+            assertThat(instance.getStatus()).isEqualTo("WITHDRAWN");
+            assertThat(instance.getVariables().get("current_handler")).isEqualTo("");
+        }
     }
 
     @SafeVarargs

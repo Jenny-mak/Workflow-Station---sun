@@ -51,7 +51,7 @@ public class ProcessApplicationQueryComponent {
     private final MainTableViewAccessResolver mainTableViewAccessResolver;
     private final FunctionUnitAccessComponent functionUnitAccessComponent;
     private final JdbcTemplate jdbcTemplate;
-    private final MiBpmnNameMapCache miBpmnNameMapCache = new MiBpmnNameMapCache();
+    private final MiOuterStepResolver miOuterStepResolver;
 
     /** 聚合扇出线程池（引擎 HTTP，不碰 DB），移出共享 commonPool。见 {@link com.portal.config.PortalAsyncConfig}。 */
     @Autowired
@@ -231,34 +231,12 @@ public class ProcessApplicationQueryComponent {
      * COMPLETED 实例不需要（列表显 '-'）。
      */
     Map<String, Map<String, String>> buildMiNodeNameMaps(List<ProcessInstance> pageContent) {
-        Map<String, Map<String, String>> byKey = new HashMap<>();
-        if (!workflowEngineClient.isAvailable()) {
-            return byKey;
-        }
         Set<String> keys = pageContent.stream()
                 .filter(i -> !"COMPLETED".equals(i.getStatus()))
                 .map(ProcessInstance::getProcessDefinitionKey)
                 .filter(k -> k != null && !k.isBlank())
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        for (String key : keys) {
-            try {
-                Map<String, String> present = miBpmnNameMapCache.getIfPresent(key);
-                if (present != null) {
-                    byKey.put(key, present);
-                    continue;
-                }
-                Optional<String> xml = workflowEngineClient.getBpmnXml(key);
-                if (xml.isEmpty()) {
-                    // Omit the key: callers treat a missing map as unknown, not "not MI".
-                    continue;
-                }
-                byKey.put(key, miBpmnNameMapCache.getOrLoad(key,
-                        () -> BpmnMiXmlSupport.buildMiInnerTaskNameToSubProcessName(xml.get())));
-            } catch (Exception e) {
-                log.debug("buildMiNodeNameMaps: BPMN parse failed for processDefKey {}: {}", key, e.getMessage());
-            }
-        }
-        return byKey;
+        return miOuterStepResolver.mapsFor(keys);
     }
 
     /**

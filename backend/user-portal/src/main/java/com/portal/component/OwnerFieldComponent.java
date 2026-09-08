@@ -63,8 +63,14 @@ public class OwnerFieldComponent {
             String startUserId,
             String assigneeUserId,
             String candidateUserIds,
-            Map<String, Object> previousVariables
+            Map<String, Object> previousVariables,
+            MiOuterStepResolver.OuterLookup miOuterLookup
     ) {
+        public OwnerWriteContext(String actorUserId, String startUserId, String assigneeUserId,
+                                 String candidateUserIds, Map<String, Object> previousVariables) {
+            this(actorUserId, startUserId, assigneeUserId, candidateUserIds, previousVariables,
+                    MiOuterStepResolver.OuterLookup.known(null));
+        }
     }
 
     /** MAIN-table Owner field names grouped by source, for View live projection. */
@@ -332,14 +338,42 @@ public class OwnerFieldComponent {
     private void applyToRecord(Map<String, Object> record, OwnerFieldMeta meta, OwnerWriteContext ctx,
                                boolean mainTable, Map<String, Object> previousRecord) {
         if (OwnerCaseHandlerCalculator.isCaseHandler(meta.source())) {
-            if (mainTable && OwnerCaseHandlerCalculator.isStepValue(OwnerFieldRowSupport.scalar(record, meta.field()))) {
-                refreshStoredDisplay(record, meta);
+            if (mainTable) {
+                applyMainHandlerOnSubmit(record, meta, ctx, previousRecord);
                 return;
             }
             writeAssignee(record, meta, ctx);
             return;
         }
         writeCreator(record, meta, ctx.actorUserId(), previousRecord);
+    }
+
+    /**
+     * Submit is not the MAIN Case Handler write point: keep previous / MI {@code step:},
+     * never the current-task assignee (that would paint an inner MI person onto MAIN).
+     */
+    private void applyMainHandlerOnSubmit(Map<String, Object> record, OwnerFieldMeta meta,
+                                          OwnerWriteContext ctx, Map<String, Object> previousRecord) {
+        MiOuterStepResolver.OuterLookup lookup = ctx.miOuterLookup() == null
+                ? MiOuterStepResolver.OuterLookup.known(null)
+                : ctx.miOuterLookup();
+        if (lookup.isInner()) {
+            writeStored(record, meta, OwnerCaseHandlerCalculator.stepValue(lookup.outerName()));
+            return;
+        }
+        String previous = OwnerFieldRowSupport.scalar(previousRecord, meta.field());
+        if (OwnerCaseHandlerCalculator.isStepValue(previous)
+                || OwnerFieldRowSupport.isStoredOwnerValue(previous)) {
+            record.put(meta.field(), previous);
+            refreshStoredDisplay(record, meta);
+            return;
+        }
+        if (lookup.isUnknown()
+                && OwnerCaseHandlerCalculator.isStepValue(OwnerFieldRowSupport.scalar(record, meta.field()))) {
+            refreshStoredDisplay(record, meta);
+            return;
+        }
+        writeStored(record, meta, "");
     }
 
     private void writeCreator(Map<String, Object> record, OwnerFieldMeta meta, String fillUserId,

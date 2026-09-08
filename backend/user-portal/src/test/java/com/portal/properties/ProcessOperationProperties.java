@@ -80,7 +80,8 @@ class ProcessOperationProperties {
                 Mockito.mock(com.portal.component.MainTableViewInvolvementChecker.class),
                 Mockito.mock(com.portal.component.MainTableViewAccessResolver.class),
                 functionUnitAccessComponent,
-                jdbcTemplate);
+                jdbcTemplate,
+                Mockito.mock(com.portal.component.MiOuterStepResolver.class));
         ProcessStartComponent processStartComponent = new ProcessStartComponent(
                 processInstanceRepository,
                 processHistoryRepository,

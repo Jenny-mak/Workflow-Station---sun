@@ -3,6 +3,7 @@ import {
   lastCompletedTaskIdForNode,
   overlayCompletedNodeOwner,
   overlayOwnerMainValues,
+  settleHistoryThenRefreshOwnerOverlay,
   snapshotFieldValuesOf,
 } from '../overlayOwnerFromCompletedSnapshot'
 
@@ -202,5 +203,20 @@ describe('overlayOwnerFromCompletedSnapshot', () => {
     })
     expect(result.values.case_handler).toBe('user:user-e2e-zhangwei')
     expect(result.values.case_handler__display).toBe('张伟')
+  })
+
+  it('refreshes the owner overlay only after history settles', async () => {
+    const order: string[] = []
+    let resolveHistory: () => void = () => undefined
+    const history = new Promise<void>(resolve => {
+      resolveHistory = resolve
+    })
+    const done = settleHistoryThenRefreshOwnerOverlay(history, () => {
+      order.push('refresh')
+    })
+    order.push('before')
+    resolveHistory()
+    await done
+    expect(order).toEqual(['before', 'refresh'])
   })
 })

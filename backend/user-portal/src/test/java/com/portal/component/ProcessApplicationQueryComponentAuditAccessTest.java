@@ -56,7 +56,8 @@ class ProcessApplicationQueryComponentAuditAccessTest {
                 mainTableViewInvolvementChecker,
                 mainTableViewAccessResolver,
                 functionUnitAccessComponent,
-                jdbcTemplate);
+                jdbcTemplate,
+                org.mockito.Mockito.mock(MiOuterStepResolver.class));
         lenient().when(workflowEngineClient.isAvailable()).thenReturn(false);
         // No published views, so nothing leaks in through the view path.
         lenient().when(jdbcTemplate.queryForList(anyString(), anyString())).thenReturn(List.of());

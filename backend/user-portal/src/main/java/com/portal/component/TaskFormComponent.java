@@ -127,6 +127,10 @@ public class TaskFormComponent {
     @Autowired
     private OwnerFieldComponent ownerFieldComponent;
 
+    @Lazy
+    @Autowired
+    private MiOuterStepResolver miOuterStepResolver;
+
     /**
      * Display name for audit fields; falls back to the raw user id when the
      * resolver is unavailable.
@@ -680,7 +684,8 @@ public class TaskFormComponent {
 
             updatedVariables.putAll(inbound);
 
-            // Owner fields: Creator pins startUserId; Current Assignee follows snapshot.
+            // Owner fields: Creator = actor at this Save; MAIN Case Handler is not
+            // taken from the current-task assignee (MI inner people stay off MAIN).
             // Overlay THIS task's MI loop variable only for the write, then drop it —
             // never persist execution-scoped _currentItem on the process-wide blob.
             if (ownerFieldComponent != null) {
@@ -695,7 +700,8 @@ public class TaskFormComponent {
                                 processInstance.getStartUserId(),
                                 processInstance.getCurrentAssignee(),
                                 processInstance.getCandidateUsers(),
-                                currentVariables),
+                                currentVariables,
+                                ownerMiLookup(processInstance)),
                         updatedVariables);
                 OwnerFieldComponent.stripProcessWideCurrentItem(updatedVariables);
             }
@@ -1114,6 +1120,13 @@ public class TaskFormComponent {
      */
     private Map<String, Object> fetchTaskFormByStageId(String stageId, String processInstanceId) {
         return formDefinitionLoader().fetchTaskFormByStageId(stageId, processInstanceId, developerWorkstationUrl);
+    }
+
+    private MiOuterStepResolver.OuterLookup ownerMiLookup(ProcessInstance instance) {
+        if (miOuterStepResolver == null || instance == null) {
+            return MiOuterStepResolver.OuterLookup.known(null);
+        }
+        return miOuterStepResolver.lookup(instance.getProcessDefinitionKey(), instance.getCurrentNode());
     }
 
     // ========== Inner data class ==========

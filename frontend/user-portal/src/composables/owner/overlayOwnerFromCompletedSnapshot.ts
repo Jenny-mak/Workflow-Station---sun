@@ -210,3 +210,17 @@ export function overlayCompletedNodeOwner(input: {
   })
   return { values, bindings }
 }
+
+/**
+ * History is fetched in parallel with forms. Overlay reads historyRecords only
+ * at refresh time — call this after history settles so completed nodes see
+ * real taskIds (§6.6).
+ */
+export function settleHistoryThenRefreshOwnerOverlay(
+  historyPromise: Promise<unknown>,
+  afterHistory: () => void,
+): Promise<unknown> {
+  return historyPromise.then(() => {
+    afterHistory()
+  })
+}

@@ -403,7 +403,7 @@ MI 期间：主表列写 `step:<外层框名>`，不写内层办理人；下一�
 | Data / View 点主表行且打开的是申请详情（`/applications/:id?from=views`） | **同一页** Basic Info → Current Assignee |
 | My Request 列表「当前办理人」列 | 同一套展示（避免列表还是旧的内层人、头上已是步骤名） |
 
-**同一套**的含义：一个计算结果，两处消费。有主表 Owner Case Handler 列就和它一致；没有配 Owner 列的 FU，头上/列表仍按 §3.3.3 **现算**，不要求先放控件。禁止再写一套「读实例 `current_assignee` / 当前查看者任务」的展示。进行中委托时两边都仍是 A；点已完成节点看快照才是实际操作人。
+**同一套**的含义：一个计算结果，两处消费。有主表 Owner Case Handler 列就和它一致；没有配 Owner 列的 FU，头上/列表仍按 §3.3.3 **现算**，不要求先放控件。禁止再写一套「读实例 `current_assignee` / 当前查看者任务」的展示。进行中委托时两边都仍是 A；点已完成节点看快照才是实际操作人。MI「内层任务名 → 外层框名」只解析一次（`MiOuterStepResolver`），列表展示和 Owner 写入共用这张表；列表显示 `multi`，Owner 列存 `step:multi`，不要把列表文案原样写入列。
 
 **不要改：** To Do / Completed **任务**详情 `TaskBasicInfo` 的 Current Assignee —— 那是**当前这条任务**的办理人（MI 待办里就是这一行的人）。
 
