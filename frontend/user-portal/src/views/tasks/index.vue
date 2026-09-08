@@ -157,6 +157,7 @@
                   @claim="handleClaim"
                   @unclaim="handleUnclaim"
                   @force-unclaim="handleForceUnclaim"
+                  @reassign="handleReassign"
                 />
               </template>
             </el-table-column>
@@ -256,6 +257,14 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <TaskReassignDialog
+      v-model="reassignDialogVisible"
+      :candidate-user-ids="reassignTask?.candidateUserIds ?? []"
+      :current-holder-id="reassignTask?.assignee"
+      :submitting="claimAllBusy"
+      @confirm="confirmReassign"
+    />
   </div>
 </template>
 
@@ -264,6 +273,7 @@ import { Loading } from '@element-plus/icons-vue'
 import TodoListToolbar from './TodoListToolbar.vue'
 import TodoPageHeader from './TodoPageHeader.vue'
 import TodoClaimRowActions from '@/components/tasks/TodoClaimRowActions.vue'
+import TaskReassignDialog from '@/components/tasks/TaskReassignDialog.vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -317,6 +327,10 @@ const {
   handleClaim,
   handleUnclaim,
   handleForceUnclaim,
+  handleReassign,
+  confirmReassign,
+  reassignDialogVisible,
+  reassignTask,
   handleClaimAll,
   handleUnclaimAll,
   handleClaimSelected,

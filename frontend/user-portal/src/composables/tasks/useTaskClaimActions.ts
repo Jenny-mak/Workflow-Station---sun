@@ -1,7 +1,7 @@
 import { type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { claimBatch, claimTask, unclaimBatch, unclaimTask } from '@/api/task'
+import { claimBatch, claimTask, reassignTask, unclaimBatch, unclaimTask } from '@/api/task'
 import { resolveUserFacingHttpMessage } from '@/utils/httpErrorMessage'
 
 type BatchSlice = {
@@ -83,6 +83,14 @@ export function useTaskClaimActions(options: {
       () => unclaimTask(taskId, assignmentType, assignee),
       'task.forceUnclaimSuccess',
     )
+  }
+
+  function reassign(taskId: string, targetUserId: string): Promise<void> {
+    if (typeof taskId !== 'string' || !taskId.trim() || !targetUserId.trim()) {
+      ElMessage.error(t('task.notFound'))
+      return Promise.resolve()
+    }
+    return run(taskId, () => reassignTask(taskId, targetUserId.trim()), 'task.reassignSuccess')
   }
 
   async function runConfirmedBatch(
@@ -219,6 +227,7 @@ export function useTaskClaimActions(options: {
     claim,
     unclaim,
     forceUnclaim,
+    reassign,
     claimAll,
     unclaimAll,
     claimSelected,

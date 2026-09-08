@@ -26,6 +26,10 @@ const CHANGE_TYPE_TAG_MAP: Record<string, string> = {
   RECORD_NOTE_ADD: 'success',
   RECORD_NOTE_UPDATE: 'warning',
   RECORD_NOTE_DELETE: 'danger',
+  CLAIM: 'success',
+  UNCLAIM: 'warning',
+  FORCE_UNCLAIM: 'danger',
+  REASSIGN: 'warning',
 }
 
 export function changeTypeTag(changeType: string): string {
@@ -42,6 +46,10 @@ export function changeTypeText(t: ReturnType<typeof useI18n>['t'], changeType: s
     RECORD_NOTE_ADD: t('upAudit.actionRECORD_NOTE_ADD'),
     RECORD_NOTE_UPDATE: t('upAudit.actionRECORD_NOTE_UPDATE'),
     RECORD_NOTE_DELETE: t('upAudit.actionRECORD_NOTE_DELETE'),
+    CLAIM: t('upAudit.actionCLAIM'),
+    UNCLAIM: t('upAudit.actionUNCLAIM'),
+    FORCE_UNCLAIM: t('upAudit.actionFORCE_UNCLAIM'),
+    REASSIGN: t('upAudit.actionREASSIGN'),
   }
   return map[changeType] || changeType
 }

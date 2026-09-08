@@ -118,6 +118,10 @@ public class TaskManagerComponent {
         return taskActionService.unclaimTask(taskId, userId);
     }
 
+    public TaskAssignmentResult reassignClaim(String taskId, String operatorUserId, String targetUserId) {
+        return taskActionService.reassignClaim(taskId, operatorUserId, targetUserId);
+    }
+
     public TaskAssignmentResult transferTask(String taskId, String fromUserId, String toUserId, String reason) {
         return taskActionService.transferTask(taskId, fromUserId, toUserId, reason);
     }

@@ -171,7 +171,8 @@ class TaskProcessProperties {
             taskApprovalCompletionComponent,
             processInstanceSyncComponent,
             miOverlayComponent,
-            Mockito.mock(com.portal.component.ClaimForceUnclaimAnnotator.class)
+            Mockito.mock(com.portal.component.ClaimForceUnclaimAnnotator.class),
+            Mockito.mock(com.portal.component.TaskAssignmentHistoryRecorder.class)
         );
         random = new Random();
 

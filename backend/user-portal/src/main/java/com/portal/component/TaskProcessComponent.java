@@ -5,6 +5,7 @@ import com.portal.dto.TaskCompleteRequest;
 import com.portal.dto.TaskDelegateRequest;
 import com.portal.dto.TaskInfo;
 import com.portal.entity.DelegationAudit;
+import com.portal.enums.ChangeType;
 import com.portal.exception.PortalException;
 import com.portal.repository.DelegationAuditRepository;
 import com.portal.service.ProcessAssigneeSnapshot;
@@ -44,6 +45,7 @@ public class TaskProcessComponent {
     private final ProcessInstanceSyncComponent processInstanceSyncComponent;
     private final MiOverlayComponent miOverlayComponent;
     private final ClaimForceUnclaimAnnotator claimForceUnclaimAnnotator;
+    private final TaskAssignmentHistoryRecorder taskAssignmentHistoryRecorder;
 
     /**
      * Claims task
@@ -93,6 +95,7 @@ public class TaskProcessComponent {
         processInstanceSyncComponent.updateProcessInstanceAssignee(task.getProcessInstanceId(), userId, null, task.getTaskName());
 
         taskQueryComponent.invalidateMineTaskListCache();
+        taskAssignmentHistoryRecorder.record(taskBefore, userId, ChangeType.CLAIM, userId);
         log.info("Task {} claimed via Flowable by user {}", taskId, userId);
         return task;
     }
@@ -150,6 +153,9 @@ public class TaskProcessComponent {
                 task.getTaskName());
 
         taskQueryComponent.invalidateMineTaskListCache();
+        boolean force = BuRolePoolTasks.isClaimPoolTask(taskBefore) && !holder;
+        taskAssignmentHistoryRecorder.record(taskBefore, userId,
+                force ? ChangeType.FORCE_UNCLAIM : ChangeType.UNCLAIM, null);
         log.info("Task {} unclaimed via Flowable by user {}", taskId, userId);
         return task;
     }

@@ -14,7 +14,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Sets {@link TaskInfo#canForceUnclaim} after claim flags. One admin-center call per list.
+ * Sets {@link TaskInfo#canForceUnclaim} and {@link TaskInfo#canReassign} after claim flags.
+ * One admin-center call per list.
  */
 @Slf4j
 @Component
@@ -35,8 +36,9 @@ public class ClaimForceUnclaimAnnotator {
         }
         List<Map<String, Object>> items = new ArrayList<>();
         for (TaskInfo task : tasks) {
-            if (!needsEvaluate(task)) {
+            if (!isClaimPool(task)) {
                 task.setCanForceUnclaim(false);
+                task.setCanReassign(false);
                 continue;
             }
             Map<String, Object> item = new HashMap<>();
@@ -50,10 +52,14 @@ public class ClaimForceUnclaimAnnotator {
         }
         Map<String, Boolean> flags = adminCenterClient.evaluateForceUnclaim(userId, items);
         for (TaskInfo task : tasks) {
-            if (!needsEvaluate(task)) {
+            if (!isClaimPool(task)) {
                 continue;
             }
-            task.setCanForceUnclaim(Boolean.TRUE.equals(flags.get(task.getTaskId())));
+            boolean authorized = Boolean.TRUE.equals(flags.get(task.getTaskId()));
+            task.setCanReassign(authorized);
+            task.setCanForceUnclaim(authorized
+                    && BuRolePoolTasks.isHeld(task)
+                    && !task.isClaimedByCurrentUser());
         }
     }
 
@@ -65,11 +71,17 @@ public class ClaimForceUnclaimAnnotator {
         return task.isCanForceUnclaim();
     }
 
-    private static boolean needsEvaluate(TaskInfo task) {
+    public boolean canReassign(TaskInfo task, String userId) {
+        if (task == null || userId == null || userId.isBlank()) {
+            return false;
+        }
+        annotate(task, userId);
+        return task.isCanReassign();
+    }
+
+    private static boolean isClaimPool(TaskInfo task) {
         return task != null
                 && task.getTaskId() != null
-                && BuRolePoolTasks.isClaimPoolTask(task)
-                && BuRolePoolTasks.isHeld(task)
-                && !task.isClaimedByCurrentUser();
+                && BuRolePoolTasks.isClaimPoolTask(task);
     }
 }

@@ -73,6 +73,10 @@ const sections: GuideSection[] = [
     anchor: 'leader',
     titleKey: 'upTasksToClaimGuide.leaderTitle',
     bodyKey: 'upTasksToClaimGuide.leaderBody',
+    samples: [
+      { code: 'Force Unclaim', hintKey: 'upTasksToClaimGuide.forceUnclaimSample' },
+      { code: 'Reassign', hintKey: 'upTasksToClaimGuide.reassignSample' },
+    ],
   },
   {
     anchor: 'apply',

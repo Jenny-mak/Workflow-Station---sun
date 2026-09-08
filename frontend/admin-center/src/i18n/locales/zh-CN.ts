@@ -814,6 +814,10 @@ export default {
     actionRECORD_NOTE_ADD: '评论新增',
     actionRECORD_NOTE_UPDATE: '评论编辑',
     actionRECORD_NOTE_DELETE: '评论删除',
+    actionCLAIM: '认领',
+    actionUNCLAIM: '取消认领',
+    actionFORCE_UNCLAIM: '强制释放',
+    actionREASSIGN: '重新分配',
   },
   businessUnit: {
     name: '业务单元名称',

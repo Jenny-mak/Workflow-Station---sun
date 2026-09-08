@@ -15,6 +15,7 @@ type BannerTask = {
   claimable?: boolean
   claimedByCurrentUser?: boolean
   canForceUnclaim?: boolean
+  canReassign?: boolean
   assignee?: string
   assigneeName?: string
 }
@@ -87,5 +88,27 @@ describe('TaskClaimBanner', () => {
     const mine = mountBanner({ claimPoolTask: true, claimedByCurrentUser: true })
     await mine.find('[data-test="task-unclaim-btn"]').trigger('click')
     expect(mine.emitted('unclaim')).toHaveLength(1)
+  })
+
+  it('offers Reassign next to Claim when the current user may assign the pool row', () => {
+    const w = mountBanner({
+      claimPoolTask: true,
+      claimable: true,
+      canReassign: true,
+    })
+
+    expect(w.find('[data-test="task-claim-btn"]').exists()).toBe(true)
+    expect(w.find('[data-test="task-reassign-btn"]').exists()).toBe(true)
+  })
+
+  it('emits reassign from the Reassign button', async () => {
+    const w = mountBanner({
+      claimPoolTask: true,
+      assignee: 'alice',
+      canForceUnclaim: true,
+      canReassign: true,
+    })
+    await w.find('[data-test="task-reassign-btn"]').trigger('click')
+    expect(w.emitted('reassign')).toHaveLength(1)
   })
 })
