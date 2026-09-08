@@ -3388,3 +3388,20 @@
     验证：vitest uploadFieldValue + uploadOverlayZIndex；
     frontend/scripts/verify-upload-card-status.mjs（绿标、重复拦截、详情抽屉）。
 
+- id: "1603"
+  status: fixed
+  fixed_at: "2026-09-08"
+  severity: major
+  category: architecture
+  summary: "BU Role Leader Reassign for claim-pool tasks, with Change History and audit"
+  file: "backend/workflow-engine-core/src/main/java/com/workflow/component/TaskClaimSupport.java"
+  note: |
+    Leader / BU Approver / SYS_ADMIN 可将认领池任务指定给同角色成员（含已被他人持有），
+    不走 Transfer（保持 CANDIDATE_USERS 池）。Force Unclaim 仍独立退回池。
+    Claim / Unclaim / Force Unclaim / Reassign 写入 up_change_history（field claimed_by）
+    并出现在 Change History 与 Admin User Portal Audit Log。
+    To Do 默认列 Claimed By。引擎 POST /tasks/{id}/reassign-claim；门户 POST /tasks/{id}/reassign。
+    验证：TaskClaimSupportReassignTest + TaskReassignComponentTest + portal vitest；
+    截图 To Do Claimed By、Help #leader、Admin 审计 Change Type 含 Claim/Reassign。
+    本环境待办无 BU Role 池行，未点到 Reassign 弹窗。
+

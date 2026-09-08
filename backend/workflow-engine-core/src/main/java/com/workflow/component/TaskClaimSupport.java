@@ -85,6 +85,24 @@ public class TaskClaimSupport {
         }
     }
 
+    public TaskAssignmentResult reassignClaim(String taskId, String operatorUserId, String targetUserId) {
+        try {
+            String target = requireText(targetUserId, "targetUserId", "Target user is required");
+            Task flowableTask = requireTask(taskId);
+            if (!actorMayForceUnclaim(flowableTask, operatorUserId)) {
+                throw validation("userId", "Not allowed to reassign this task", operatorUserId);
+            }
+            List<String> candidates = FlowableCandidateUsers.userIds(taskService, taskId);
+            validateReassignTarget(flowableTask, taskId, target, candidates);
+            return applyReassignHold(taskId, operatorUserId, target, candidates);
+        } catch (WorkflowValidationException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new WorkflowBusinessException("TASK_REASSIGN_ERROR",
+                    "Task reassign failed: " + e.getMessage(), e);
+        }
+    }
+
     public TaskAssignmentResult unclaimTask(String taskId, String userId) {
         try {
             Task flowableTask = requireTask(taskId);
@@ -198,6 +216,64 @@ public class TaskClaimSupport {
     private static void rememberCandidatePool(ExtendedTaskInfo task, List<String> candidateUserIds) {
         task.setAssignmentType(AssignmentType.CANDIDATE_USERS);
         task.setAssignmentTarget(String.join(",", candidateUserIds));
+    }
+
+    private TaskAssignmentResult applyReassignHold(String taskId, String operatorUserId, String target,
+            List<String> candidates) {
+        AssignmentType resultType = AssignmentType.CANDIDATE_USERS;
+        String resultTarget = String.join(",", candidates);
+        Optional<ExtendedTaskInfo> extendedOpt = extendedTaskInfoRepository.findByTaskIdAndIsDeletedFalse(taskId);
+        if (extendedOpt.isPresent()) {
+            ExtendedTaskInfo extended = extendedOpt.get();
+            if (extended.isCompleted()) {
+                throw validation("taskId", "Task already completed, cannot reassign", taskId);
+            }
+            rememberPoolUnlessVirtualGroup(extended, candidates);
+            extended.claimTask(target);
+            extendedTaskInfoRepository.save(extended);
+            resultType = extended.getAssignmentType();
+            resultTarget = extended.getAssignmentTarget();
+        }
+        taskService.setAssignee(taskId, target);
+        log.info("Task reassign-claim: taskId={}, operator={}, target={}", taskId, operatorUserId, target);
+        return TaskAssignmentResult.success(
+                taskId, resultType, resultTarget, operatorUserId, "Task reassigned successfully");
+    }
+
+    private void validateReassignTarget(Task flowableTask, String taskId, String target,
+            List<String> candidates) {
+        String current = flowableTask.getAssignee();
+        if (engineActorMatchesPortalUser(current, target)) {
+            throw validation("targetUserId", "Task already held by target", target);
+        }
+        if (!candidates.isEmpty()) {
+            if (!actorInCandidatePool(candidates, target)) {
+                throw validation("targetUserId", "Target is not in the claim pool", target);
+            }
+            return;
+        }
+        Optional<ExtendedTaskInfo> extendedOpt = extendedTaskInfoRepository.findByTaskIdAndIsDeletedFalse(taskId);
+        if (extendedOpt.isPresent()
+                && extendedOpt.get().getAssignmentType() == AssignmentType.VIRTUAL_GROUP
+                && userPermissionService.hasTaskPermission(
+                        target, AssignmentType.VIRTUAL_GROUP, extendedOpt.get().getAssignmentTarget())) {
+            return;
+        }
+        throw validation("taskId", "Directly assigned tasks cannot be reassigned in the claim pool", taskId);
+    }
+
+    private void rememberPoolUnlessVirtualGroup(ExtendedTaskInfo task, List<String> candidates) {
+        if (task.getAssignmentType() == AssignmentType.VIRTUAL_GROUP || candidates.isEmpty()) {
+            return;
+        }
+        rememberCandidatePool(task, candidates);
+    }
+
+    private static String requireText(String value, String field, String message) {
+        if (!StringUtils.hasText(value)) {
+            throw validation(field, message, value);
+        }
+        return value.trim();
     }
 
     private String persistCandidatePoolFromFlowable(ExtendedTaskInfo task, String taskId) {

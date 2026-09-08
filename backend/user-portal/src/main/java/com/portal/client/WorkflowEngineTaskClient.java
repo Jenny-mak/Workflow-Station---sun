@@ -477,6 +477,38 @@ public class WorkflowEngineTaskClient {
     }
 
     /**
+     * Reassigns a claim-pool hold to another pool member.
+     */
+    public Optional<Map<String, Object>> reassignClaim(String taskId, String operatorUserId, String targetUserId) {
+        if (!engine.isAvailable()) {
+            return Optional.empty();
+        }
+        try {
+            String url = engine.engineUrl() + "/api/v1/tasks/" + SafeUrlInput.requirePathToken(taskId)
+                    + "/reassign-claim";
+            Map<String, Object> request = new HashMap<>();
+            request.put("targetUserId", targetUserId);
+            request.put("operatorUserId", operatorUserId);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            engine.forwardInboundAuthorization(headers);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+
+            ResponseEntity<Map<String, Object>> response = engine.restTemplate().exchange(
+                    url, HttpMethod.POST, entity,
+                    new ParameterizedTypeReference<Map<String, Object>>() {});
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return Optional.of(ApiResponseBodyUnwrap.unwrapDataMap(response.getBody()));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to reassign task in workflow engine: {}", e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Transfers task
      */
     public Optional<Map<String, Object>> transferTask(String taskId, String fromUserId,

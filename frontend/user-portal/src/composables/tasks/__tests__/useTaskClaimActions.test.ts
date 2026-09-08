@@ -6,11 +6,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 // 不是把类型糊过去 —— 改成别的值会让用例失去意义。
 import type { MessageBoxData } from 'element-plus'
 
-const { claimTask, unclaimTask, claimBatch, unclaimBatch } = vi.hoisted(() => ({
+const { claimTask, unclaimTask, claimBatch, unclaimBatch, reassignTask } = vi.hoisted(() => ({
   claimTask: vi.fn(),
   unclaimTask: vi.fn(),
   claimBatch: vi.fn(),
   unclaimBatch: vi.fn(),
+  reassignTask: vi.fn(),
 }))
 
 vi.mock('vue-i18n', () => ({
@@ -27,6 +28,7 @@ vi.mock('@/api/task', () => ({
   unclaimTask: (...args: unknown[]) => unclaimTask(...args),
   claimBatch: (...args: unknown[]) => claimBatch(...args),
   unclaimBatch: (...args: unknown[]) => unclaimBatch(...args),
+  reassignTask: (...args: unknown[]) => reassignTask(...args),
 }))
 
 import { useTaskClaimActions } from '../useTaskClaimActions'
@@ -39,6 +41,7 @@ describe('useTaskClaimActions', () => {
     unclaimTask.mockReset()
     claimBatch.mockReset()
     unclaimBatch.mockReset()
+    reassignTask.mockReset()
     vi.mocked(ElMessageBox.confirm).mockReset()
   })
 
@@ -241,5 +244,17 @@ describe('useTaskClaimActions', () => {
 
     expect(ElMessage.error).toHaveBeenCalledWith('Already claimed')
     expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('reassigns after the dialog confirms a target user', async () => {
+    reassignTask.mockResolvedValue({})
+    const reload = vi.fn().mockResolvedValue(undefined)
+    const { reassign } = useTaskClaimActions({ reload })
+
+    await reassign('task-1', 'bob')
+
+    expect(reassignTask).toHaveBeenCalledWith('task-1', 'bob')
+    expect(ElMessage.success).toHaveBeenCalledWith('task.reassignSuccess')
+    expect(reload).toHaveBeenCalledTimes(1)
   })
 })

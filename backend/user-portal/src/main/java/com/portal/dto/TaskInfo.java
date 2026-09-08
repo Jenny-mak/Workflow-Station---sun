@@ -188,4 +188,10 @@ public class TaskInfo {
      */
     @Builder.Default
     private boolean canForceUnclaim = false;
+
+    /**
+     * Leader / BU Approver / SYS_ADMIN may assign this claim-pool task to a specified pool member.
+     */
+    @Builder.Default
+    private boolean canReassign = false;
 }

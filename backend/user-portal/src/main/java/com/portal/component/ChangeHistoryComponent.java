@@ -10,6 +10,7 @@ import com.portal.dto.UserPortalAuditQueryRequest;
 import com.portal.dto.UserPortalAuditRecord;
 import com.portal.entity.ChangeHistory;
 import com.portal.entity.ProcessInstance;
+import com.portal.enums.AssignmentChangeTypes;
 import com.portal.enums.ChangeType;
 import com.portal.repository.ChangeHistoryRepository;
 import com.portal.repository.ProcessInstanceRepository;
@@ -139,7 +140,7 @@ public class ChangeHistoryComponent {
             "assigneedisplayname", "taskid", "taskdefinitionkey");
     private static final String RECORD_NOTE_FIELD_NAME = "__record_note__";
     private static final Set<String> ASSIGNEE_VALUE_FIELDS = Set.of(
-            "assignee", "assigneeuserid", "assigneeid");
+            "assignee", "assigneeuserid", "assigneeid", "claimed_by");
 
     /**
      * Record field changes.
@@ -861,6 +862,9 @@ public class ChangeHistoryComponent {
         }
 
         boolean isUserVisible(ChangeHistoryRecord record) {
+            if (AssignmentChangeTypes.isAssignmentActionName(record.getChangeType())) {
+                return true;
+            }
             String fieldName = record.getFieldName();
             if (fieldName == null || fieldName.isBlank()) {
                 return false;

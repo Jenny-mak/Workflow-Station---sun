@@ -153,7 +153,7 @@ export default {
     upTasksToClaim: {
       title: 'To Do — claim pool',
       summary:
-        'Business-unit role requests live on To Do. Claim before you edit; Claim all takes every free request in batches; the selection bar Claims or Unclaims only checked rows. Unclaim all releases only your holds. Optional auto-claim on open is off by default. Leaders, BU Approvers, and System Administrators can force-release someone else’s hold.',
+        'Business-unit role requests live on To Do. Claim before you edit; Claim all takes every free request in batches; the selection bar Claims or Unclaims only checked rows. Unclaim all releases only your holds. Optional auto-claim on open is off by default. Leaders, BU Approvers, and System Administrators can force-release someone else’s hold or Reassign it to another member of the same role.',
     },
     taskDelegate: {
       title: 'Delegate a task',
@@ -506,6 +506,8 @@ export default {
     unclaimAllSample: 'next to Claim all; releases only your holds, never a colleague’s',
     claimSelectedSample: 'on the selection bar after you tick rows; confirms “Claim N of M selected”',
     unclaimSelectedSample: 'next to selection Claim; only your holds in the ticks, never Force Unclaim',
+    forceUnclaimSample: 'on the row and the task banner; returns the request to the pool',
+    reassignSample: 'on the row and the task banner; pick another member of the same role',
     autoClaimTitle: 'Auto-claim on open',
     autoClaimBody:
       'The Auto-claim on open switch sits on the To Do top bar and on User Profile. It is stored with your account and defaults to off. When it is on, clicking a Request ID on To Do claims that row first if it is still free, then opens the form. There is no success toast. If the claim fails (for example someone else just took it), you still open the form and see an error. Home, notifications, email links, bookmarks, and Completed Tasks do not auto-claim.',
@@ -520,10 +522,10 @@ export default {
     filePreviewSample: 'new tab; Ctrl + scroll zoom; Fit / 100%; Previous file / Next file',
     detailTitle: 'On the task page',
     detailBody:
-      'If nobody holds the role request, or someone else holds it, the form is view-only and the action bar is hidden. The banner at the top says the request is not claimed yet, that you are holding it, or that another person claimed it. Only the holder sees Claimed by You and can Unclaim, edit, and submit. If you are a Leader of this role, a BU Approver of this business unit, or a System Administrator, the banner and the list also show Force Unclaim.',
+      'If nobody holds the role request, or someone else holds it, the form is view-only and the action bar is hidden. The banner at the top says the request is not claimed yet, that you are holding it, or that another person claimed it. Only the holder sees Claimed by You and can Unclaim, edit, and submit. If you are a Leader of this role, a BU Approver of this business unit, or a System Administrator, the banner and the list also show Force Unclaim and Reassign.',
     leaderTitle: 'Leader, Approver, and Admin',
     leaderBody:
-      'Member and Leader are per business unit and role, not a platform-wide flag. A Member Claims and Unclaims only their own hold. A Leader of that same role can Force Unclaim a hold taken by someone else. The business unit Approver and a System Administrator (SYS_ADMIN) have the same Force Unclaim right. An Auditor cannot. Confirm before Force Unclaim: Claimed By becomes empty, and another Member can Claim it. Admin Center → User Management shows Member or Leader on each business unit role. Organization → Eligible Roles lists the Leaders of each role so you can find who can release a stuck hold.',
+      'Member and Leader are per business unit and role, not a platform-wide flag. A Member Claims and Unclaims only their own hold. A Leader of that same role can Force Unclaim a hold taken by someone else, or Reassign the request to another member of the same role (including a free request or one already held). The business unit Approver and a System Administrator (SYS_ADMIN) have the same Force Unclaim and Reassign rights. An Auditor cannot. Force Unclaim and Reassign are separate: Force Unclaim returns the request to the pool; Reassign assigns it to a chosen member and does not send it back to the pool. Confirm before Force Unclaim: Claimed By becomes empty, and another Member can Claim it. Reassign opens a dialog to pick a member of the same role; Change History and Admin Center → User Portal Audit Log record who assigned, when, from whom, and to whom. Admin Center → User Management shows Member or Leader on each business unit role. Organization → Eligible Roles lists the Leaders of each role so you can find who can release or reassign a stuck hold.',
     applyTitle: 'Apply as Member or Leader',
     applyBody:
       'Open User Profile Setup → Apply Permission. Choose the business unit and role, then Member or Leader. The approver’s Approve Request dialog shows that Member or Leader choice and the role. If you already have that role as a Member, you can apply to become Leader. After approval, the User Profile Setup card and Admin user page show Leader on that role.',
@@ -532,7 +534,7 @@ export default {
       'Tasks to Claim is no longer a separate menu. Free role requests, your holds, and colleague holds all appear on To Do. Assignment Type no longer offers Virtual Group as a filter; use BU + role for the claim pool. Older bookmarks to /tasks/to-claim open To Do.',
     failTitle: 'When Claim fails',
     failBody:
-      'Claim fails if another member already holds the request, you are no longer in the role that was written when the task was created, or the engine is unavailable. Refresh the list: the Claimed By column shows the current holder. Unclaim fails if you are not the holder. Unclaim all skips colleague holds and reports skipped or failed counts. Force Unclaim fails if you are not a Leader of that role, a BU Approver of that business unit, or a System Administrator. Claim all continues after a failed row and reports the failed count at the end.',
+      'Claim fails if another member already holds the request, you are no longer in the role that was written when the task was created, or the engine is unavailable. Refresh the list: the Claimed By column shows the current holder. Unclaim fails if you are not the holder. Unclaim all skips colleague holds and reports skipped or failed counts. Force Unclaim and Reassign fail if you are not a Leader of that role, a BU Approver of that business unit, or a System Administrator. Reassign also fails if the chosen user is not in the same role pool, or is already the holder. Claim all continues after a failed row and reports the failed count at the end.',
   },
   taskDelegateGuide: {
     pageTitle: 'Delegate a task',

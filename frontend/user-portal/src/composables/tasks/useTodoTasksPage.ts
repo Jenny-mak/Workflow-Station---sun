@@ -14,13 +14,14 @@ import { useUserPreferenceStore } from '@/stores/userPreference'
 import { taskPriorityBand, taskPriorityCssClass } from '@/utils/taskPriority'
 import { usePendingTaskStore } from '@/stores/pendingTask'
 
-export const CLAIM_ACTION_WIDTH = 180
+export const CLAIM_ACTION_WIDTH = 280
 
 const TODO_VISIBLE_FIELDS = [
   'requestId',
   'functionUnitCode',
   'taskName',
   'assignmentType',
+  'assigneeName',
   'createTime',
 ] as const
 
@@ -39,7 +40,7 @@ export function useTodoTasksPage() {
   })
 
   const grid = usePortalListGrid<TaskInfo>({
-    storageKey: 'portal-list-layout:todo-tasks-v2',
+    storageKey: 'portal-list-layout:todo-tasks-v3',
     extraWidth: 50 + CLAIM_ACTION_WIDTH,
     visibleFields: TODO_VISIBLE_FIELDS,
   })
@@ -72,7 +73,7 @@ export function useTodoTasksPage() {
     }
   }
 
-  const { claim, unclaim, forceUnclaim, claimAll, unclaimAll, claimSelected, unclaimSelected, prepareTodoOpen } =
+  const { claim, unclaim, forceUnclaim, reassign, claimAll, unclaimAll, claimSelected, unclaimSelected, prepareTodoOpen } =
     useTaskClaimActions({
       reload: loadTasks,
       actingTaskId,
@@ -181,6 +182,25 @@ export function useTodoTasksPage() {
     return forceUnclaim(task.taskId, task.assignmentType, task.assignee, task.assigneeName)
   }
 
+  const reassignDialogVisible = ref(false)
+  const reassignTask = ref<TaskInfo | null>(null)
+
+  function handleReassign(task: TaskInfo) {
+    reassignTask.value = task
+    reassignDialogVisible.value = true
+  }
+
+  function confirmReassign(targetUserId: string) {
+    const task = reassignTask.value
+    if (!task?.taskId) {
+      return Promise.resolve()
+    }
+    return reassign(task.taskId, targetUserId).then(() => {
+      reassignDialogVisible.value = false
+      reassignTask.value = null
+    })
+  }
+
   function onAutoClaimChange(value: string | number | boolean) {
     return preferenceStore.setAutoClaimOnOpen(value === true)
   }
@@ -262,6 +282,10 @@ export function useTodoTasksPage() {
     handleClaim,
     handleUnclaim,
     handleForceUnclaim,
+    handleReassign,
+    confirmReassign,
+    reassignDialogVisible,
+    reassignTask,
     handleClaimAll: claimAll,
     handleUnclaimAll: unclaimAll,
     handleClaimSelected,

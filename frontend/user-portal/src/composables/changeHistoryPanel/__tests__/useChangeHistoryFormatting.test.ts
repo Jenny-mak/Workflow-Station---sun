@@ -113,4 +113,16 @@ describe('useChangeHistoryFormatting', () => {
     })
     expect(formatDisplayValue(value)).toBe('card_number: ************7890; merchant_name: Shop')
   })
+
+  it('labels assignment history as Claimed By and maps empty holder to the pool', () => {
+    const { fieldLocationLabel, formatDisplayValue, getChangeTypeLabel } = useChangeHistoryFormatting(t, dayjs)
+    expect(fieldLocationLabel({ changeType: 'REASSIGN', fieldName: 'claimed_by' } as never))
+      .toBe('changeHistory.claimedBy')
+    expect(formatDisplayValue(null, 240, 'claimed_by')).toBe('changeHistory.claimPool')
+    expect(formatDisplayValue('Alice Chen', 240, 'claimed_by')).toBe('Alice Chen')
+    expect(getChangeTypeLabel('CLAIM')).toBe('changeHistory.claim')
+    expect(getChangeTypeLabel('UNCLAIM')).toBe('changeHistory.unclaim')
+    expect(getChangeTypeLabel('FORCE_UNCLAIM')).toBe('changeHistory.forceUnclaim')
+    expect(getChangeTypeLabel('REASSIGN')).toBe('changeHistory.reassign')
+  })
 })

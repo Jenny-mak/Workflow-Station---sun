@@ -44,6 +44,17 @@
           >
             {{ t('task.forceUnclaim') }}
           </el-button>
+          <el-button
+            v-if="task.canReassign"
+            type="primary"
+            plain
+            size="small"
+            :loading="submitting"
+            data-test="task-reassign-btn"
+            @click="emit('reassign')"
+          >
+            {{ t('task.reassign') }}
+          </el-button>
         </div>
       </template>
     </el-alert>
@@ -59,6 +70,7 @@ interface ClaimBannerTask {
   claimable?: boolean
   claimedByCurrentUser?: boolean
   canForceUnclaim?: boolean
+  canReassign?: boolean
   assignee?: string
   assigneeName?: string
 }
@@ -72,6 +84,7 @@ const emit = defineEmits<{
   (e: 'claim'): void
   (e: 'unclaim'): void
   (e: 'force-unclaim'): void
+  (e: 'reassign'): void
 }>()
 
 const { t } = useI18n()
@@ -91,6 +104,7 @@ const hint = computed(() => {
   if (props.task.claimedByCurrentUser) return t('task.claimHeldByYouHint')
   if (props.task.claimable) return t('task.claimAvailableHint')
   if (props.task.canForceUnclaim) return t('task.forceUnclaimHint')
+  if (props.task.canReassign) return t('task.reassignHint')
   return t('task.claimHeldByOtherHint')
 })
 </script>

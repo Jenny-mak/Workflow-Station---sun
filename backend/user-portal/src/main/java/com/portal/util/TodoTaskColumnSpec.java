@@ -30,6 +30,7 @@ public final class TodoTaskColumnSpec {
             "functionUnitCode",
             "taskName",
             "assignmentType",
+            "assigneeName",
             "createTime");
 
     private TodoTaskColumnSpec() {

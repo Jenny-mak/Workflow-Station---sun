@@ -361,6 +361,10 @@ public class WorkflowEngineClient {
         return taskClient.unclaimTask(taskId, userId);
     }
 
+    public Optional<Map<String, Object>> reassignClaim(String taskId, String operatorUserId, String targetUserId) {
+        return taskClient.reassignClaim(taskId, operatorUserId, targetUserId);
+    }
+
     /**
      * Transfers task
      */

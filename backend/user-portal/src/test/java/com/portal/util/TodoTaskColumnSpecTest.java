@@ -74,6 +74,7 @@ class TodoTaskColumnSpecTest {
                 "functionUnitCode",
                 "taskName",
                 "assignmentType",
+                "assigneeName",
                 "createTime");
     }
 

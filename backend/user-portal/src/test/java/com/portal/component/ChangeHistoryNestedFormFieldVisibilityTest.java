@@ -115,6 +115,29 @@ class ChangeHistoryNestedFormFieldVisibilityTest {
     }
 
     @Test
+    void assignmentActionsRemainVisibleEvenWhenNotFormFields() {
+        Instant now = Instant.parse("2026-09-08T03:00:00Z");
+        when(changeHistoryRepository.findByProcessInstanceIdOrderByTimestampAsc(PROCESS_ID))
+                .thenReturn(List.of(ChangeHistory.builder()
+                        .id(9L)
+                        .processInstanceId(PROCESS_ID)
+                        .userId("leader-1")
+                        .timestamp(now)
+                        .fieldName("claimed_by")
+                        .oldValue("alice")
+                        .newValue("bob")
+                        .changeType(ChangeType.REASSIGN)
+                        .build()));
+
+        List<ChangeHistoryRecord> records = component.getChangeHistory(PROCESS_ID);
+
+        assertThat(records).extracting(ChangeHistoryRecord::getChangeType)
+                .containsExactly("REASSIGN");
+        assertThat(records.get(0).getOldValue()).isEqualTo("alice");
+        assertThat(records.get(0).getNewValue()).isEqualTo("bob");
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void miTaskRowFilterKeepsSharedSubTablesAndHidesOtherCollectionRows() {
         Instant now = Instant.parse("2026-09-04T10:36:00Z");

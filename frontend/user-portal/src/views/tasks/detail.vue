@@ -88,6 +88,7 @@
         @claim="handleClaimTask"
         @unclaim="handleUnclaimTask"
         @force-unclaim="handleForceUnclaimTask"
+        @reassign="handleReassignTask"
       />
 
       <div
@@ -494,6 +495,13 @@
       :is-mi-sub-task-mode="isMiSubTaskMode"
 :is-completed-task="isCompletedTask" @update:form-data="val => miFillDialogData = { ...miFillDialogData, ...val }" @update:sub-table-data="syncMiFillSubTableRows" @confirm="saveMiFillDialog"
     />
+    <TaskReassignDialog
+      v-model="reassignDialogVisible"
+      :candidate-user-ids="taskInfo?.candidateUserIds ?? []"
+      :current-holder-id="taskInfo?.assignee"
+      :submitting="claimSubmitting"
+      @confirm="confirmReassignTask"
+    />
   </div>
 </template>
 
@@ -520,6 +528,7 @@ import TaskSnapshotSection from '@/components/tasks/TaskSnapshotSection.vue'
 import TaskHistorySection from '@/components/tasks/TaskHistorySection.vue'
 import TaskActionBar from '@/components/tasks/TaskActionBar.vue'
 import TaskClaimBanner from '@/components/tasks/TaskClaimBanner.vue'
+import TaskReassignDialog from '@/components/tasks/TaskReassignDialog.vue'
 import { useTaskForm } from '@/composables/tasks/useTaskForm'
 import { useBpmnParser } from '@/composables/tasks/useBpmnParser'
 import { useTaskDisplay } from '@/composables/tasks/useTaskDisplay'
@@ -885,10 +894,12 @@ const claimLocked = computed(
   () => !!taskInfo.value?.claimPoolTask && !taskInfo.value?.claimedByCurrentUser,
 )
 const claimSubmitting = ref(false)
-const { claim: claimHeld, unclaim: unclaimHeld, forceUnclaim: forceUnclaimHeld } = useTaskClaimActions({
+const { claim: claimHeld, unclaim: unclaimHeld, forceUnclaim: forceUnclaimHeld, reassign: reassignHeld } = useTaskClaimActions({
   reload: loadTaskDetail,
   submitting: claimSubmitting,
 })
+
+const reassignDialogVisible = ref(false)
 
 function handleClaimTask() {
   return claimHeld(effectiveTaskId.value)
@@ -907,6 +918,16 @@ function handleForceUnclaimTask() {
     task?.assignee ?? '',
     task?.assigneeName,
   )
+}
+
+function handleReassignTask() {
+  reassignDialogVisible.value = true
+}
+
+function confirmReassignTask(targetUserId: string) {
+  return reassignHeld(effectiveTaskId.value, targetUserId).then(() => {
+    reassignDialogVisible.value = false
+  })
 }
 
 // display helpers moved to useTaskDisplay composable

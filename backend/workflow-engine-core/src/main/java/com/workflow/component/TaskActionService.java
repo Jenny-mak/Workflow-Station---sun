@@ -179,6 +179,12 @@ public class TaskActionService {
         return taskClaimSupport.unclaimTask(taskId, userId);
     }
 
+    public TaskAssignmentResult reassignClaim(String taskId, String operatorUserId, String targetUserId) {
+        validateUserId(operatorUserId);
+        validateUserId(targetUserId);
+        return taskClaimSupport.reassignClaim(taskId, operatorUserId, targetUserId);
+    }
+
     public TaskAssignmentResult transferTask(String taskId, String fromUserId, String toUserId, String reason) {
         try {
             validateUserId(fromUserId);
