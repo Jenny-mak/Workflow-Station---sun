@@ -204,12 +204,15 @@
             :click-text="t('form.uploadClickText')"
             :fail-label="t('form.uploadFailed')"
             :remove-label="t('common.delete')"
+            :success-status-label="t('form.uploadStatusUploaded')"
+            :uploading-status-label="t('form.uploadStatusUploading')"
             :handle-success="(res: unknown, file: { name?: string; url?: string }, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadSuccess(res, file, col, list)"
             :handle-change="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadChange(col, list)"
             :handle-remove="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadRemove(col, list)"
             :handle-exceed="() => handleUploadExceed(col)"
             :handle-error="(error: unknown) => handleUploadError(col, error)"
             :handle-size-exceed="() => handleSizeExceed(col)"
+            :handle-duplicate="(name: string) => handleDuplicate(col, name)"
             :handle-open-details="(file) => openDetails(col, file)"
           />
         </div>
@@ -645,6 +648,10 @@ function handleUploadError(col: DialogColumn, error?: unknown) {
 
 function handleSizeExceed(col: DialogColumn) {
   ElMessage.warning(t('form.uploadSizeExceed', { size: maxFileSizeMbOf(col) }))
+}
+
+function handleDuplicate(_col: DialogColumn, name: string) {
+  ElMessage.warning(t('form.uploadDuplicate', { name }))
 }
 </script>
 

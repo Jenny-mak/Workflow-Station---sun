@@ -13,6 +13,8 @@ import {
   resolveUploadMaxFiles,
   splitUploadFileList,
   uploadValueFingerprint,
+  isDuplicateUploadFile,
+  rejectUploadFileReason,
 } from '../uploadFieldValue'
 
 describe('resolveUploadMaxFiles', () => {
@@ -142,5 +144,42 @@ describe('cell helpers', () => {
     expect(extractStoredUploadUrl({ data: { url: '/api/v1/upload/files/x' } })).toBe(
       '/api/v1/upload/files/x',
     )
+  })
+})
+
+describe('duplicate upload names', () => {
+  const existing = [
+    { name: 'Invoice.PDF', url: '/api/v1/upload/files/a?originalName=Invoice.PDF', status: 'success' },
+  ]
+
+  it('rejects the same original name case-insensitively', () => {
+    expect(isDuplicateUploadFile('invoice.pdf', existing)).toBe(true)
+    expect(isDuplicateUploadFile('other.pdf', existing)).toBe(false)
+  })
+
+  it('allows retrying a failed row with the same name', () => {
+    expect(isDuplicateUploadFile('a.pdf', [{ name: 'a.pdf', status: 'fail' }])).toBe(false)
+  })
+
+  it('reads the originalName from a stored URL when name is empty', () => {
+    expect(isDuplicateUploadFile('a.pdf', [
+      { url: '/api/v1/upload/files/x?originalName=a.pdf', status: 'success' },
+    ])).toBe(true)
+  })
+
+  it('prefers size over duplicate when the file is too large', () => {
+    expect(rejectUploadFileReason(
+      { name: 'invoice.pdf', size: 11 * 1024 * 1024 },
+      existing,
+      10,
+    )).toBe('size')
+  })
+
+  it('returns duplicate when the name is already present', () => {
+    expect(rejectUploadFileReason(
+      { name: 'invoice.pdf', size: 1024 },
+      existing,
+      10,
+    )).toBe('duplicate')
   })
 })

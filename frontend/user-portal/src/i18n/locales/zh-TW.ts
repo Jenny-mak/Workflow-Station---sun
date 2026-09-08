@@ -1027,6 +1027,9 @@ export default {
     waitUntilComplete: '請等待檔案上傳完成後再提交。',
     fixFailedBeforeSubmit: '有檔案上傳失敗。請刪除或重新上傳後再提交。',
     sessionExpired: '登入已過期。請重新登入後再上傳該檔案。',
+    duplicate: '檔案「{name}」已存在，請勿重複上傳',
+    statusUploaded: '已上傳',
+    statusUploading: '正在上傳',
   },
   filePreview: {
     previewFile: '預覽檔案',

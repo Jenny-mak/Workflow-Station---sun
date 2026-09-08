@@ -49,6 +49,8 @@
         :disabled="disabled"
         :fail-label="failLabel"
         :remove-label="removeLabel"
+        :success-status-label="successStatusLabel"
+        :uploading-status-label="uploadingStatusLabel"
         @open="openDetails(file)"
         @remove="removeFile(file)"
       />
@@ -61,7 +63,7 @@ import { computed } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 import type { UploadRequestOptions, UploadUserFile } from 'element-plus'
 import FormUploadFileCard from './FormUploadFileCard.vue'
-import { extractStoredUploadUrl, fileExceedsUploadSize } from './uploadFieldValue'
+import { extractStoredUploadUrl, rejectUploadFileReason } from './uploadFieldValue'
 
 const props = defineProps<{
   action: string
@@ -77,6 +79,8 @@ const props = defineProps<{
   maxFileSizeMb?: number
   failLabel: string
   removeLabel: string
+  successStatusLabel?: string
+  uploadingStatusLabel?: string
   httpRequest?: (options: UploadRequestOptions) => XMLHttpRequest | Promise<unknown> | void
   handleSuccess?: (...args: unknown[]) => void
   handleChange?: (...args: unknown[]) => void
@@ -84,6 +88,7 @@ const props = defineProps<{
   handleExceed?: (...args: unknown[]) => void
   handleError?: (...args: unknown[]) => void
   handleSizeExceed?: (maxMb: number) => void
+  handleDuplicate?: (name: string) => void
   handleOpenDetails?: (file: { url: string; name: string }) => void
 }>()
 
@@ -97,9 +102,13 @@ function cardKey(file: UploadUserFile): string {
 }
 
 function beforeUpload(file: File): boolean {
-  const maxMb = props.maxFileSizeMb
-  if (maxMb != null && fileExceedsUploadSize(file, maxMb)) {
-    props.handleSizeExceed?.(maxMb)
+  const reason = rejectUploadFileReason(file, props.fileList || [], props.maxFileSizeMb)
+  if (reason === 'size') {
+    props.handleSizeExceed?.(props.maxFileSizeMb ?? 0)
+    return false
+  }
+  if (reason === 'duplicate') {
+    props.handleDuplicate?.(file.name)
     return false
   }
   return true
