@@ -74,6 +74,16 @@ class FunctionUnitAccessProperties {
     }
 
     @Property(tries = 20)
+    @Label("属性: 无已部署 catalog 记录的功能单元应判定为禁用（fail-closed）")
+    void unresolvableFunctionUnitShouldBeTreatedAsDisabled(
+            @ForAll("functionUnitIds") String functionUnitCode) {
+        // No catalog row: every resolve lookup misses, so enabled status cannot be confirmed.
+        mockFunctionUnitResolveMiss(functionUnitCode);
+
+        assertThat(accessComponent.isFunctionUnitEnabled(functionUnitCode)).isFalse();
+    }
+
+    @Property(tries = 20)
     @Label("属性: 未配置访问权限的功能单元应拒绝所有用户")
     void unconfiguredAccessShouldDenyAllUsers(
             @ForAll("validUserIds") String userId,
@@ -223,18 +233,30 @@ class FunctionUnitAccessProperties {
     }
 
     @SuppressWarnings("unchecked")
-    private void mockFunctionUnitEnabled(String functionUnitId, boolean enabled) {
-        mockFunctionUnitResolveIdentity(functionUnitId);
+    private void mockFunctionUnitEnabled(String functionUnitIdOrCode, boolean enabled) {
+        mockFunctionUnitResolveIdentity(functionUnitIdOrCode);
+        String catalogId = catalogIdFor(functionUnitIdOrCode);
         Map<String, Object> response = new HashMap<>();
-        response.put("id", functionUnitId);
+        response.put("id", catalogId);
         response.put("enabled", enabled);
-        
+
+        // Detail lookups are keyed by catalog UUID, never by the dw code.
         when(restTemplate.exchange(
-                contains("/function-units/" + functionUnitId),
+                contains("/function-units/" + catalogId),
                 eq(HttpMethod.GET),
                 isNull(),
                 any(ParameterizedTypeReference.class)))
                 .thenReturn(ResponseEntity.ok(response));
+    }
+
+    /**
+     * Deployed catalog rows are keyed by UUID while callers pass dw codes / process keys, so the
+     * fixtures must not conflate the two — {@code isFunctionUnitEnabled} resolves before it reads
+     * the enabled flag, and a fixture that returned the code as its own catalog id would hide that.
+     */
+    private String catalogIdFor(String functionUnitIdOrCode) {
+        return UUID.nameUUIDFromBytes(functionUnitIdOrCode.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .toString();
     }
 
     /**
@@ -248,7 +270,7 @@ class FunctionUnitAccessProperties {
         }
         String encoded = java.net.URLEncoder.encode(functionUnitIdOrCode, java.nio.charset.StandardCharsets.UTF_8);
         Map<String, Object> payload = new HashMap<>();
-        payload.put("id", functionUnitIdOrCode);
+        payload.put("id", catalogIdFor(functionUnitIdOrCode));
 
         when(restTemplate.exchange(
                 contains("/function-units/by-process-key/" + encoded),
@@ -265,9 +287,20 @@ class FunctionUnitAccessProperties {
                 .thenReturn(ResponseEntity.ok(payload));
     }
 
+    /** Every admin-center resolve route misses, i.e. the code has no deployed catalog entry. */
     @SuppressWarnings("unchecked")
-    private void mockFunctionUnitAccess(String functionUnitId, List<String> roleIds) {
-        mockFunctionUnitResolveIdentity(functionUnitId);
+    private void mockFunctionUnitResolveMiss(String functionUnitCode) {
+        when(restTemplate.exchange(
+                contains("/function-units/"),
+                eq(HttpMethod.GET),
+                isNull(),
+                any(ParameterizedTypeReference.class)))
+                .thenThrow(new RuntimeException("not found"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void mockFunctionUnitAccess(String functionUnitIdOrCode, List<String> roleIds) {
+        mockFunctionUnitResolveIdentity(functionUnitIdOrCode);
         List<Map<String, Object>> accessList = new ArrayList<>();
         for (String roleId : roleIds) {
             Map<String, Object> access = new HashMap<>();
@@ -277,12 +310,16 @@ class FunctionUnitAccessProperties {
             accessList.add(access);
         }
         
-        when(restTemplate.exchange(
-                contains("/function-units/" + functionUnitId + "/access"),
-                eq(HttpMethod.GET),
-                isNull(),
-                any(ParameterizedTypeReference.class)))
-                .thenReturn(ResponseEntity.ok(accessList));
+        // Two call paths reach access rows: filterAccessibleFunctionUnits passes catalog ids from the
+        // admin-center list straight through, while canAccessFunctionUnit resolves a code first.
+        for (String key : Set.of(functionUnitIdOrCode, catalogIdFor(functionUnitIdOrCode))) {
+            when(restTemplate.exchange(
+                    contains("/function-units/" + key + "/access"),
+                    eq(HttpMethod.GET),
+                    isNull(),
+                    any(ParameterizedTypeReference.class)))
+                    .thenReturn(ResponseEntity.ok(accessList));
+        }
     }
 
     @SuppressWarnings("unchecked")

@@ -3530,3 +3530,32 @@
     验证：engine/DW 单测绿；screenshot
     frontend/developer-workstation/verification-screenshots/2026-09-09_email-field-mapping-attachments.png。
 
+- id: "1612"
+  status: fixed
+  fixed_at: "2026-09-08"
+  severity: major
+  category: bug
+  summary: "isFunctionUnitEnabled 用 dw code 打按主键查的接口，enabled 门禁从未生效（已改 fail-closed）"
+  file: "backend/user-portal/src/main/java/com/portal/component/FunctionUnitAccessComponent.java"
+  note: |
+    根因：isFunctionUnitEnabled 把 dw code 直接拼进 admin-center 的
+    GET /api/v1/admin/function-units/{id}，而该端点走 FunctionUnitLookup.getById →
+    findById，主键是 sys_function_units 的 UUID。code 永远匹配不上 UUID 主键，
+    每次必抛，被 catch-all 吞掉 return true —— PortalMainTableViewServiceImpl:123
+    与 :1309 两处 enabled 门禁是死代码，停用的 FU 在 Portal Data 菜单照样可见可进。
+    同源于 #1427（primary-keys/allocate 传 processDefinitionKey），修法一致：先 resolve。
+    最终改动：新增 toCatalogId()，非 UUID 输入先走 resolveFunctionUnitId()
+    （by-process-key → code/latest → 精确名），解析结果非 UUID 视为未解析；
+    改 fail-closed —— 无已部署 catalog 记录 / payload 空 / admin-center 不可达一律返回 false，
+    与同伴 canAccessFunctionUnit（allowedRoleCodes 空即拒）姿态一致。
+    catch 由 ERROR+全栈降为 WARN 无栈（该方法无缓存，原来 5 分钟刷 70 条带栈 ERROR）。
+    注意：requireEnabledFunctionUnit 本来就先 resolve 再调，传的是 UUID，走短路分支不变。
+    副作用（预期）：dev 的 fu-20260422-23tfag（Multi-Instance Subtask Demo）在
+    dw_function_units 有 PUBLISHED 视图但 sys_function_units 无记录，现从 Data 菜单隐藏。
+    测试夹具原先把 catalog id 当成 code 本身（bug 的镜像），已改为 code → 确定性 UUID；
+    mockFunctionUnitAccess 同时桩原始 id 与 UUID（filterAccessibleFunctionUnits 不解析，
+    直接用列表里的 catalog id）。新增属性用例 unresolvableFunctionUnitShouldBeTreatedAsDisabled。
+    验证：FunctionUnitAccessProperties 12 绿 + PortalMainTableView*/`*FunctionUnit*` 共 41 绿；
+    dev 重建 user-portal 后 —— atm-20260623-gaevus 零日志且 Data 菜单仍在、
+    fu-20260422-23tfag 打一条 WARN 并隐藏、旧 ERROR 计数 0、
+    任务详情 /processes/function-units/atm-20260623-gaevus/content 200（回归 requireEnabledFunctionUnit）。
