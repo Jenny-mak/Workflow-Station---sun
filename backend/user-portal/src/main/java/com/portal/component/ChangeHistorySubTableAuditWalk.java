@@ -16,7 +16,7 @@ import java.util.Set;
  */
 final class ChangeHistorySubTableAuditWalk {
 
-    /** Link-child tables (ATM Correspondence under Transaction) nest one level. */
+    /** Link-child tables nest one level under the parent row. */
     private static final int MAX_NESTED_SUB_TABLE_LIFT_DEPTH = 2;
 
     private ChangeHistorySubTableAuditWalk() {
@@ -50,7 +50,8 @@ final class ChangeHistorySubTableAuditWalk {
         appendEditableSlices(entries, enrichedTables, editableByBinding, aliases,
                 lookupDisplayByBinding, bestPriorityByBinding, rowsByTableAndIdentity);
         Map<String, Object> result = new LinkedHashMap<>();
-        rowsByTableAndIdentity.forEach((tableName, rows) -> result.put(tableName, new ArrayList<>(rows.values())));
+        rowsByTableAndIdentity.forEach((tableName, rows) ->
+                result.put(tableName, stripAuditKeys(rows.values())));
         return result;
     }
 
@@ -154,7 +155,7 @@ final class ChangeHistorySubTableAuditWalk {
         if (submittedRows.isEmpty()) {
             return;
         }
-        ChangeHistorySubTableSliceMerger.mergeSliceRows(rowsByIdentity, filteredRows);
+        ChangeHistorySubTableSliceMerger.mergeSliceRows(rowsByIdentity, filteredRows, designerPk);
     }
 
     private static List<Map<String, Object>> filterSubmittedRows(
@@ -173,6 +174,7 @@ final class ChangeHistorySubTableAuditWalk {
                     findEnrichedRow(submittedRow, enrichedRows, i, designerPrimaryKeyFields),
                     editableFields, lookupDisplayByField, designerPrimaryKeyFields);
             if (!filteredRow.isEmpty()) {
+                ChangeHistoryAuditRowKey.stamp(filteredRow, designerPrimaryKeyFields);
                 filteredRows.add(filteredRow);
             }
         }
@@ -231,7 +233,7 @@ final class ChangeHistorySubTableAuditWalk {
             Map<String, Object> nestedFiltered = filter(
                     nestedMap, nestedEnriched, editableByBinding, aliases, lookupDisplayByBinding,
                     remainingLiftDepth - 1);
-            ChangeHistorySubTableSliceMerger.mergeFilteredTableRows(rowsByTableAndIdentity, nestedFiltered, true);
+            ChangeHistorySubTableSliceMerger.mergeFilteredTableRows(rowsByTableAndIdentity, nestedFiltered, aliases);
         }
     }
 
@@ -276,6 +278,19 @@ final class ChangeHistorySubTableAuditWalk {
     private static Set<String> rowIdentities(Map<?, ?> row, List<String> designerPrimaryKeyFields) {
         return SubTableRowIdentity.identityValuesOf(
                 SubTableRowKeySupport.normalizeStringKeyMap(row), designerPrimaryKeyFields);
+    }
+
+    private static List<Map<String, Object>> stripAuditKeys(Iterable<Map<String, Object>> rows) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            if (row == null) {
+                continue;
+            }
+            Map<String, Object> copy = new LinkedHashMap<>(row);
+            copy.remove(ChangeHistoryAuditRowKey.FIELD);
+            out.add(copy);
+        }
+        return out;
     }
 
     private static List<?> findRows(

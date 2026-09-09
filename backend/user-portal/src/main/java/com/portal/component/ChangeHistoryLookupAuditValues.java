@@ -18,14 +18,13 @@ final class ChangeHistoryLookupAuditValues {
         if (!(value instanceof Map<?, ?> map) || map.isEmpty()) {
             return value;
         }
-        if (selectedDisplayField != null) {
-            Object displayed = map.get(selectedDisplayField);
-            if (displayed != null) {
-                return displayed;
-            }
+        if (selectedDisplayField == null || selectedDisplayField.isBlank()) {
+            return value;
         }
-        Object id = map.get("id");
-        return id != null ? id : value;
+        if (!map.containsKey(selectedDisplayField)) {
+            return value;
+        }
+        return map.get(selectedDisplayField);
     }
 
     static String selectedDisplayField(Map<?, ?> rule, ObjectMapper objectMapper) {

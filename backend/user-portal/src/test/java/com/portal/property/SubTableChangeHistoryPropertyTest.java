@@ -212,13 +212,11 @@ public class SubTableChangeHistoryPropertyTest {
                                 .build();
                 Map<String, Object> generated = new LinkedHashMap<>();
                 generated.put("__subTables__", Map.of("people", List.of()));
-                generated.put("id", "Test-000002");
+                generated.put(com.platform.common.jdbc.SubTableRowIdentity.CANONICAL_FIELD, "uuid-1");
                 generated.put("created_at", "2026-07-24T10:00:00Z");
                 generated.put("created_by", "system");
                 generated.put("updated_at", "2026-07-24T10:00:00Z");
                 generated.put("updated_by", "system");
-                generated.put("task_status", "PENDING");
-                generated.put("task_current_node", "sub form1");
                 SubTableChange change = SubTableChange.builder()
                                 .changeType("ROW_UPDATE")
                                 .rowIdentifier("Test-000002")
@@ -511,6 +509,10 @@ public class SubTableChangeHistoryPropertyTest {
                 ChangeHistoryComponent mockedHistory = mock(ChangeHistoryComponent.class);
                 // These rows are keyed by `row_id`, so that is the primary key their table declares.
                 // Identity comes from this configuration lookup, not from the column's name.
+                when(mockedHistory.primaryKeyResolver(any()))
+                                .thenReturn(slice -> List.of("row_id"));
+                when(mockedHistory.designerPrimaryKeyFieldsForSliceKey(any(), anyString()))
+                                .thenReturn(List.of("row_id"));
                 when(mockedHistory.designerPrimaryKeyFieldsForSliceKey(anyString()))
                                 .thenReturn(List.of("row_id"));
                 TaskFormSubTableChangeRecorder recorder = new TaskFormSubTableChangeRecorder(mockedHistory);
@@ -536,7 +538,7 @@ public class SubTableChangeHistoryPropertyTest {
                 newRow.put("updated_by", "Liam L Li");
                 Map<String, Object> oldSubTables = Map.of("atm transaction", List.of(oldRow));
                 Map<String, Object> newSubTables = Map.of("atm_transaction", List.of(newRow));
-                recorder.recordSubTableChangeHistory(context, oldSubTables, newSubTables);
+                recorder.recordSubTableChangeHistory(context, oldSubTables, newSubTables, "fu-test");
                 ArgumentCaptor<String> tableNameCaptor = ArgumentCaptor.forClass(String.class);
                 @SuppressWarnings("unchecked")
                 ArgumentCaptor<List<SubTableChange>> changesCaptor = ArgumentCaptor.forClass(List.class);

@@ -1,23 +1,28 @@
 package com.portal.component;
 
+import com.platform.common.jdbc.SubTableRowIdentity;
 import com.portal.dto.SubTableChange;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("Task approval sub-table change-history baselines")
 class TaskApprovalCompletionChangeHistoryTest {
 
     /**
-     * The table's DESIGNER primary key, as production resolves and passes it per slice
-     * ({@code dw_field_definitions.is_primary_key}). Rows below are keyed by {@code row_id}, so
-     * that is this fixture's configured key — it identifies rows because the table declares it,
-     * not because the platform assumes columns of that name are identities.
+     * Designer primary key for fixtures that store identity in {@code row_id}.
+     * That name identifies a row only because the fixture declares it, not
+     * because the platform guesses columns called {@code row_id}.
      */
     private static final List<String> PK = List.of("row_id");
+
     @Test
     @DisplayName("uses the pre-completion process state")
     void usesPreSyncSubTables() {
@@ -28,7 +33,8 @@ class TaskApprovalCompletionChangeHistoryTest {
         assertSame(existingSubTables, resolved);
         assertEquals(List.of(), TaskApprovalCompletionComponent.computeSubTableRowChanges(
                 List.of(Map.of("row_id", "transaction-1", "amount", 100)),
-                List.of(Map.of("row_id", "transaction-1", "amount", 100))));
+                List.of(Map.of("row_id", "transaction-1", "amount", 100)),
+                PK));
     }
 
     @Test
@@ -42,26 +48,26 @@ class TaskApprovalCompletionChangeHistoryTest {
     }
 
     @Test
-    @DisplayName("does not audit workflow-node progress fields as a user sub-table edit")
-    void ignoresWorkflowNodeProgressFields() {
+    @DisplayName("workflow node fields that reach the diff are recorded, not skipped by name")
+    void workflowNodeProgressFieldsAreRecordedWhenPresent() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
                 List.of(Map.of(
                         "row_id", "transaction-1",
                         "amount", 100,
-                        "task_current_node", "Transaction Investigation",
-                        "sub_task_current_node", "Transaction Investigation",
-                        "task_status", "IN_PROGRESS")),
+                        "task_current_node", "Transaction Investigation")),
                 List.of(Map.of(
                         "row_id", "transaction-1",
                         "amount", 100,
-                        "task_current_node", "Mark Completed",
-                        "sub_task_current_node", "Mark Completed",
-                        "task_status", "COMPLETED")));
-        assertEquals(List.of(), changes);
+                        "task_current_node", "Mark Completed")),
+                PK);
+        assertEquals(1, changes.size());
+        assertEquals("ROW_UPDATE", changes.get(0).getChangeType());
+        assertEquals(Map.of("task_current_node", "Transaction Investigation"), changes.get(0).getOldValues());
+        assertEquals(Map.of("task_current_node", "Mark Completed"), changes.get(0).getNewValues());
     }
 
     @Test
-    @DisplayName("same row_id with a changed business field is a row update")
+    @DisplayName("same configured primary key with a changed business field is a row update")
     void sameRowIdWithChangedFieldIsUpdate() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
                 List.of(Map.of("row_id", "corr-1", "channel", "Email", "assignee", "user-a")),
@@ -75,44 +81,90 @@ class TaskApprovalCompletionChangeHistoryTest {
     }
 
     @Test
-    @DisplayName("same business payload with a new row_id is identity churn, not a user add/delete")
+    @DisplayName("same configured PK with a new platform key is not add/delete")
     void identityChurnIsNotAUserOperation() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
-                List.of(Map.of("row_id", "uuid-A", "channel", "Email")),
-                List.of(Map.of("row_id", "uuid-B", "channel", "Email")));
+                List.of(row("item-1", "uuid-A", "channel", "Email")),
+                List.of(row("item-1", "uuid-B", "channel", "Email")),
+                List.of("item_id"));
         assertEquals(List.of(), changes);
     }
 
     @Test
-    @DisplayName("anonymous resubmit of an identified row is not a user delete")
-    void anonymousResubmitIsNotADelete() {
+    @DisplayName("sharing only a default stage value does not turn a new row into an update")
+    void sharedDefaultStageDoesNotTurnAddIntoUpdate() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
-                List.of(Map.of("row_id", "uuid-A", "channel", "Email")),
-                List.of(Map.of("channel", "Email")));
-        assertEquals(List.of(), changes);
+                List.of(Map.of("item_id", "existing", "stage", "OPEN", "channel", "Email")),
+                List.of(
+                        Map.of("item_id", "existing", "stage", "OPEN", "channel", "Email"),
+                        Map.of("item_id", "added", "stage", "OPEN", "channel", "SMS")),
+                List.of("item_id"));
+        assertEquals(1, changes.size());
+        assertEquals("ROW_ADD", changes.get(0).getChangeType());
+        assertEquals("added", changes.get(0).getRowIdentifier());
     }
 
     @Test
-    @DisplayName("system-filled assignee_id is not a user edit")
-    void assigneeAutofillIsNotAUserOperation() {
+    @DisplayName("an unchanged default stage is not recorded again on a real field edit")
+    void unchangedDefaultStageIsNotRecordedAgain() {
+        List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
+                List.of(Map.of("item_id", "existing", "stage", "OPEN", "channel", "Email")),
+                List.of(Map.of("item_id", "existing", "stage", "OPEN", "channel", "Letter")),
+                List.of("item_id"));
+        assertEquals(1, changes.size());
+        assertEquals("ROW_UPDATE", changes.get(0).getChangeType());
+        assertEquals(Map.of("channel", "Email"), changes.get(0).getOldValues());
+        assertEquals(Map.of("channel", "Letter"), changes.get(0).getNewValues());
+        assertTrue(!changes.get(0).getNewValues().containsKey("stage"));
+    }
+
+    @Test
+    @DisplayName("a new row that only shares a default stage is add, not an update of the old row")
+    void newRowSharingOnlyDefaultStageIsAddNotUpdate() {
+        List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
+                List.of(platformRow("uuid-A", "OPEN", null)),
+                List.of(platformRow("uuid-B", "OPEN", "Email")));
+        assertEquals(2, changes.size());
+        assertEquals(1, changes.stream().filter(c -> "ROW_ADD".equals(c.getChangeType())).count());
+        assertEquals(1, changes.stream().filter(c -> "ROW_DELETE".equals(c.getChangeType())).count());
+        assertEquals(0, changes.stream().filter(c -> "ROW_UPDATE".equals(c.getChangeType())).count());
+    }
+
+    @Test
+    @DisplayName("different platform keys with the same business values are add and delete")
+    void differentPlatformKeysWithSameBusinessValuesAreAddAndDelete() {
+        List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
+                List.of(platformRow("uuid-A", "OPEN", "Email")),
+                List.of(platformRow("uuid-B", "OPEN", "Email")));
+        assertEquals(2, changes.size());
+        assertEquals(1, changes.stream().filter(c -> "ROW_ADD".equals(c.getChangeType())).count());
+        assertEquals(1, changes.stream().filter(c -> "ROW_DELETE".equals(c.getChangeType())).count());
+        assertEquals(0, changes.stream().filter(c -> "ROW_UPDATE".equals(c.getChangeType())).count());
+    }
+
+    @Test
+    @DisplayName("empty-to-filled assignee_id is a real field change, not skipped by column name")
+    void assigneeIdEmptyToFilledIsRecorded() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
                 List.of(Map.of("row_id", "transaction-1", "amount", 100)),
-                List.of(Map.of("row_id", "transaction-1", "amount", 100, "assignee_id", "user-1")));
-        assertEquals(List.of(), changes);
-    }
-
-    @Test
-    @DisplayName("replacing a row's business values is recorded as an update")
-    void singletonReplacementWithFieldChangeIsUpdate() {
-        List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
-                List.of(Map.of("row_id", "uuid-A", "channel", "Email")),
-                List.of(Map.of("row_id", "uuid-B", "channel", "SMS")),
+                List.of(Map.of("row_id", "transaction-1", "amount", 100, "assignee_id", "user-1")),
                 PK);
         assertEquals(1, changes.size());
         assertEquals("ROW_UPDATE", changes.get(0).getChangeType());
-        assertEquals("uuid-A", changes.get(0).getRowIdentifier());
-        assertEquals(Map.of("channel", "Email"), changes.get(0).getOldValues());
-        assertEquals(Map.of("channel", "SMS"), changes.get(0).getNewValues());
+        assertEquals(Map.of("assignee_id", "user-1"), changes.get(0).getNewValues());
+    }
+
+    @Test
+    @DisplayName("a business column named id is recorded when it is not the configured primary key")
+    void businessColumnNamedIdIsRecorded() {
+        List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
+                List.of(Map.of("participant_key", "p1", "id", "old")),
+                List.of(Map.of("participant_key", "p1", "id", "new")),
+                List.of("participant_key"));
+        assertEquals(1, changes.size());
+        assertEquals("ROW_UPDATE", changes.get(0).getChangeType());
+        assertEquals(Map.of("id", "old"), changes.get(0).getOldValues());
+        assertEquals(Map.of("id", "new"), changes.get(0).getNewValues());
     }
 
     @Test
@@ -120,60 +172,36 @@ class TaskApprovalCompletionChangeHistoryTest {
     void unmatchedNewRowIsAdd() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
                 List.of(),
-                List.of(Map.of("row_id", "uuid-new", "channel", "Email")));
+                List.of(Map.of("row_id", "uuid-new", "channel", "Email")),
+                PK);
         assertEquals(1, changes.size());
         assertEquals("ROW_ADD", changes.get(0).getChangeType());
     }
 
     @Test
-    @DisplayName("two complete rows with the same payload stay two rows at the diff layer")
+    @DisplayName("two distinct identities with the same payload stay two rows")
     void twoCompleteIdenticalPayloadsRemainTwoRows() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
-                List.of(Map.of(
-                        "row_id", "uuid-old",
-                        "correspondence_channel", "Email",
-                        "correspondence_type", "Customer Notification",
-                        "mdc_status", "Draft",
-                        "processed_date", "2026-09-05")),
+                List.of(Map.of("item_id", "old", "channel", "Email", "status", "Draft")),
                 List.of(
-                        Map.of(
-                                "row_id", "uuid-new-1",
-                                "correspondence_channel", "Letter",
-                                "correspondence_type", "Customer Notification",
-                                "mdc_status", "Draft",
-                                "processed_date", "2026-09-05"),
-                        Map.of(
-                                "row_id", "uuid-new-2",
-                                "correspondence_channel", "Letter",
-                                "correspondence_type", "Customer Notification",
-                                "mdc_status", "Draft",
-                                "processed_date", "2026-09-05")));
-        assertEquals(2, changes.size());
-        assertEquals(1, changes.stream().filter(c -> "ROW_UPDATE".equals(c.getChangeType())).count());
-        assertEquals(1, changes.stream().filter(c -> "ROW_ADD".equals(c.getChangeType())).count());
-        assertEquals(0, changes.stream().filter(c -> "ROW_DELETE".equals(c.getChangeType())).count());
+                        Map.of("item_id", "new-1", "channel", "Letter", "status", "Draft"),
+                        Map.of("item_id", "new-2", "channel", "Letter", "status", "Draft")),
+                List.of("item_id"));
+        assertEquals(3, changes.size());
+        assertEquals(2, changes.stream().filter(c -> "ROW_ADD".equals(c.getChangeType())).count());
+        assertEquals(1, changes.stream().filter(c -> "ROW_DELETE".equals(c.getChangeType())).count());
+        assertEquals(0, changes.stream().filter(c -> "ROW_UPDATE".equals(c.getChangeType())).count());
     }
 
     @Test
-    @DisplayName("editing one row and adding a distinct second row is update+add, not a phantom delete")
+    @DisplayName("editing one identified row and adding another is update+add")
     void extraDistinctRowIsUpdateAndAddNotDelete() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
-                List.of(Map.of(
-                        "row_id", "uuid-old",
-                        "correspondence_type", "Customer Notification",
-                        "mdc_status", "Draft",
-                        "processed_date", "2026-09-05")),
+                List.of(Map.of("item_id", "kept", "status", "Draft")),
                 List.of(
-                        Map.of(
-                                "row_id", "uuid-new-1",
-                                "correspondence_type", "Customer Notification",
-                                "mdc_status", "Acknowledged",
-                                "processed_date", "2026-09-26"),
-                        Map.of(
-                                "row_id", "uuid-new-2",
-                                "correspondence_type", "Complaint",
-                                "mdc_status", "Closed",
-                                "processed_date", "2026-09-10")));
+                        Map.of("item_id", "kept", "status", "Acknowledged"),
+                        Map.of("item_id", "added", "status", "Closed")),
+                List.of("item_id"));
         assertEquals(2, changes.size());
         assertEquals(1, changes.stream().filter(c -> "ROW_UPDATE".equals(c.getChangeType())).count());
         assertEquals(1, changes.stream().filter(c -> "ROW_ADD".equals(c.getChangeType())).count());
@@ -189,7 +217,8 @@ class TaskApprovalCompletionChangeHistoryTest {
                         "correspondence_channel", "Email",
                         "correspondence_mode", "Outbound",
                         "mdc_status", "Draft")),
-                List.of(Map.of("row_id", "uuid-same")));
+                List.of(Map.of("row_id", "uuid-same")),
+                PK);
         assertEquals(List.of(), changes);
     }
 
@@ -206,7 +235,8 @@ class TaskApprovalCompletionChangeHistoryTest {
                         "row_id", "uuid-same",
                         "correspondence_channel", "",
                         "correspondence_mode", "",
-                        "mdc_status", "")));
+                        "mdc_status", "")),
+                PK);
         assertEquals(1, changes.size());
         assertEquals("ROW_UPDATE", changes.get(0).getChangeType());
         assertEquals(Map.of(
@@ -224,10 +254,29 @@ class TaskApprovalCompletionChangeHistoryTest {
     void recordsActualBusinessFieldChange() {
         List<SubTableChange> changes = TaskApprovalCompletionComponent.computeSubTableRowChanges(
                 List.of(Map.of("row_id", "transaction-1", "amount", 100)),
-                List.of(Map.of("row_id", "transaction-1", "amount", 125)));
+                List.of(Map.of("row_id", "transaction-1", "amount", 125)),
+                PK);
         assertEquals(1, changes.size());
         assertEquals("ROW_UPDATE", changes.get(0).getChangeType());
         assertEquals(Map.of("amount", 100), changes.get(0).getOldValues());
         assertEquals(Map.of("amount", 125), changes.get(0).getNewValues());
+    }
+
+    private static Map<String, Object> row(String itemId, String platformKey, String field, String value) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("item_id", itemId);
+        map.put(SubTableRowIdentity.CANONICAL_FIELD, platformKey);
+        map.put(field, value);
+        return map;
+    }
+
+    private static Map<String, Object> platformRow(String platformKey, String stage, String channel) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put(SubTableRowIdentity.CANONICAL_FIELD, platformKey);
+        map.put("stage", stage);
+        if (channel != null) {
+            map.put("channel", channel);
+        }
+        return map;
     }
 }

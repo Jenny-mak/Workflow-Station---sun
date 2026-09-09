@@ -309,12 +309,16 @@ public class ProcessFormComponent {
                 .build();
 
         try {
-            changeHistoryComponent.recordFieldChanges(context, snapshotOldValues, userChanges);
-                    Object filteredOldSubTables = changeHistorySubmissionFilter().filterProcessSubTableBaseline(
-                        gate.getFunctionUnitCode(), snapshotOldValues.get("__subTables__"));
+            changeHistoryComponent.recordFieldChanges(context,
+                    changeHistorySubmissionFilter().projectProcessAuditBaseline(
+                            gate.getFunctionUnitCode(), snapshotOldValues),
+                    userChanges);
+            Object filteredOldSubTables = changeHistorySubmissionFilter().filterProcessSubTableBaseline(
+                    gate.getFunctionUnitCode(), snapshotOldValues.get("__subTables__"));
             recordSubTableChangeHistory(context,
-                        filteredOldSubTables,
-                    userChanges.get("__subTables__"));
+                    filteredOldSubTables,
+                    userChanges.get("__subTables__"),
+                    gate.getFunctionUnitCode());
         } catch (RuntimeException ex) {
             log.warn("process form change-history skipped for {}: {}", processInstanceId, ex.getMessage());
         }
@@ -323,17 +327,18 @@ public class ProcessFormComponent {
     @SuppressWarnings("unchecked")
     private void recordSubTableChangeHistory(ChangeHistoryContext context,
                                               Object oldSubTablesObj,
-                                              Object newSubTablesObj) {
+                                              Object newSubTablesObj,
+                                              String functionUnitCode) {
         if (newSubTablesObj == null) {
             return;
         }
         try {
             Map<String, List<Map<String, Object>>> oldRowsByTable =
                     ChangeHistoryComponent.normalizeSubTableRowsByHistoryName(oldSubTablesObj,
-                            changeHistoryComponent::designerPrimaryKeyFieldsForSliceKey);
+                            changeHistoryComponent.primaryKeyResolver(functionUnitCode));
             Map<String, List<Map<String, Object>>> newRowsByTable =
                     ChangeHistoryComponent.normalizeSubTableRowsByHistoryName(newSubTablesObj,
-                            changeHistoryComponent::designerPrimaryKeyFieldsForSliceKey);
+                            changeHistoryComponent.primaryKeyResolver(functionUnitCode));
             for (Map.Entry<String, List<Map<String, Object>>> subTableEntry : newRowsByTable.entrySet()) {
                 String subTableKey = subTableEntry.getKey();
                 List<Map<String, Object>> newRows = subTableEntry.getValue();
@@ -341,7 +346,8 @@ public class ProcessFormComponent {
                 // Pair rows by the identity this table declares, resolved per slice from Table
                 // Design — never by assuming a column name means "identity".
                 List<SubTableChange> changes = SubTableChangeHistoryDiff.compute(oldRows, newRows,
-                        changeHistoryComponent.designerPrimaryKeyFieldsForSliceKey(subTableKey));
+                        changeHistoryComponent.designerPrimaryKeyFieldsForSliceKey(
+                                functionUnitCode, subTableKey));
                 if (!changes.isEmpty()) {
                     changeHistoryComponent.recordSubTableChanges(
                             context, subTableKey, changes);
