@@ -17,6 +17,10 @@ cache/
 # interrupted an interactive rebase mid-run, which git reports as an unrelated failure.
 daemon.pid
 daemon.sock
+# codegraph.lock is the same story: tracked until 2026-09-09, deleted and rewritten as the
+# daemon starts and stops, so it surfaced as a stray deletion in every commit and blocked
+# `git rebase` with "cannot rebase: You have unstaged changes".
+codegraph.lock
 
 # Hook markers
 .dirty
