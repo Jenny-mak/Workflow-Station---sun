@@ -428,6 +428,20 @@ export default {
     extractFieldCatalogLead: 'Field catalog — Field Mapping tab on the monitor dialog.',
     extractAttributeSample:
       'Example: map Source From (sender) → main-table sender_email; runtime stores the raw From header (display name + address).',
+    extractAttachmentsTitle: 'Field Mapping — store email attachments',
+    extractAttachmentsBody:
+      'Add a Field Mapping row with Source = Attachments. The target must be a main-table FILE column. One email’s attachments all land in that field (one file = URL; two or more = JSON [{url,name}]). Inline CID images stay in the HTML body and are not stored. Oversized files (over 50MB) or more than 10 files are skipped and recorded; if Required is checked and nothing remains, the email goes to manual review.',
+    extractAttachmentsCatalogLead: 'Field catalog — Attachments source on the Field Mapping tab.',
+    fSourceAttachments:
+      'Source group Attachments. Maps every non-inline attachment of the inbound email into one FILE field. Method is locked to Direct (whole value).',
+    fAttachmentsTarget:
+      'Target dropdown lists only FILE columns on the main table. Save and Deploy reject a non-FILE target. Empty list: add a FILE column in Table Design first.',
+    fAttachmentsMethod:
+      'Method is Direct (whole value). The whole attachment set is stored; there is no filename/MIME filter in this version.',
+    fAttachmentsRequired:
+      'When checked, an email with no usable attachments (none, all oversized, or all failed to store) goes to manual review instead of starting a process.',
+    fSampleAttachments:
+      'Optional Sample Email field: comma-separated filenames for Preview only. Runtime uses the real attachments; this box never uploads files.',
     extractSubTableTitle: 'Sub-table (HTML table) tab',
     extractSubTableBody:
       'Optional third tab. Map one HTML <table> in the email to a form Sub-Table (one email row per record). Add a Sub-Table on the main process form first if the binding list is empty.',

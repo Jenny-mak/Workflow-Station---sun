@@ -26,9 +26,11 @@ import {
 import { openFilePreview } from '@/composables/filePreview/useFilePreview'
 import { useMainTableViewLookupHydration } from '@/composables/mainTableView/useMainTableViewLookupHydration'
 import { useMainTableViewFkHydration } from '@/composables/mainTableView/useMainTableViewFkHydration'
+import { useMainTableViewRowTasks } from '@/composables/mainTableView/useMainTableViewRowTasks'
 import {
   filterTableGroups,
   groupViewsByTable,
+  isMainTableView,
   pickDefaultView,
   resolveRowOpenTarget,
   sortViewsByName,
@@ -63,6 +65,8 @@ const {
   hydrateFkCells,
   formatFkDisplayCell,
 } = useMainTableViewFkHydration(gridColumns, allRows)
+
+const { loadRowTasks, rowTasksOf } = useMainTableViewRowTasks(allRows)
 
 const gridRuntime = reactive<GridRuntimeState>(createDefaultGridRuntime())
 
@@ -109,6 +113,10 @@ const selectedFuCode = computed(() => String(route.params.functionUnitCode || ''
 const selectedViewMeta = computed(() =>
   views.value.find(v => v.id === selectedViewId.value),
 )
+
+// Task markers only make sense where one row is one request. Read from the view's table type,
+// never from a column name — what the designer called the case identifier varies per function unit.
+const showRowTaskColumn = computed(() => isMainTableView(selectedViewMeta.value))
 
 const showExportButton = computed(() => selectedViewMeta.value?.enableExport !== false)
 const showImportButton = computed(() => selectedViewMeta.value?.enableImport !== false)
@@ -157,6 +165,8 @@ function handleSelectTable(index: string) {
 const displayColumns = computed(() => orderedColumns(gridColumns.value, gridRuntime))
 
 const MTV_SELECTION_COL_WIDTH = 48
+/** Width of the task-marker column; must match the `width` bound on it in the template. */
+const MTV_TASK_COL_WIDTH = 44
 
 const layoutStorageKey = computed(() =>
   selectedViewId.value != null ? listLayoutStorageKey(selectedViewId.value) : '',
@@ -176,7 +186,9 @@ const {
 } = useListColumnLayout({
   storageKey: layoutStorageKey,
   fields: layoutFields,
-  extraWidth: MTV_SELECTION_COL_WIDTH,
+  // Both leading fixture columns are outside `fields`, so their width has to be declared here or
+  // the fit calculation lets the data columns overflow by exactly the task column.
+  extraWidth: () => MTV_SELECTION_COL_WIDTH + (showRowTaskColumn.value ? MTV_TASK_COL_WIDTH : 0),
   defaultWidthOf: (field) => {
     const col = displayColumns.value.find((c) => c.fieldName === field)
     if (!col) return headerFitColumnWidth(field)
@@ -292,6 +304,9 @@ async function loadData() {
     tableRef.value?.clearSelection()
     await hydrateLookupCells()
     await hydrateFkCells()
+    await loadRowTasks(showRowTaskColumn.value, () => {
+      ElMessage.error(t('mainTableView.loadRowTasksFailed'))
+    })
     await nextTick()
     tableRef.value?.doLayout?.()
   } catch (e: unknown) {
@@ -439,6 +454,14 @@ async function handleExport() {
  * the detail form bound to it in Developer Workstation. Rows that can do neither say so rather than
  * appearing inert or landing the user on an unrelated page.
  */
+/**
+ * Opens one of the row's To Do tasks. The task id comes from the marker lookup, so this lands on
+ * the same task the To Do list would open — no searching by case number in between.
+ */
+function openRowTask(task: { taskId: string }) {
+  router.push(`/tasks/${task.taskId}`)
+}
+
 function openRow(row: GridDisplayRow) {
   const target = resolveRowOpenTarget(
     selectedViewMeta.value,
@@ -729,10 +752,11 @@ onMounted(async () => {
     importResultVisible, importResult, importProgressLabel, importResultStatus, importResultHeadline,
     selectedFuCode, selectedViewMeta, showExportButton, showImportButton, selectedFu, displayColumns,
     viewListCollapsed, viewSearchKeyword, filteredGroupedViews, selectedTableKey, currentTableViewsSorted, handleSelectTable,
-    MTV_SELECTION_COL_WIDTH, gridInnerStyle, gridScrollRef, gridFits, gridTableHeight, gridTableKey,
+    MTV_SELECTION_COL_WIDTH, MTV_TASK_COL_WIDTH, gridInnerStyle, gridScrollRef, gridFits, gridTableHeight, gridTableKey,
     pagedRows, displayTotal, toListColumnMeta,
     handleSearch, handlePageChange, formatCell, isRowSelectable, getRowKey, onSelectionChange, openRow, columnIndex,
     isFkLinkCell, openFkTarget, isLookupLinkCell, openLookupTarget, isFileLinkCell, fileLinksOf, previewFile,
+    showRowTaskColumn, rowTasksOf, openRowTask,
     handleSortChange, handleClearSort, openFilterDialog, openWidthDialog, handleMoveColumn,
     applyColumnFilter, clearColumnFilter, clearFilterFromDialog, applyColumnWidth,
     handleColumnResize, handleColumnResizeEnd, displayWidthOf,

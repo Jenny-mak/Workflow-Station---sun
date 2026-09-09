@@ -1,14 +1,17 @@
 package com.portal.component;
 
+import org.springframework.stereotype.Component;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * TTL cache for My Requests "current step" MI name maps. BPMN is per process definition, not per
- * row; without this every page/filter re-fetched XML from the engine.
+ * Shared TTL cache for the inner-task → outer MI box map. One bean for My Request
+ * Current Step / Current Assignee and Owner Case Handler writes.
  */
+@Component
 final class MiBpmnNameMapCache {
 
     private static final long TTL_MS = 5 * 60 * 1000L;
@@ -22,14 +25,21 @@ final class MiBpmnNameMapCache {
                 }
             });
 
-    Map<String, String> getOrLoad(String processDefinitionKey, Supplier<Map<String, String>> load) {
+    Map<String, String> getIfPresent(String processDefinitionKey) {
         Cached cached = cache.get(processDefinitionKey);
-        long now = System.currentTimeMillis();
-        if (cached != null && now - cached.cachedAt < TTL_MS) {
-            return cached.map;
+        if (cached == null || System.currentTimeMillis() - cached.cachedAt >= TTL_MS) {
+            return null;
+        }
+        return cached.map;
+    }
+
+    Map<String, String> getOrLoad(String processDefinitionKey, Supplier<Map<String, String>> load) {
+        Map<String, String> present = getIfPresent(processDefinitionKey);
+        if (present != null) {
+            return present;
         }
         Map<String, String> loaded = load.get();
-        cache.put(processDefinitionKey, new Cached(loaded, now));
+        cache.put(processDefinitionKey, new Cached(loaded, System.currentTimeMillis()));
         return loaded;
     }
 

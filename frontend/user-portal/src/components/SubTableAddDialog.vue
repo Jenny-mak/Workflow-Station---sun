@@ -375,11 +375,11 @@
                       :remove-label="t('common.delete')"
                       :success-status-label="t('upload.statusUploaded')"
                       :uploading-status-label="t('upload.statusUploading')"
-                      :handle-success="(res: unknown, file: { name?: string; url?: string }, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadSuccess(res, file, col, list)"
-                      :handle-change="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadChange(col, list)"
-                      :handle-remove="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadRemove(col, list)"
+                      :handle-success="(res, file, list) => handleUploadSuccess(res, file, col, list)"
+                      :handle-change="(_file, list) => handleUploadChange(col, list)"
+                      :handle-remove="(_file, list) => handleUploadRemove(col, list)"
                       :handle-exceed="() => handleUploadExceed(col)"
-                      :handle-error="(error: unknown) => handleUploadError(col, error)"
+                      :handle-error="(error) => handleUploadError(col, error)"
                       :handle-size-exceed="() => handleSizeExceed(col)"
                       :handle-duplicate="(name: string) => handleDuplicate(col, name)"
                       :handle-open-details="(file) => openDialogDetails(col, file)"
@@ -538,7 +538,7 @@
                     />
                   </div>
 
-                  <!-- owner: readonly; backend fills Creator / Current Assignee -->
+                  <!-- owner: readonly; Creator is prefilled on open, Case Handler stays empty -->
                   <OwnerField
                     v-else-if="col.type === 'owner'"
                     :model-value="formData[col.field]"

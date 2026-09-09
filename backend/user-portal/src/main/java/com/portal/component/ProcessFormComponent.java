@@ -89,6 +89,10 @@ public class ProcessFormComponent {
     @Autowired
     private OwnerFieldComponent ownerFieldComponent;
 
+    @Lazy
+    @Autowired
+    private MiOuterStepResolver miOuterStepResolver;
+
     /** Display name for audit fields; falls back to the raw user id when the resolver is unavailable. */
     private String resolveAuditUserDisplay(String userId) {
         UserDisplayNameResolver resolver = userDisplayNameResolver;
@@ -280,7 +284,8 @@ public class ProcessFormComponent {
                                 processInstance.getStartUserId(),
                                 processInstance.getCurrentAssignee(),
                                 processInstance.getCandidateUsers(),
-                                oldValues),
+                                oldValues,
+                                ownerMiLookup(processInstance)),
                         updatedVariables);
             }
             // System audit fields: refresh updated_at/updated_by at real update
@@ -784,5 +789,12 @@ public class ProcessFormComponent {
             log.debug("Failed to attach MI assignment configs for processDefinitionKey={}: {}",
                     processDefinitionKey, e.getMessage());
         }
+    }
+
+    private MiOuterStepResolver.OuterLookup ownerMiLookup(ProcessInstance instance) {
+        if (miOuterStepResolver == null || instance == null) {
+            return MiOuterStepResolver.OuterLookup.known(null);
+        }
+        return miOuterStepResolver.lookup(instance.getProcessDefinitionKey(), instance.getCurrentNode());
     }
 }

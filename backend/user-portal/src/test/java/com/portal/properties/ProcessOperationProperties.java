@@ -80,7 +80,8 @@ class ProcessOperationProperties {
                 Mockito.mock(com.portal.component.MainTableViewInvolvementChecker.class),
                 Mockito.mock(com.portal.component.MainTableViewAccessResolver.class),
                 functionUnitAccessComponent,
-                jdbcTemplate);
+                jdbcTemplate,
+                Mockito.mock(com.portal.component.MiOuterStepResolver.class));
         ProcessStartComponent processStartComponent = new ProcessStartComponent(
                 processInstanceRepository,
                 processHistoryRepository,
@@ -137,6 +138,8 @@ class ProcessOperationProperties {
         
         // Mock FunctionUnitAccessComponent 返回功能单元内容（包含 BPMN XML）
         when(functionUnitAccessComponent.resolveFunctionUnitId(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(functionUnitAccessComponent.resolveFunctionUnitIdAlignedWithActiveCatalog(any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         // i18n: 返回 key 本身，避免分类等展示字段为 null

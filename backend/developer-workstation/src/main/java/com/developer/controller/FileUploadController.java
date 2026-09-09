@@ -7,11 +7,13 @@ import com.platform.common.exception.ErrorResponse;
 import com.developer.entity.UploadedFile;
 import com.developer.exception.DeveloperBusinessException;
 import com.developer.exception.ResourceNotFoundException;
+import com.platform.common.constant.PlatformConstants;
 import com.platform.security.util.SecurityContextUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
@@ -20,6 +22,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.Map;
 
@@ -36,17 +40,22 @@ public class FileUploadController {
 
     private final FileUploadComponent fileUploadComponent;
 
+    @Value("${service.internal-token:}")
+    private String serviceInternalToken;
+
     /**
      * Upload a single file. Any authenticated caller may upload — this endpoint backs
      * ordinary form/sub-table Attachment fields used by portal end users, not just the
      * developer workstation, so it is intentionally NOT gated by a developer permission.
      * Anonymous callers receive 401 (SecurityConfig is permitAll; this check is the gate).
+     * First-party services (Email Monitor) may upload with a valid C-3 {@code X-Service-Token}.
      */
     @PostMapping
-    @Operation(summary = "Upload file", description = "Any file type, max 50MB; login required")
+    @Operation(summary = "Upload file", description = "Any file type, max 50MB; login or service token")
     public ResponseEntity<ApiResponse<Map<String, Object>>> upload(
-            @RequestParam("file") MultipartFile file) {
-        if (!SecurityContextUtils.isAuthenticated()) {
+            @RequestParam("file") MultipartFile file,
+            @RequestHeader(value = PlatformConstants.HEADER_SERVICE_TOKEN, required = false) String serviceToken) {
+        if (!SecurityContextUtils.isAuthenticated() && !isValidServiceToken(serviceToken)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(errorResponse("UNAUTHENTICATED", "Authentication required"));
         }
@@ -118,6 +127,16 @@ public class FileUploadController {
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    private boolean isValidServiceToken(String provided) {
+        if (serviceInternalToken == null || serviceInternalToken.isBlank()
+                || provided == null || provided.isBlank()) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                serviceInternalToken.getBytes(StandardCharsets.UTF_8),
+                provided.getBytes(StandardCharsets.UTF_8));
     }
 
     private <T> ApiResponse<T> errorResponse(String code, String message) {

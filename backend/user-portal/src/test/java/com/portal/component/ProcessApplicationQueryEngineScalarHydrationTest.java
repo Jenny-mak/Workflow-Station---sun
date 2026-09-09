@@ -63,7 +63,8 @@ class ProcessApplicationQueryEngineScalarHydrationTest {
                 mock(MainTableViewInvolvementChecker.class),
                 mock(MainTableViewAccessResolver.class),
                 mock(FunctionUnitAccessComponent.class),
-                mock(JdbcTemplate.class));
+                mock(JdbcTemplate.class),
+                mock(MiOuterStepResolver.class));
     }
 
     @Test

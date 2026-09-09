@@ -50,25 +50,40 @@ public class FunctionUnitLifecycleComponent {
     private final I18nService i18nService;
 
     /**
-     * Validate function unit: structure/dependency/trial deploy; mark VALIDATED on success
+     * Validate function unit: structure/dependency/trial deploy.
+     * DRAFT transitions to VALIDATED on success; VALIDATED/DEPLOYED keep status
+     * so DW overwrite-import of an already deployed catalog can still pass /validate.
      */
     @Transactional
     public ValidationResult validateFunctionUnit(String id, String validatorId) {
         FunctionUnit functionUnit = functionUnitLookup.getById(id);
-
-        if (!functionUnit.isValidatable()) {
-            throw new AdminBusinessException("INVALID_STATUS",
-                    i18nService.getMessage("admin.fu.validate_draft_only", functionUnit.getStatus()));
-        }
+        assertContentValidationAllowed(functionUnit);
 
         ValidationResult result = validationComponent.validate(id);
         result.setFunctionUnitId(id);
-        result.setStatus(FunctionUnitStatus.DRAFT.name());
-
+        result.setStatus(functionUnit.getStatus().name());
         if (!result.isValid()) {
             return result;
         }
+        return persistDraftTransitionIfNeeded(functionUnit, validatorId, result);
+    }
 
+    private void assertContentValidationAllowed(FunctionUnit functionUnit) {
+        FunctionUnitStatus status = functionUnit.getStatus();
+        if (status == FunctionUnitStatus.DRAFT
+                || status == FunctionUnitStatus.VALIDATED
+                || status == FunctionUnitStatus.DEPLOYED) {
+            return;
+        }
+        throw new AdminBusinessException("INVALID_STATUS",
+                i18nService.getMessage("admin.fu.validate_draft_only", status));
+    }
+
+    private ValidationResult persistDraftTransitionIfNeeded(
+            FunctionUnit functionUnit, String validatorId, ValidationResult result) {
+        if (!functionUnit.isValidatable()) {
+            return result;
+        }
         functionUnit.markAsValidated(validatorId);
         functionUnitRepository.save(functionUnit);
         result.setStatus(FunctionUnitStatus.VALIDATED.name());

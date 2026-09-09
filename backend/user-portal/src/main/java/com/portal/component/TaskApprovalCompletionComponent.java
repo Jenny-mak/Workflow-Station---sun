@@ -59,6 +59,16 @@ public class TaskApprovalCompletionComponent {
     @Autowired
     private RequestIdEnricher requestIdEnricher;
 
+    /** Lazy: Case Handler Complete/terminal writes; null in {@code new}-constructed tests skips Owner. */
+    @Lazy
+    @Autowired
+    private OwnerFieldComponent ownerFieldComponent;
+
+    /** Lazy: MI outer-box name for Complete MAIN writes; null in {@code new}-constructed tests. */
+    @Lazy
+    @Autowired
+    private MiOuterStepResolver miOuterStepResolver;
+
     /**
      * Handles approval completion
      * Via WorkflowEngineClient calling Flowable engine
@@ -185,6 +195,18 @@ public class TaskApprovalCompletionComponent {
 
                 Map<String, Object> mergedVars = new HashMap<>(variablesForEngine);
 
+                if (ownerFieldComponent != null) {
+                    if (OwnerFieldComponent.taskScopedCurrentItem(mergedVars) == null) {
+                        Map<String, Object> fromTask = OwnerFieldComponent.taskScopedCurrentItem(task.getVariables());
+                        if (fromTask != null) {
+                            mergedVars.put("_currentItem", fromTask);
+                        }
+                    }
+                    ownerFieldComponent.applyOnComplete(
+                            syncInstance.getFunctionUnitCode(), mergedVars, userId,
+                            completingMiLookup(task, syncInstance));
+                    OwnerFieldComponent.stripProcessWideCurrentItem(mergedVars);
+                }
                 taskFormComponent.mergeCompletedTaskSnapshotIntoVariables(
                         taskId, userId, task.getTaskDefinitionKey(), syncProcessId, mergedVars);
                 // Prevent geometric __subTables__ bloat: collapse deep nested copies to the canonical
@@ -298,6 +320,7 @@ public class TaskApprovalCompletionComponent {
                             instance.setCompletedAt(finishedAt);
                             instance.setCurrentNode(null);
                             instance.setCurrentAssignee(null);
+                            clearMainCaseHandler(instance);
                             processInstanceRepository.save(instance);
                             log.info("Process instance {} updated to COMPLETED with currentNode: {}",
                                     processInstanceId, instance.getCurrentNode());
@@ -343,6 +366,7 @@ public class TaskApprovalCompletionComponent {
                                         instance.setEndTime(finishedAt);
                                         instance.setCompletedAt(finishedAt);
                                         instance.setCurrentNode(null);
+                                        clearMainCaseHandler(instance);
                                     }
 
                                     processInstanceRepository.save(instance);
@@ -371,15 +395,38 @@ public class TaskApprovalCompletionComponent {
         }
     }
 
+    private MiOuterStepResolver.OuterLookup completingMiLookup(TaskInfo task, ProcessInstance instance) {
+        if (miOuterStepResolver == null || task == null) {
+            return MiOuterStepResolver.OuterLookup.unknown();
+        }
+        String processKey = task.getProcessDefinitionKey();
+        if (processKey == null || processKey.isBlank()) {
+            processKey = instance != null ? instance.getProcessDefinitionKey() : null;
+        }
+        String node = task.getTaskName();
+        if (node == null || node.isBlank()) {
+            node = instance != null ? instance.getCurrentNode() : null;
+        }
+        return miOuterStepResolver.lookup(processKey, node);
+    }
+
+    private void clearMainCaseHandler(ProcessInstance instance) {
+        if (ownerFieldComponent == null) {
+            return;
+        }
+        Map<String, Object> vars = instance.getVariables() == null
+                ? new HashMap<>()
+                : new HashMap<>(instance.getVariables());
+        ownerFieldComponent.clearMainCaseHandler(instance.getFunctionUnitCode(), vars);
+        instance.setVariables(vars);
+    }
+
     /**
      * Prevents a task completion from wiping a service task's sub-table output. When the outbound
      * {@code variables} carry a {@code __subTables__} with an empty slice (e.g. a bare approval that
      * never loaded or edited the grid), sending it to Flowable would overwrite the populated engine
-    * rows with {@code []}. Fills only internally produced empty/missing slices from the live engine's
-    * {@code __subTables__}; explicitly submitted slices, including delete-all, are left untouched. Best-effort — a failed
-     * engine round-trip leaves {@code variables} unchanged. Shares the fill-empty merge with the
-     * read paths via {@link EngineSubTableHydrator}; the {@code hasEmptySlice} pre-check keeps this
-     * write path from making the engine round-trip when there is nothing to protect.
+     * rows with {@code []}. Fills only internally produced empty/missing slices from the live engine's
+     * {@code __subTables__}; explicitly submitted slices, including delete-all, are left untouched.
      */
     void preserveEngineSubTablesOnComplete(String processInstanceId, Map<String, Object> variables) {
         preserveEngineSubTablesOnComplete(processInstanceId, variables, Map.of());

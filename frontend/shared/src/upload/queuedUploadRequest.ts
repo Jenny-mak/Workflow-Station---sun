@@ -1,18 +1,29 @@
 import { MAX_UPLOAD_CONCURRENCY, sharedUploadQueue } from './uploadQueue'
 import { refreshUploadAuth, UPLOAD_HTTP_UNAUTHORIZED } from './uploadAuthRefresh'
 
-/** Subset of Element Plus {@code UploadRequestOptions} used by the shared XHR. */
+/**
+ * Subset of Element Plus {@code UploadRequestOptions} used by the shared XHR.
+ *
+ * `data` and `headers` mirror Element Plus exactly rather than the narrower shapes this file
+ * used to declare: el-upload really can hand over a `[Blob, filename]` tuple or a `Headers`
+ * object, and declaring them away both hid that from {@link buildUploadBody} / {@link applyHeaders}
+ * and made {@link queuedUploadRequest} unassignable to el-upload's own `http-request` prop.
+ */
 export interface QueuedUploadRequestOptions {
   action: string
   method?: string
-  data?: Record<string, string | Blob>
+  data?: Record<string, string | Blob | [Blob, string]>
   filename?: string
   file: File
-  headers?: Record<string, string>
+  headers?: Headers | Record<string, string | number | null | undefined>
   withCredentials?: boolean
-  onSuccess: (response: unknown) => void
-  onError: (error: Error) => void
-  onProgress?: (evt: { percent: number }) => void
+  // Method syntax, not property syntax: these are callbacks el-upload supplies, and it declares
+  // narrower parameters than this queue can promise to pass (it reports a plain Error where
+  // el-upload types an UploadAjaxError). Method syntax is checked bivariantly, which is what a
+  // callback contract wants; property syntax would reject el-upload's own options object.
+  onSuccess(response: unknown): void
+  onError(error: Error): void
+  onProgress?(evt: { percent: number }): void
 }
 
 /**
@@ -83,10 +94,16 @@ function postOneFile(
   })
 }
 
-function applyHeaders(xhr: XMLHttpRequest, headers?: Record<string, string>): void {
+function applyHeaders(xhr: XMLHttpRequest, headers?: QueuedUploadRequestOptions['headers']): void {
   if (!headers) return
+  if (headers instanceof Headers) {
+    headers.forEach((value, key) => xhr.setRequestHeader(key, value))
+    return
+  }
   for (const [key, value] of Object.entries(headers)) {
-    xhr.setRequestHeader(key, value)
+    // A null / undefined header value means "do not send this header" in el-upload.
+    if (value === null || value === undefined) continue
+    xhr.setRequestHeader(key, String(value))
   }
 }
 
@@ -95,7 +112,10 @@ function buildUploadBody(options: QueuedUploadRequestOptions): FormData {
   body.append(options.filename || 'file', options.file, options.file.name)
   if (options.data) {
     for (const [key, value] of Object.entries(options.data)) {
-      body.append(key, value)
+      // el-upload's `[blob, filename]` form maps onto FormData's three-argument append; without
+      // this the tuple stringified into the body as "[object Blob],name".
+      if (Array.isArray(value)) body.append(key, value[0], value[1])
+      else body.append(key, value)
     }
   }
   return body

@@ -43,117 +43,27 @@
               placeholder="<table>...</table>"
             />
           </el-form-item>
+          <el-form-item :label="t('emailMonitor.wizard.sampleAttachments')">
+            <el-input
+              v-model="sample.attachmentNames"
+              :placeholder="t('emailMonitor.wizard.sampleAttachmentsPlaceholder')"
+            />
+            <div class="wizard-hint">{{ t('emailMonitor.wizard.sampleAttachmentsHint') }}</div>
+          </el-form-item>
         </el-form>
       </el-tab-pane>
 
       <!-- Main field mapping -->
       <el-tab-pane :label="t('emailMonitor.wizard.fieldMapping')" name="fields">
-        <div class="wizard-toolbar">
-          <el-button size="small" type="primary" @click="addFieldRule">
-            {{ t('emailMonitor.wizard.addField') }}
-          </el-button>
-          <span v-if="lastSelection" class="wizard-selection">
-            {{ t('emailMonitor.wizard.selected') }}: "{{ lastSelection }}"
-            <el-button size="small" link type="primary" @click="addRuleFromSelection">
-              {{ t('emailMonitor.wizard.bindSelection') }}
-            </el-button>
-          </span>
-        </div>
-        <el-table :data="fields" size="small" border>
-          <el-table-column :label="t('emailMonitor.wizard.targetField')" min-width="180">
-            <template #default="{ row }">
-              <el-select
-                v-model="row.target"
-                size="small"
-                filterable
-                clearable
-                :placeholder="t('emailMonitor.wizard.targetFieldPlaceholder')"
-                class="target-field-select"
-              >
-                <el-option
-                  v-for="f in mainFieldOptionsForRow(row.target)"
-                  :key="f.fieldName"
-                  :label="fieldOptionLabel(f)"
-                  :value="f.fieldName"
-                />
-                <template v-if="mainFieldOptions.length === 0" #empty>
-                  <span class="el-select-dropdown__empty">
-                    {{ t('emailMonitor.wizard.mainTargetFieldEmpty') }}
-                  </span>
-                </template>
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('emailMonitor.wizard.source')" width="170">
-            <template #default="{ row }">
-              <el-select v-model="row.source" size="small" @change="onSourceChange(row)">
-                <el-option-group :label="t('emailMonitor.wizard.sourceGroupAttributes')">
-                  <el-option
-                    v-for="s in ATTRIBUTE_SOURCES"
-                    :key="s"
-                    :label="sourceLabel(s)"
-                    :value="s"
-                  />
-                </el-option-group>
-                <el-option-group :label="t('emailMonitor.wizard.sourceGroupBody')">
-                  <el-option
-                    v-for="s in BODY_SOURCES"
-                    :key="s"
-                    :label="sourceLabel(s)"
-                    :value="s"
-                  />
-                </el-option-group>
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('emailMonitor.wizard.type')" width="130">
-            <template #default="{ row }">
-              <el-select
-                v-if="!isLockedAttributeSource(row.source)"
-                v-model="row.type"
-                size="small"
-              >
-                <el-option
-                  v-for="ty in typesForSource(row.source)"
-                  :key="ty"
-                  :label="typeLabel(ty)"
-                  :value="ty"
-                />
-              </el-select>
-              <span v-else class="wizard-direct-label">{{ typeLabel('DIRECT') }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('emailMonitor.wizard.config')" min-width="220">
-            <template #default="{ row }">
-              <span v-if="row.type === 'DIRECT'" class="wizard-hint">—</span>
-              <el-input v-else-if="row.type === 'LABEL'" v-model="row.label" size="small" placeholder="Case No: " />
-              <template v-else-if="row.type === 'BETWEEN'">
-                <el-input v-model="row.before" size="small" :placeholder="t('emailMonitor.wizard.before')" />
-                <el-input v-model="row.after" size="small" :placeholder="t('emailMonitor.wizard.after')" />
-              </template>
-              <el-input v-else-if="row.type === 'REGEX'" v-model="row.pattern" size="small" placeholder="(\\d+)" />
-              <el-input v-else-if="row.type === 'CONST'" v-model="row.value" size="small" placeholder="EMAIL" />
-              <el-input v-else-if="row.type === 'HEADER'" v-model="row.header" size="small" placeholder="From" />
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('emailMonitor.wizard.required')" width="70">
-            <template #default="{ row }">
-              <el-switch v-model="row.required" size="small" />
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('emailMonitor.wizard.preview')" min-width="120">
-            <template #default="{ row }">
-              <span class="wizard-preview-val">{{ previewField(row) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column width="60">
-            <template #default="{ $index }">
-              <el-button size="small" link type="danger" @click="fields.splice($index, 1)">
-                {{ t('common.delete') }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+        <EmailFieldMappingTable
+          :fields="fields"
+          :main-field-options="mainFieldOptions"
+          :last-selection="lastSelection"
+          :attachment-preview="sample.attachmentNames"
+          :preview-field="previewField"
+          @add-field="addFieldRule"
+          @bind-selection="addRuleFromSelection"
+        />
       </el-tab-pane>
 
       <!-- Sub-table (HTML) mapping -->
@@ -271,7 +181,10 @@
 import { reactive, ref, computed, watch, nextTick, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SubTableBindingSelect from '@/components/designer/SubTableBindingSelect.vue'
+import EmailFieldMappingTable from '@/components/designer/email/EmailFieldMappingTable.vue'
 import { useProcessFormSubBindings, type SubTableFieldOption } from '@/composables/email/useProcessFormSubBindings'
+import { invalidAttachmentTargets } from '@/composables/email/emailExtractionFieldMapping'
+import { computePreviewRows, previewField as previewMappedField } from '@/composables/email/emailExtractionPreview'
 import { normalizeBindingId } from '@/utils/bindingDisplayHelpers'
 import type {
   ExtractionRules,
@@ -286,50 +199,6 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'update:modelValue', value: ExtractionRules): void }>()
 const { t } = useI18n()
 
-const ATTRIBUTE_SOURCES = [
-  'SUBJECT', 'FROM', 'TO', 'CC', 'REPLY_TO', 'DATE', 'MESSAGE_ID',
-] as const
-const BODY_SOURCES = ['TEXT_AND_HTML', 'TEXT', 'HTML', 'HEADER', 'CONST'] as const
-const LOCKED_ATTRIBUTE_SOURCES = ['FROM', 'TO', 'CC', 'REPLY_TO', 'DATE', 'MESSAGE_ID'] as const
-const BODY_TYPES = ['LABEL', 'BETWEEN', 'REGEX', 'CONST', 'HEADER'] as const
-const SUBJECT_TYPES = ['DIRECT', 'LABEL', 'BETWEEN', 'REGEX'] as const
-
-function sourceLabel(source: typeof ATTRIBUTE_SOURCES[number] | typeof BODY_SOURCES[number]): string {
-  return t(`emailMonitor.wizard.source_${source}`)
-}
-
-function typeLabel(type: string): string {
-  if (type === 'DIRECT') {
-    return t('emailMonitor.wizard.type_DIRECT')
-  }
-  return type
-}
-
-function isLockedAttributeSource(source?: string): boolean {
-  return LOCKED_ATTRIBUTE_SOURCES.includes(source as typeof LOCKED_ATTRIBUTE_SOURCES[number])
-}
-
-function typesForSource(source?: string): string[] {
-  if (source === 'SUBJECT') {
-    return [...SUBJECT_TYPES]
-  }
-  return [...BODY_TYPES]
-}
-
-function onSourceChange(row: ExtractionFieldRule) {
-  if (isLockedAttributeSource(row.source)) {
-    row.type = 'DIRECT'
-    return
-  }
-  if (row.source === 'SUBJECT' && !SUBJECT_TYPES.includes(row.type as typeof SUBJECT_TYPES[number])) {
-    row.type = 'DIRECT'
-    return
-  }
-  if (row.type === 'DIRECT') {
-    row.type = 'LABEL'
-  }
-}
-
 const activeTab = ref('sample')
 const sample = reactive({
   subject: '',
@@ -341,6 +210,7 @@ const sample = reactive({
   messageId: '',
   text: '',
   html: '',
+  attachmentNames: '',
 })
 const lastSelection = ref('')
 const lastSelectionPrefix = ref('')
@@ -354,16 +224,6 @@ const { loading: subBindingLoading, options: subBindingOptions, fieldsByBindingI
 
 function fieldOptionLabel(f: SubTableFieldOption): string {
   return f.displayName !== f.fieldName ? `${f.displayName} (${f.fieldName})` : f.fieldName
-}
-
-/** Keep legacy saved field names selectable even if metadata changed. */
-function mainFieldOptionsForRow(currentTarget?: string): SubTableFieldOption[] {
-  const base = mainFieldOptions.value
-  const trimmed = currentTarget?.trim()
-  if (trimmed && !base.some((f) => f.fieldName === trimmed)) {
-    return [{ fieldName: trimmed, displayName: trimmed }, ...base]
-  }
-  return base
 }
 
 function bindingIdOf(st: ExtractionSubTableRule): number | null {
@@ -419,6 +279,7 @@ function seedFromModel(model?: ExtractionRules) {
   sample.messageId = s?.messageId ?? ''
   sample.text = s?.text ?? ''
   sample.html = s?.html ?? ''
+  sample.attachmentNames = s?.attachmentNames ?? ''
 }
 seedFromModel(props.modelValue)
 
@@ -426,15 +287,8 @@ function addFieldRule() {
   fields.push({ target: '', source: 'TEXT_AND_HTML', type: 'LABEL', required: false })
 }
 
-function attributePreviewValue(source?: string): string | null {
-  if (source === 'SUBJECT') return sample.subject?.trim() || null
-  if (source === 'FROM') return sample.from?.trim() || null
-  if (source === 'TO') return sample.to?.trim() || null
-  if (source === 'CC') return sample.cc?.trim() || null
-  if (source === 'REPLY_TO') return sample.replyTo?.trim() || null
-  if (source === 'DATE') return sample.date?.trim() || null
-  if (source === 'MESSAGE_ID') return sample.messageId?.trim() || null
-  return null
+function previewField(rule: ExtractionFieldRule): string {
+  return previewMappedField(sample, rule)
 }
 
 /** New block defaults its tableIndex to the next HTML table (0,1,2…) — the common multi-table case. */
@@ -476,118 +330,6 @@ function addRuleFromSelection() {
   activeTab.value = 'fields'
 }
 
-function combinedSampleTextAndHtml(): string {
-  const plain = sample.text?.trim() ?? ''
-  const html = stripHtml(sample.html)?.trim() ?? ''
-  if (!plain) return html
-  if (!html) return plain
-  if (plain.includes(html) || html.includes(plain)) {
-    return plain.length >= html.length ? plain : html
-  }
-  return `${plain}\n${html}`
-}
-
-/** Client-side mirror of the backend interpreter for live preview. */
-function sourceText(source?: string): string {
-  if (source === 'SUBJECT') return sample.subject
-  if (source === 'HTML') return stripHtml(sample.html)
-  if (source === 'TEXT' || source === 'TEXT_AND_HTML') return combinedSampleTextAndHtml()
-  return sample.text
-}
-
-function stripHtml(html: string): string {
-  if (!html) return ''
-  const doc = new DOMParser().parseFromString(html, 'text/html')
-  return doc.body?.textContent ?? ''
-}
-
-function previewField(rule: ExtractionFieldRule): string {
-  try {
-    let raw: string | null = null
-    if (rule.type === 'DIRECT') {
-      raw = attributePreviewValue(rule.source) ?? sourceText(rule.source)
-    } else if (rule.type === 'CONST') raw = rule.value ?? null
-    else if (rule.type === 'HEADER') {
-      const header = rule.header?.toLowerCase()
-      if (header === 'from') raw = sample.from || null
-      else if (header === 'to') raw = sample.to || null
-      else if (header === 'cc') raw = sample.cc || null
-      else if (header === 'reply-to') raw = sample.replyTo || null
-      else if (header === 'date') raw = sample.date || null
-      else if (header === 'message-id') raw = sample.messageId || null
-      else raw = null
-    } else if (rule.type === 'LABEL') raw = byLabel(sourceText(rule.source), rule.label)
-    else if (rule.type === 'BETWEEN') raw = between(sourceText(rule.source), rule.before, rule.after)
-    else if (rule.type === 'REGEX') raw = byRegex(sourceText(rule.source), rule.pattern, rule.group ?? 1)
-    return applyPost(raw, rule.postProcess) ?? '—'
-  } catch {
-    return '—'
-  }
-}
-
-function byLabel(text: string, label?: string): string | null {
-  if (!text || !label) return null
-  const idx = text.indexOf(label)
-  if (idx < 0) return null
-  const after = text.substring(idx + label.length)
-  const eol = after.search(/[\r\n]/)
-  return (eol < 0 ? after : after.substring(0, eol)).trim() || null
-}
-
-function between(text: string, before?: string, after?: string): string | null {
-  if (!text || !before) return null
-  const idx = text.indexOf(before)
-  if (idx < 0) return null
-  const start = idx + before.length
-  const end = after ? text.indexOf(after, start) : -1
-  return text.substring(start, end < 0 ? text.length : end).trim() || null
-}
-
-function byRegex(text: string, pattern?: string, group = 1): string | null {
-  if (!text || !pattern) return null
-  const m = new RegExp(pattern).exec(text)
-  return m && m[group] != null ? m[group].trim() : null
-}
-
-function applyPost(value: string | null, steps?: string[]): string | null {
-  if (value == null || !steps?.length) return value
-  return steps.reduce((acc, step) => {
-    if (acc == null) return acc
-    if (step === 'TRIM') return acc.trim()
-    if (step === 'DIGITS_ONLY') return acc.replace(/[^0-9]/g, '')
-    if (step === 'STRIP_CURRENCY') return acc.replace(/[^0-9.,-]/g, '').trim()
-    if (step === 'UPPER') return acc.toUpperCase()
-    if (step === 'LOWER') return acc.toLowerCase()
-    return acc
-  }, value as string | null)
-}
-
-/** Mirrors backend table selection: tableSelector (default "table") + tableIndex picks one table. */
-function computePreviewRows(st: ExtractionSubTableRule, doc: Document): Record<string, string>[] {
-  if (!st.columns.length) return []
-  const selector = st.tableSelector?.trim() || 'table'
-  let tables: Element[]
-  try {
-    tables = Array.from(doc.querySelectorAll(selector))
-  } catch {
-    return []
-  }
-  const table = tables[st.tableIndex ?? 0]
-  if (!table) return []
-  const trs = Array.from(table.querySelectorAll('tr'))
-  const rows = st.headerRow ? trs.slice(1) : trs
-  return rows.map(tr => {
-    const cells = Array.from(tr.querySelectorAll('td,th'))
-    const obj: Record<string, string> = {}
-    st.columns.forEach(col => {
-      if (col.field && col.columnIndex != null && cells[col.columnIndex]) {
-        obj[col.field] = (cells[col.columnIndex].textContent ?? '').trim()
-      }
-    })
-    return obj
-  }).filter(o => Object.keys(o).length)
-}
-
 const subTablePreviews = computed((): Record<string, string>[][] => {
   if (!sample.html) return subTables.map(() => [])
   let doc: Document
@@ -626,6 +368,7 @@ function buildRules(): ExtractionRules {
     || sample.messageId?.trim()
     || sample.text?.trim()
     || sample.html?.trim()
+    || sample.attachmentNames?.trim()
   ) {
     result.sampleEmail = {
       subject: sample.subject.trim() || undefined,
@@ -637,6 +380,7 @@ function buildRules(): ExtractionRules {
       messageId: sample.messageId.trim() || undefined,
       text: sample.text.trim() || undefined,
       html: sample.html.trim() || undefined,
+      attachmentNames: sample.attachmentNames.trim() || undefined,
     }
   }
   return result
@@ -663,7 +407,11 @@ watch(() => props.modelValue, (model) => {
   nextTick(() => { suppressEmit = false })
 }, { deep: true })
 
-defineExpose({ buildRules })
+function attachmentTargetErrors(): string[] {
+  return invalidAttachmentTargets(fields, mainFieldOptions.value)
+}
+
+defineExpose({ buildRules, attachmentTargetErrors })
 </script>
 
 <style scoped lang="scss">

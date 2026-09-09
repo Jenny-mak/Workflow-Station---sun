@@ -13,7 +13,7 @@
       :limit="limit"
       :multiple="multiple"
       :disabled="disabled"
-      :file-list="fileList"
+      :file-list="elFileList"
       :show-file-list="false"
       :http-request="httpRequest"
       :before-upload="beforeUpload"
@@ -61,9 +61,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
-import type { UploadRequestOptions, UploadUserFile } from 'element-plus'
+import type { UploadRequestOptions, UploadStatus, UploadUserFile } from 'element-plus'
 import FormUploadFileCard from './FormUploadFileCard.vue'
 import { extractStoredUploadUrl, rejectUploadFileReason } from './uploadFieldValue'
+import type { UploadFileListItem } from './uploadFieldValue'
 
 const props = defineProps<{
   action: string
@@ -75,29 +76,49 @@ const props = defineProps<{
   disabled?: boolean
   compact?: boolean
   tip?: string
-  fileList?: UploadUserFile[]
+  fileList?: UploadFileListItem[]
   maxFileSizeMb?: number
   failLabel: string
   removeLabel: string
   successStatusLabel?: string
   uploadingStatusLabel?: string
-  httpRequest?: (options: UploadRequestOptions) => XMLHttpRequest | Promise<unknown> | void
-  handleSuccess?: (...args: unknown[]) => void
-  handleChange?: (...args: unknown[]) => void
-  handleRemove?: (...args: unknown[]) => void
-  handleExceed?: (...args: unknown[]) => void
-  handleError?: (...args: unknown[]) => void
+  httpRequest?: (options: UploadRequestOptions) => XMLHttpRequest | Promise<unknown>
+  handleSuccess?: (response: unknown, file: UploadFileListItem, list: UploadFileListItem[]) => void
+  handleChange?: (file: UploadFileListItem, list: UploadFileListItem[]) => void
+  handleRemove?: (file: UploadFileListItem, list: UploadFileListItem[]) => void
+  handleExceed?: (files: File[], list: UploadFileListItem[]) => void
+  handleError?: (error: Error, file: UploadFileListItem, list: UploadFileListItem[]) => void
   handleSizeExceed?: (maxMb: number) => void
   handleDuplicate?: (name: string) => void
   handleOpenDetails?: (file: { url: string; name: string }) => void
 }>()
+
+/**
+ * el-upload needs a name on every row; a live row can still be missing one (a drop that has not
+ * resolved yet), so fall back to the url exactly like the cards below do. The list only feeds
+ * el-upload's own bookkeeping — the visible cards render from `sortedFiles`.
+ */
+const EL_UPLOAD_STATUSES: readonly string[] = ['ready', 'uploading', 'success', 'fail']
+
+/** A row's status is a free string upstream; hand el-upload only the four values it knows. */
+function elStatus(status?: string): UploadStatus | undefined {
+  return status && EL_UPLOAD_STATUSES.includes(status) ? (status as UploadStatus) : undefined
+}
+
+const elFileList = computed<UploadUserFile[]>(() =>
+  (props.fileList || []).map((file) => ({
+    ...file,
+    name: String(file.name || file.url || ''),
+    status: elStatus(file.status),
+  })),
+)
 
 const sortedFiles = computed(() => {
   const list = [...(props.fileList || [])]
   return list.sort((a, b) => String(a.name || a.url || '').localeCompare(String(b.name || b.url || '')))
 })
 
-function cardKey(file: UploadUserFile): string {
+function cardKey(file: UploadFileListItem): string {
   return String(file.uid ?? file.url ?? file.name)
 }
 
@@ -114,17 +135,17 @@ function beforeUpload(file: File): boolean {
   return true
 }
 
-function fileUrl(file: UploadUserFile): string {
+function fileUrl(file: UploadFileListItem): string {
   return extractStoredUploadUrl(file.response) || String(file.url || '').trim()
 }
 
-function openDetails(file: UploadUserFile): void {
+function openDetails(file: UploadFileListItem): void {
   const url = fileUrl(file)
   if (!url) return
   props.handleOpenDetails?.({ url, name: String(file.name || url) })
 }
 
-function removeFile(file: UploadUserFile): void {
+function removeFile(file: UploadFileListItem): void {
   const next = (props.fileList || []).filter((item) => item !== file)
   props.handleRemove?.(file, next)
 }

@@ -125,6 +125,11 @@ export default {
     sectionSetup: 'Setup'
   },
   mainTableView: {
+    openMyTask: 'Open my task',
+    myTasksOnRow: 'You have {count} tasks on this request',
+    pickTaskToOpen: 'Open which task?',
+    unnamedTask: 'Untitled task',
+    loadRowTasksFailed: 'Could not check which rows have your tasks',
     openRelatedRecord: 'Open related record',
     openLookupTable: 'Open in relation table',
     downloadFile: 'Download file',

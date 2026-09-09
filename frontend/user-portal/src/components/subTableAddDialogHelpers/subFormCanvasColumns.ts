@@ -186,7 +186,7 @@ export function mapSubFormRuleToDialogColumns(
       'action', 'accept', 'multiple', 'precision', 'min', 'max', 'rows', 'maxlength', 'fileNameTargetField', 'cannotDownload',
       'isRange', 'valueFormat', 'startPlaceholder', 'endPlaceholder', 'treeData', 'checkStrictly',
       'showAlpha', 'allowHalf', 'step', 'cascaderProps', 'leftTitle', 'rightTitle',
-      'boundSubTableBindingId',
+      'boundSubTableBindingId', 'ownerConfig',
     ]
     for (const key of propKeys) {
       if (rProps[key] !== undefined) passProps[key] = rProps[key]

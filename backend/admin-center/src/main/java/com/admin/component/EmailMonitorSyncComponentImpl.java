@@ -37,6 +37,7 @@ public class EmailMonitorSyncComponentImpl implements EmailMonitorSyncComponent 
 
         if (monitorRules == null || monitorRules.isEmpty()) {
             emailMonitorRuleRepository.deleteByFunctionUnitId(functionUnitId);
+            deleteSupersededSiblingRules(functionUnit, Set.of());
             log.info("No email monitor rules to sync for function unit {}", functionUnitId);
             return;
         }
@@ -48,7 +49,7 @@ public class EmailMonitorSyncComponentImpl implements EmailMonitorSyncComponent 
                 continue;
             }
             EmailMonitorRule entity = toEntity(functionUnit, rule);
-            EmailMonitorRule previous = existingById.get(entity.getId());
+            EmailMonitorRule previous = resolvePreviousRule(existingById, entity.getId());
             if (previous != null) {
                 entity.setLastSyncCursor(previous.getLastSyncCursor());
                 entity.setLastSyncedAt(previous.getLastSyncedAt());
@@ -63,7 +64,40 @@ public class EmailMonitorSyncComponentImpl implements EmailMonitorSyncComponent 
                 emailMonitorRuleRepository.delete(stale);
             }
         }
+        deleteSupersededSiblingRules(functionUnit, syncedIds);
         log.info("Synced {} email monitor runtime bindings for function unit {}", synced, functionUnitId);
+    }
+
+    /**
+     * Re-import/deploy creates a new catalog UUID for the same FU code. Old rows on
+     * previous catalog ids stay enabled and would poll the same mailbox in parallel.
+     */
+    private void deleteSupersededSiblingRules(FunctionUnit current, Set<String> keepIds) {
+        String code = current.getCode();
+        if (code == null || code.isBlank()) {
+            return;
+        }
+        List<FunctionUnit> versions = functionUnitRepository.findByCodeOrderByVersionDesc(code);
+        for (FunctionUnit version : versions) {
+            if (version.getId().equals(current.getId())) {
+                continue;
+            }
+            for (EmailMonitorRule leftover : emailMonitorRuleRepository.findByFunctionUnitId(version.getId())) {
+                if (!keepIds.contains(leftover.getId())) {
+                    emailMonitorRuleRepository.delete(leftover);
+                    log.info("Removed superseded email monitor {} from previous catalog {}",
+                            leftover.getId(), version.getId());
+                }
+            }
+        }
+    }
+
+    private EmailMonitorRule resolvePreviousRule(Map<String, EmailMonitorRule> existingById, String ruleUid) {
+        EmailMonitorRule previous = existingById.get(ruleUid);
+        if (previous != null) {
+            return previous;
+        }
+        return emailMonitorRuleRepository.findById(ruleUid).orElse(null);
     }
 
     private static boolean hasStartEvent(Map<String, Object> rule) {

@@ -260,4 +260,34 @@ class EmailFieldExtractorTest {
         ExtractionResult result = EmailFieldExtractor.extract(email, spec);
         assertThat(result.getFields()).containsEntry("case_number", "ABC-99");
     }
+
+    @Test
+    void attachmentsRequired_withoutParts_marksMissing() {
+        FieldRule rule = field("quote_files", Source.ATTACHMENTS, RuleType.DIRECT);
+        rule.setRequired(true);
+        EmailExtractionSpec spec = new EmailExtractionSpec();
+        spec.setFields(List.of(rule));
+
+        ExtractionResult result = EmailFieldExtractor.extract(
+                new EmailMessage("m-att-0", "s", "a@b.com", "body", null, Map.of()), spec);
+
+        assertThat(result.getFields()).doesNotContainKey("quote_files");
+        assertThat(result.getMissingRequired()).contains("quote_files");
+    }
+
+    @Test
+    void attachmentsRequired_withParts_doesNotMarkMissing() {
+        FieldRule rule = field("quote_files", Source.ATTACHMENTS, RuleType.DIRECT);
+        rule.setRequired(true);
+        EmailExtractionSpec spec = new EmailExtractionSpec();
+        spec.setFields(List.of(rule));
+        EmailMessage email = new EmailMessage(
+                "m-att-1", "s", "a@b.com", "body", null, Map.of(),
+                List.of(new EmailAttachment("a.pdf", "application/pdf", "x".getBytes())));
+
+        ExtractionResult result = EmailFieldExtractor.extract(email, spec);
+
+        assertThat(result.getFields()).doesNotContainKey("quote_files");
+        assertThat(result.hasMissingRequired()).isFalse();
+    }
 }

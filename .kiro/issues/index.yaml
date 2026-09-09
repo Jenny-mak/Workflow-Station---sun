@@ -3444,15 +3444,15 @@
     未做：真实 ZIP 手测 Export→Import 覆盖。
 
 - id: "1606"
-  status: open
+  status: fixed
+  fixed_at: "2026-09-09"
   severity: minor
   category: quality
   summary: "EmailExtractionWizard.vue 756 行超 SFC 600 行硬上限，需拆分子组件"
   file: "frontend/developer-workstation/src/components/designer/email/EmailExtractionWizard.vue"
   note: |
-    2026-09-08 code review：DIRECT 邮件属性映射功能合并后文件 756 行（硬上限 600）。
-    建议拆分为 Sample 预览 / Field Mapping 表格 / Sub-table 段独立子组件或 composable。
-    本 PR 刻意不修，单独 refactor PR + 截图验证 wizard 行为不变。
+    Field Mapping 抽到 EmailFieldMappingTable.vue；wizard 现 472 行（硬上限 600）。
+    验证：DW Field Mapping 截图 2026-09-09_email-field-mapping-attachments.png。
 
 - id: "1607"
   status: fixed
@@ -3465,9 +3465,159 @@
     根因：syncMonitorRules deleteByFunctionUnitId + insert 不保留 lastSyncCursor/lastSyncedAt；
     deploy 后 IMAP baseline 跳过高 UID 邮件（dev 实测 UID 3480 被跳过）。
     修复：按 ruleUid upsert，同 id 保留 cursor；删除 payload 中已移除的 stale binding。
-    验证：EmailMonitorSyncComponentImplTest（含 preservesLastSyncCursorForSameRuleUid）pass。
+    2026-09-08 运行时复验：仅按 functionUnitId 查旧规则不足（deploy 后 FU UUID 会变），
+    增补 findById(ruleUid) 回退；deploy 后 cursor=3482 保留，引擎日志 cursor=3482 非 null。
+    验证：EmailMonitorSyncComponentImplTest（含 preservesLastSyncCursor + FU id 变更场景）pass。
 
 - id: "1608"
+  status: fixed
+  fixed_at: "2026-09-08"
+  severity: major
+  category: bug
+  summary: "Re-import FU then email start failed: stale processKey cache + leftover monitor rules"
+  file: "backend/user-portal/src/main/java/com/portal/component/FunctionUnitAccessComponent.java"
+  note: |
+    根因1：Portal processKeyCache TTL 5min，active-for-start 已是新 catalog，resolve 仍返回旧 id，
+    start 抛 Portal startable version mismatch（不重启 user-portal 则失败）。
+    根因2：re-import 新 catalog UUID，旧 sys_email_monitor_rules 仍 enabled，双规则 poll。
+    修复：resolveFunctionUnitIdAlignedWithActiveCatalog 不一致则清 cache 再解析；
+    EmailMonitorSync 删除同 FU code 的旧 catalog 规则。
+    验证：FunctionUnitAccessComponentTest + EmailMonitorSyncComponentImplTest sibling delete。
+
+- id: "1609"
+  status: fixed
+  fixed_at: "2026-09-09"
+  severity: major
+  category: bug
+  summary: "DW delete FU then re-import Deploy failed on uk_sys_action_name_fu Mark Complete"
+  file: "backend/admin-center/src/main/java/com/admin/component/FunctionUnitImportComponent.java"
+  note: |
+    路径：DW 删除 Function Unit → 再导入 MCY → Deploy。Admin 仍保留同 code+version catalog
+    （如 ce946f29 1.0.138），ZIP import overwrite 默认覆盖写入。saveImportedActions
+    delete 后未 flush，Hibernate INSERT 先于 DELETE，撞 uk_sys_action_name_fu。
+    修复：deleteByFunctionUnitId 后 flush 再 insert。
+    验证：FunctionUnitImportActionFlushTest pass。
+
+- id: "1610"
+  status: fixed
+  fixed_at: "2026-09-09"
+  severity: major
+  category: bug
+  summary: "DW Deploy over overwrite of DEPLOYED catalog failed at 55% validate INVALID_STATUS"
+  file: "backend/admin-center/src/main/java/com/admin/component/FunctionUnitLifecycleComponent.java"
+  note: |
+    根因：同 code+version 覆盖导入不改 status；DW 一键发布仍 POST /validate；
+    isValidatable 仅 DRAFT，已 DEPLOYED 抛 INVALID_STATUS。人工 Disable 不是状态机步骤。
+    修复：DRAFT 仍 markAsValidated；VALIDATED/DEPLOYED 只做内容校验、不改 status；
+    ARCHIVED/DEPRECATED 仍拒绝。
+    验证：FunctionUnitLifecycleValidateTest 修复前 DEPLOYED/VALIDATED 抛 AdminBusinessException，
+    修复后 Tests run: 5 Failures: 0。admin-center 已 package + compose rebuild，Started。
+    未手测 DW 一键发布端到端。
+
+- id: "1611"
+  status: fixed
+  fixed_at: "2026-09-09"
+  severity: major
+  category: bug
+  summary: "Email Monitor Field Mapping 无法把附件存进主表 FILE 字段"
+  file: "backend/workflow-engine-core/src/main/java/com/workflow/email/inbound/ImapInboundMailClient.java"
+  note: |
+    根因：IMAP extractParts 只留 text/html，附件 MIME 丢弃；EmailMessage 无 attachments；
+    Field Mapping 只能映射字符串。
+    修复：Source.ATTACHMENTS + DIRECT；跳过 inline CID；引擎 C-3 token POST DW /upload；
+    persistUploadValue（0="" / 1=url / ≥2=JSON）；无映射=旧行为；required+空附件→人工审核；
+    非 FILE 目标保存/Deploy 拒绝。
+    验证：engine/DW 单测绿；screenshot
+    frontend/developer-workstation/verification-screenshots/2026-09-09_email-field-mapping-attachments.png。
+
+- id: "1612"
+  status: fixed
+  fixed_at: "2026-09-08"
+  severity: major
+  category: bug
+  summary: "isFunctionUnitEnabled 用 dw code 打按主键查的接口，enabled 门禁从未生效（已改 fail-closed）"
+  file: "backend/user-portal/src/main/java/com/portal/component/FunctionUnitAccessComponent.java"
+  note: |
+    根因：isFunctionUnitEnabled 把 dw code 直接拼进 admin-center 的
+    GET /api/v1/admin/function-units/{id}，而该端点走 FunctionUnitLookup.getById →
+    findById，主键是 sys_function_units 的 UUID。code 永远匹配不上 UUID 主键，
+    每次必抛，被 catch-all 吞掉 return true —— PortalMainTableViewServiceImpl:123
+    与 :1309 两处 enabled 门禁是死代码，停用的 FU 在 Portal Data 菜单照样可见可进。
+    同源于 #1427（primary-keys/allocate 传 processDefinitionKey），修法一致：先 resolve。
+    最终改动：新增 toCatalogId()，非 UUID 输入先走 resolveFunctionUnitId()
+    （by-process-key → code/latest → 精确名），解析结果非 UUID 视为未解析；
+    改 fail-closed —— 无已部署 catalog 记录 / payload 空 / admin-center 不可达一律返回 false，
+    与同伴 canAccessFunctionUnit（allowedRoleCodes 空即拒）姿态一致。
+    catch 由 ERROR+全栈降为 WARN 无栈（该方法无缓存，原来 5 分钟刷 70 条带栈 ERROR）。
+    注意：requireEnabledFunctionUnit 本来就先 resolve 再调，传的是 UUID，走短路分支不变。
+    副作用（预期）：dev 的 fu-20260422-23tfag（Multi-Instance Subtask Demo）在
+    dw_function_units 有 PUBLISHED 视图但 sys_function_units 无记录，现从 Data 菜单隐藏。
+    测试夹具原先把 catalog id 当成 code 本身（bug 的镜像），已改为 code → 确定性 UUID；
+    mockFunctionUnitAccess 同时桩原始 id 与 UUID（filterAccessibleFunctionUnits 不解析，
+    直接用列表里的 catalog id）。新增属性用例 unresolvableFunctionUnitShouldBeTreatedAsDisabled。
+    验证：FunctionUnitAccessProperties 12 绿 + PortalMainTableView*/`*FunctionUnit*` 共 41 绿；
+    dev 重建 user-portal 后 —— atm-20260623-gaevus 零日志且 Data 菜单仍在、
+    fu-20260422-23tfag 打一条 WARN 并隐藏、旧 ERROR 计数 0、
+    任务详情 /processes/function-units/atm-20260623-gaevus/content 200（回归 requireEnabledFunctionUnit）。
+
+- id: "1613"
+  status: fixed
+  fixed_at: "2026-09-07"
+  severity: major
+  category: bug
+  summary: "MI Participants Owner Creator/Case Handler never wrote under dw:subtable"
+  file: "backend/user-portal/src/main/java/com/portal/component/OwnerFieldMetadata.java"
+  note: |
+    反例：application 1eb0b1b4-aa83-11f1-9768-463ece98de68（fu-20260422-23tfag），
+    __subTables__ 只有 dw:subtable / dw:attachment；Test-000012/013 有 lookup
+    assignee，row_owner / row_case_handler 均为空。
+    根因：1) Owner 元数据只按 bindingId/表名 identify，认不到规范 key dw:<table>；
+    2) 任务 Save 在 applyOnSubmit 前丢掉 execution 级 _currentItem，Complete/claim
+    同步也没把任务级 currentItem 临时挂上，子表 Case Handler 对不上行。
+    修复：identify 用 SubTableStoreKeys.tableNameOf；catalog 增加 dw: 别名；
+    Save/Complete/claim 写 Owner 时临时 overlay currentItem，persist 前再剥掉。
+    存量单已过 MI 写窗口，不回填。新发起的 MI Demo 首次 Save 写 Creator，
+    认领/保存/完成子任务写该行 Case Handler。
+    验证：OwnerFieldComponentTest 22 绿（含 dw:asset_items 三例）；
+    user-portal 已重建 healthy。
+
+- id: "1614"
+  status: fixed
+  fixed_at: "2026-09-07"
+  severity: major
+  category: bug
+  summary: "流程图点已完成节点，Owner 字段显示活数据而非该节点快照"
+  file: "frontend/user-portal/src/composables/taskDetail/useTaskDetailFormsLoader.ts"
+  note: |
+    反例：task c23c2609-aa85-11f1-b0b7-dafa4142d7ca（fu-20260422-23tfag）点
+    assignment 节点，Case Handler 显示活值 step:multi / multi；
+    正例：应显示该节点完成时冻结的 张伟（设计 §6.6）。
+    根因（三处叠加）：
+    1) loadTaskHistory 把 TaskHistoryInfo 映射成 HistoryRecord 时丢掉 taskId，
+       lastCompletedTaskIdForNode 退化用合成行 id `history_N`，
+       _snapshot_{taskId} 永远查不到；
+    2) 覆盖层拿 matchedForm.name（"Assign Task"）当 BPMN 节点名传下去，
+       nodeName 兜底匹配对不上 flow-history 的 nodeName（"assignment"）；
+    3) ProcessStartComponent 自动完成首个任务时没先调
+       ownerFieldComponent.applyOnComplete，导致 submit 节点快照里
+       case_handler 是空串。
+    修复：HistoryRecord 增 taskId 并在 loader 透传；lastCompletedTaskIdForNode
+    只认真实 taskId（查不到即清空 Owner，不再回落活数据）；NodeFormInfo 增
+    bpmnNodeName 供名称兜底；ProcessStartComponent 新增
+    applyOwnerOnFirstTaskComplete，在 captureTaskFormSnapshot 之前写实际操作人。
+    验证：overlayOwnerFromCompletedSnapshot.test.ts 8 绿（含"只认真实 taskId"
+    与"节点名兜底"两条新例）；OwnerFieldComponentTest completeValueLandsInSnapshot 绿；
+    前端 build + compose 重建 user-portal / user-portal-frontend；
+    Playwright verify-owner-completed-node-snapshot.mjs PASS，截图
+    frontend/user-portal/verification-screenshots/2026-09-07_owner-completed-node-assignment-owner-rows.png
+    显示 Case Owner / Case Handler 均为 张伟；
+    新发起实例 f9aace08-aa8c-11f1-80ec-22af4e2ce74d 的
+    _snapshot_f9b1abf8-… 中 case_handler = user:user-e2e-zhangwei（原为空串）。
+    regression:mi：unit 层全绿，6 个截图场景 5 过；#1438 attachment-rows 失败系
+    fixture 缺口（bb6a9c8a 实例 __subTables__ 里 dw:attachment 行数为 0，
+    与本次改动无关，归 #1522）。
+
+- id: "1615"
   status: fixed
   fixed_at: "2026-09-09"
   severity: major
@@ -3475,6 +3625,7 @@
   summary: "Sub-table Change History paired rows by business values, so default stage OPEN repeated and ADD was recorded as UPDATE"
   file: "backend/user-portal/src/main/java/com/portal/component/SubTableChangeHistoryDiff.java"
   note: |
+    合入 common_0731_SELF_AP 时对面已占用 #1608–#1614，本条由 topic branch #1608 顺延为 #1615。
     反例：两行只共享默认 stage=OPEN 时，pairByFingerprint / pairRemainingRowsAsUpdates
     把新行配成旧行的 UPDATE；同一逻辑行在后续 stage 因 UUID 变化再记一次 OPEN。
     根因：diff 用业务字段指纹和剩余行重叠分配对，而不是设计器主键 / platformRowUuid。
@@ -3509,7 +3660,7 @@
     分配，不用 includes('prefixedSequence')。
     ATM 复验 PASS process=f0331233-ac17-11f1-a8ab-52e514deeb31
     requestId=ATM-DC-PW-000034 first=Corr-000033 second=Corr-000034 COMPLETED。
-- id: "1609"
+- id: "1616"
   status: open
   severity: major
   category: bug
@@ -3521,7 +3672,7 @@
     物理表/列不存在（设计器 FK 是 meeting_id，表有前缀）。事务 aborted → portal 500。
     Portal 已按 BPMN assignmentConfig.assigneeField 写入 __subTables__。
     2026-09-09 验证 process=169f1305-abff-11f1-924d-7e698774d79f。
-- id: "1610"
+- id: "1617"
   status: open
   severity: major
   category: bug

@@ -234,7 +234,6 @@
                 <OwnerChip
                   v-for="(chip, chipIdx) in ownerChipsForRow(col, scope.row)"
                   :key="`${col.field}-${chipIdx}-${chip.label}`"
-                  :kind="chip.kind"
                   :label="chip.label"
                   :size="22"
                 />

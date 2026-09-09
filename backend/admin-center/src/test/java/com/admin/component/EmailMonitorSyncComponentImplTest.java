@@ -92,4 +92,70 @@ class EmailMonitorSyncComponentImplTest {
         assertEquals("3479", captor.getValue().getLastSyncCursor());
         assertEquals(existing.getLastSyncedAt(), captor.getValue().getLastSyncedAt());
     }
+
+    @Test
+    void syncMonitorRules_preservesCursorWhenFunctionUnitIdChanges() {
+        FunctionUnit oldFunctionUnit = FunctionUnit.builder().id("fu-old").code("fu_demo").build();
+        FunctionUnit newFunctionUnit = FunctionUnit.builder().id("fu-new").code("fu_demo").build();
+        when(functionUnitRepository.findById("fu-new")).thenReturn(Optional.of(newFunctionUnit));
+        EmailMonitorRule existing = EmailMonitorRule.builder()
+                .id("bind-1")
+                .functionUnit(oldFunctionUnit)
+                .name("old")
+                .connectionUid("uid-1")
+                .startEventId("StartEvent_1")
+                .lastSyncCursor("3480")
+                .lastSyncedAt(Instant.parse("2026-09-08T10:56:05Z"))
+                .build();
+        when(emailMonitorRuleRepository.findByFunctionUnitId("fu-new")).thenReturn(List.of());
+        when(emailMonitorRuleRepository.findById("bind-1")).thenReturn(Optional.of(existing));
+        when(emailMonitorRuleRepository.save(any(EmailMonitorRule.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        Map<String, Object> binding = Map.of(
+                "ruleUid", "bind-1",
+                "name", "Inbound template → StartEvent_1",
+                "connectionUid", "uid-1",
+                "startEventId", "StartEvent_1");
+
+        syncComponent.syncMonitorRules("fu-new", List.of(binding));
+
+        ArgumentCaptor<EmailMonitorRule> captor = ArgumentCaptor.forClass(EmailMonitorRule.class);
+        verify(emailMonitorRuleRepository).save(captor.capture());
+        assertEquals("3480", captor.getValue().getLastSyncCursor());
+        assertEquals(existing.getLastSyncedAt(), captor.getValue().getLastSyncedAt());
+        assertEquals("fu-new", captor.getValue().getFunctionUnit().getId());
+    }
+
+    @Test
+    void syncMonitorRules_deletesRulesOnPreviousCatalogOfSameCode() {
+        FunctionUnit oldFunctionUnit = FunctionUnit.builder().id("fu-old").code("fu_demo").build();
+        FunctionUnit newFunctionUnit = FunctionUnit.builder().id("fu-new").code("fu_demo").build();
+        when(functionUnitRepository.findById("fu-new")).thenReturn(Optional.of(newFunctionUnit));
+        when(functionUnitRepository.findByCodeOrderByVersionDesc("fu_demo"))
+                .thenReturn(List.of(newFunctionUnit, oldFunctionUnit));
+        EmailMonitorRule leftover = EmailMonitorRule.builder()
+                .id("bind-old")
+                .functionUnit(oldFunctionUnit)
+                .name("stale")
+                .connectionUid("uid-1")
+                .startEventId("StartEvent_1")
+                .build();
+        when(emailMonitorRuleRepository.findByFunctionUnitId("fu-new")).thenReturn(List.of());
+        when(emailMonitorRuleRepository.findByFunctionUnitId("fu-old")).thenReturn(List.of(leftover));
+        when(emailMonitorRuleRepository.findById("bind-new")).thenReturn(Optional.empty());
+        when(emailMonitorRuleRepository.save(any(EmailMonitorRule.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        Map<String, Object> binding = Map.of(
+                "ruleUid", "bind-new",
+                "name", "Inbound template → StartEvent_1",
+                "connectionUid", "uid-1",
+                "startEventId", "StartEvent_1",
+                "processDefinitionKey", "fu_demo");
+
+        syncComponent.syncMonitorRules("fu-new", List.of(binding));
+
+        verify(emailMonitorRuleRepository).delete(leftover);
+    }
 }

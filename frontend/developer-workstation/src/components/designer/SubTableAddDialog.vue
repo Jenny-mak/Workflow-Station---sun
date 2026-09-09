@@ -206,11 +206,11 @@
             :remove-label="t('common.delete')"
             :success-status-label="t('form.uploadStatusUploaded')"
             :uploading-status-label="t('form.uploadStatusUploading')"
-            :handle-success="(res: unknown, file: { name?: string; url?: string }, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadSuccess(res, file, col, list)"
-            :handle-change="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadChange(col, list)"
-            :handle-remove="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadRemove(col, list)"
+            :handle-success="(res, file, list) => handleUploadSuccess(res, file, col, list)"
+            :handle-change="(_file, list) => handleUploadChange(col, list)"
+            :handle-remove="(_file, list) => handleUploadRemove(col, list)"
             :handle-exceed="() => handleUploadExceed(col)"
-            :handle-error="(error: unknown) => handleUploadError(col, error)"
+            :handle-error="(error) => handleUploadError(col, error)"
             :handle-size-exceed="() => handleSizeExceed(col)"
             :handle-duplicate="(name: string) => handleDuplicate(col, name)"
             :handle-open-details="(file) => openDetails(col, file)"
@@ -394,6 +394,7 @@ import {
   toElUploadFileList,
 } from '@platform-shared/upload/uploadFieldValue'
 import { queuedUploadRequest } from '@platform-shared/upload/queuedUploadRequest'
+import type { UploadFileListItem } from '@platform-shared/upload/uploadFieldValue'
 import { isUploadUnauthorizedError } from '@platform-shared/upload/uploadAuthRefresh'
 import { clearUploadWidgetState, setUploadWidgetState, warnIfUploadsBlocking } from '@platform-shared/upload/uploadSubmitGate'
 import { useSubTableDialogComponentEvents } from '@/composables/designerSubTableField/useSubTableDialogComponentEvents'
@@ -477,7 +478,7 @@ function openDetails(col: DialogColumn, file: UploadDetailFile) {
 
 function writeUploadColumn(
   col: DialogColumn,
-  list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>,
+  list: UploadFileListItem[],
 ) {
   const { stored, display } = splitUploadFileList(list, maxFilesOf(col))
   formData.value[col.field] = stored
@@ -611,9 +612,9 @@ async function handleSave() {
 
 function handleUploadSuccess(
   _res: unknown,
-  _file: { name?: string; url?: string },
+  _file: UploadFileListItem,
   col: DialogColumn,
-  list?: Array<{ url?: string; name?: string; status?: string; response?: unknown }>,
+  list?: UploadFileListItem[],
 ) {
   if (!list) return
   writeUploadColumn(col, list)
@@ -621,7 +622,7 @@ function handleUploadSuccess(
 
 function handleUploadChange(
   col: DialogColumn,
-  list?: Array<{ url?: string; name?: string; status?: string; response?: unknown }>,
+  list?: UploadFileListItem[],
 ) {
   if (!list) return
   writeUploadColumn(col, list)
@@ -629,7 +630,7 @@ function handleUploadChange(
 
 function handleUploadRemove(
   col: DialogColumn,
-  list?: Array<{ url?: string; name?: string; status?: string; response?: unknown }>,
+  list?: UploadFileListItem[],
 ) {
   writeUploadColumn(col, list ?? [])
 }

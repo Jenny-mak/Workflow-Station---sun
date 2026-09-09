@@ -21,6 +21,7 @@ import org.springframework.util.StringUtils;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -43,6 +44,7 @@ public class EmailMonitorProcessor {
     private final ProcessedEmailMessageRepository processedRepository;
     private final EmailMonitorPortalSyncComponent portalSyncComponent;
     private final AdminCenterClient adminCenterClient;
+    private final EmailInboundAttachmentBinder attachmentBinder;
     private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
 
@@ -81,6 +83,13 @@ public class EmailMonitorProcessor {
         }
 
         ExtractionResult extraction = EmailFieldExtractor.extract(email, spec);
+        EmailInboundAttachmentBinder.BindResult attachments = attachmentBinder.bind(email, spec);
+        extraction.getFields().putAll(attachments.fields());
+        for (String missing : attachments.missingRequired()) {
+            if (!extraction.getMissingRequired().contains(missing)) {
+                extraction.getMissingRequired().add(missing);
+            }
+        }
 
         boolean review = extraction.hasMissingRequired()
                 && (rule.getReviewOnMissing() == null || Boolean.TRUE.equals(rule.getReviewOnMissing()));
@@ -101,7 +110,8 @@ public class EmailMonitorProcessor {
                     "functionUnitCode could not be resolved for rule " + rule.getId());
         }
 
-        Map<String, Object> startVariables = buildStartVariables(rule, email, extraction, functionUnitCode.get());
+        Map<String, Object> startVariables = buildStartVariables(
+                rule, email, extraction, functionUnitCode.get(), attachments);
         ProcessInstanceResult result = portalSyncComponent.startPortalProcess(
                 rule.getProcessDefinitionKey(),
                 functionUnitCode.get(),
@@ -138,7 +148,8 @@ public class EmailMonitorProcessor {
             SysEmailMonitorRule rule,
             EmailMessage email,
             ExtractionResult extraction,
-            String functionUnitCode) {
+            String functionUnitCode,
+            EmailInboundAttachmentBinder.BindResult attachments) {
         Map<String, Object> variables = new HashMap<>(extraction.getFields());
         if (StringUtils.hasText(rule.getSystemInitiatorUserId())) {
             variables.put("initiator", rule.getSystemInitiatorUserId());
@@ -150,14 +161,15 @@ public class EmailMonitorProcessor {
         if (StringUtils.hasText(rule.getProcessDefinitionKey())) {
             variables.put("processDefinitionKey", rule.getProcessDefinitionKey());
         }
-        variables.put("__inboundEmail__", inboundEmailSnapshot(email));
+        variables.put("__inboundEmail__", inboundEmailSnapshot(email, attachments));
         if (!extraction.getSubTables().isEmpty()) {
             variables.put("__subTables__", extraction.getSubTables());
         }
         return variables;
     }
 
-    private Map<String, Object> inboundEmailSnapshot(EmailMessage email) {
+    private Map<String, Object> inboundEmailSnapshot(
+            EmailMessage email, EmailInboundAttachmentBinder.BindResult attachments) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("messageId", email.messageId());
         snapshot.put("subject", email.subject());
@@ -169,6 +181,15 @@ public class EmailMonitorProcessor {
         snapshot.put("text", email.text());
         if (StringUtils.hasText(email.html())) {
             snapshot.put("html", email.html());
+        }
+        List<String> names = !attachments.attachmentNames().isEmpty()
+                ? attachments.attachmentNames()
+                : email.attachmentNames();
+        if (!names.isEmpty()) {
+            snapshot.put("attachmentNames", names);
+        }
+        if (!attachments.attachmentErrors().isEmpty()) {
+            snapshot.put("attachmentErrors", attachments.attachmentErrors());
         }
         return snapshot;
     }

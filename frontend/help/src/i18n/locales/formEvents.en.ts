@@ -364,7 +364,7 @@ export default {
     lookupFocus: 'focus — clear the error',
     ownerTitle: 'Owner',
     ownerBody:
-      'Creator or current assignee, from Owner source. Create lists change, blur, focus. value is the owner display name or id. Example: copy it into Requester.',
+      'Read-only. Source is Creator (first Save operator) or Case Handler (assignee while the step is open; the person who completes it, including a delegate; MI writes the outer step name). Bind an existing VARCHAR column — do not drag Owner to auto-create a field. Create lists change, blur, focus. value is user:<id>, a comma list, or step:<name>.',
     ownerChange: 'change — copy Owner into Requester on help_pr',
     ownerBlur: 'blur — warn when Owner is empty',
     ownerFocus: 'focus — clear the error',

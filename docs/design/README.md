@@ -29,15 +29,15 @@
 
 > 改这两处任一侧前，两篇都值得扫一眼：契约字段名由前者定义，后者依赖它做门控。
 
-## Owner 组件（Creator / Current Assignee）
+## Owner 组件（Creator / Case Handler）
 
-Table Design 先建 VARCHAR 列，表单上把控件改成 Owner（**主表、子表都可以**）。每个控件选 **Creator**（流程发起人 / 子表建行人）或 **Current Assignee**（按当前任务办理规则取值：未领一堆人、领了一个人，**写进本 Owner 列**）。一表、一表单可以多个。只读。View 勾选该列即可。不是每表一个，也不自动建列。
+Table Design 先建 VARCHAR 列，表单上把控件改成 Owner（**主表、子表都可以**）。属性面板 **下拉框**选 **Creator** 或 **Case Handler**（两值，不是四值）。Create = 行创建预填当前 user、Save 落库。主表 Case Handler：进行中写任务 assignee，**该节点 Complete 写实际操作人**（委托则记代办人），MI 写外层框名（`step:`），终态清空；子表 Case Handler **仅 MI 行**写人，非 MI 不自动写。一表、一表单可以多个。View 勾选该列即可。不是每表一个，也不自动建列。
 
 | 文档 | 覆盖 |
 |------|------|
-| [owner-field-component.md](./owner-field-component.md) | **Owner 组件**（状态：方案已定稿 2026-08-21）：先建列再改类型、source 二选一、主表+子表、可多个、一人或一堆 `user:` + `__display` |
+| [owner-field-component.md](./owner-field-component.md) | **Owner 组件**（状态：2026-09-07 修订）：Source 下拉、四场景、主表 Case Handler=`user:`/`step:`、Complete 记实际操作人、子表仅 MI 行 |
 
-> Owner 的 Current Assignee **只是字段取值来源**，不是门户系统 Current Assignee（My Requests / 详情头 / 实例列）。不要合成存储，不要读路径互盖。分派仍看 BPMN `assigneeType`；MI 行内分派仍看上面两篇。改 Owner 不转办。
+> 主表 Owner Case Handler 与申请详情 Basic Info / My Request 列表 Current Assignee **同一套展示逻辑**。To Do 任务头仍是本任务办理人。存储不与实例列合成。分派仍看 BPMN；改 Owner 不转办。Source 是下拉两项。
 > 08-17「拖组件建列 / 每表一个 / 可改派 / 禁止跟办理人」已作废，且 **未合入 origin**。实现以该文档为准，样式跟 Lookup / `ws-theme`。
 > 「owned by me」筛选、手改派、行级可见性均另开设计。
 

@@ -56,6 +56,11 @@ public class EmailExtractionSpec {
         HTML,
         /** Plain-text + HTML body (QQ forwards often have HTML only). */
         TEXT_AND_HTML,
+        /**
+         * All non-inline attachments of this email, stored into one FILE field
+         * ({@link RuleType#DIRECT} only).
+         */
+        ATTACHMENTS,
         HEADER,
         CONST
     }

@@ -4,7 +4,9 @@ import com.developer.component.FileUploadComponent;
 import com.developer.entity.UploadedFile;
 import com.developer.exception.DeveloperBusinessException;
 import com.developer.exception.ResourceNotFoundException;
+import com.platform.common.constant.PlatformConstants;
 import com.platform.security.util.SecurityContextUtils;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -74,6 +76,47 @@ class FileUploadControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("UNAUTHENTICATED"));
+    }
+
+    @Test
+    void upload_shouldAcceptValidServiceTokenWhenAnonymous() throws Exception {
+        security.when(SecurityContextUtils::isAuthenticated).thenReturn(false);
+        ReflectionTestUtils.setField(controller, "serviceInternalToken", "svc-token");
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "invoice.pdf",
+                MediaType.APPLICATION_PDF_VALUE,
+                "hello".getBytes()
+        );
+        when(fileUploadComponent.upload(any()))
+                .thenReturn(Map.of(
+                        "id", "abc.pdf",
+                        "name", "invoice.pdf",
+                        "url", "/api/v1/upload/files/abc.pdf?originalName=invoice.pdf"
+                ));
+
+        mockMvc.perform(multipart("/upload")
+                        .file(file)
+                        .header(PlatformConstants.HEADER_SERVICE_TOKEN, "svc-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    void upload_shouldRejectInvalidServiceTokenWhenAnonymous() throws Exception {
+        security.when(SecurityContextUtils::isAuthenticated).thenReturn(false);
+        ReflectionTestUtils.setField(controller, "serviceInternalToken", "svc-token");
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "invoice.pdf",
+                MediaType.APPLICATION_PDF_VALUE,
+                "hello".getBytes()
+        );
+
+        mockMvc.perform(multipart("/upload")
+                        .file(file)
+                        .header(PlatformConstants.HEADER_SERVICE_TOKEN, "wrong"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

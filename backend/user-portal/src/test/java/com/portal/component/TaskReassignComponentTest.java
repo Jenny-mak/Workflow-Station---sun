@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -66,7 +67,25 @@ class TaskReassignComponentTest {
 
         assertThat(result.getAssignee()).isEqualTo("bob");
         verify(taskAssignmentHistoryRecorder).record(before, "leader", ChangeType.REASSIGN, "bob");
-        verify(processInstanceSyncComponent).updateProcessInstanceAssignee(eq("pi-1"), eq("bob"), any(), any());
+        verify(processInstanceSyncComponent).updateProcessInstanceAssignee(
+                eq("pi-1"), eq("bob"), any(), any(), isNull());
+    }
+
+    @Test
+    void reassignsMiPoolTaskForwardsCurrentItem() {
+        Map<String, Object> currentItem = Map.of("row_id", "r1");
+        TaskInfo before = pool("alice", currentItem);
+        TaskInfo after = pool("bob", currentItem);
+        when(taskQueryComponent.getTaskById("t1")).thenReturn(Optional.of(before), Optional.of(after));
+        when(claimForceUnclaimAnnotator.canReassign(before, "leader")).thenReturn(true);
+        when(taskPermissionEvaluator.isHeldByUser(before, "bob", null)).thenReturn(false);
+        when(workflowEngineClient.reassignClaim("t1", "leader", "bob"))
+                .thenReturn(Optional.of(Map.of("success", true)));
+
+        component.reassign("t1", "leader", "bob", "leader");
+
+        verify(processInstanceSyncComponent).updateProcessInstanceAssignee(
+                eq("pi-1"), eq("bob"), any(), any(), eq(currentItem));
     }
 
     @Test
@@ -92,12 +111,17 @@ class TaskReassignComponentTest {
     }
 
     private static TaskInfo pool(String assignee) {
+        return pool(assignee, null);
+    }
+
+    private static TaskInfo pool(String assignee, Map<String, Object> currentItem) {
         return TaskInfo.builder()
                 .taskId("t1")
                 .processInstanceId("pi-1")
                 .bpmnAssigneeType("BU_ROLE")
                 .assignee(assignee)
                 .candidateUserIds(List.of("alice", "bob"))
+                .variables(currentItem == null ? null : Map.of("_currentItem", currentItem))
                 .build();
     }
 }

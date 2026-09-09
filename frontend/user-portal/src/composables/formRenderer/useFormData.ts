@@ -172,6 +172,9 @@ export function useFormData(deps: FormDataDeps) {
         data[field.key] = bound
       } else if (field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== '') {
         data[field.key] = field.defaultValue
+        if (typeof field._ownerPrefillDisplay === 'string' && field._ownerPrefillDisplay.length > 0) {
+          data[`${field.key}__display`] = field._ownerPrefillDisplay
+        }
       } else if (field.type === 'checkbox') {
         data[field.key] = []
       } else if (field.type === 'switch') {

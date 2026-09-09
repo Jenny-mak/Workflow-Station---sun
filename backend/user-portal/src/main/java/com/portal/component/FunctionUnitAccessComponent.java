@@ -125,39 +125,71 @@ public class FunctionUnitAccessComponent {
     }
     
     /**
-     * Check if a function unit is enabled
-     * @return true if enabled, false if disabled or unable to determine status
+     * Check if a function unit is enabled.
+     *
+     * <p>The admin-center detail endpoint is keyed by the catalog UUID, so a dw code /
+     * processDefinitionKey has to be resolved first — same order as {@link #canAccessFunctionUnit}
+     * and the primary-key allocation path. Handing it a raw code could never match a UUID primary
+     * key, so every lookup threw and fell back to "enabled", which disabled the gate outright.
+     *
+     * @return true only when admin-center confirms the unit is enabled; false when it is disabled,
+     *         has no deployed catalog entry, or admin-center cannot answer (fail-closed)
      */
     public boolean isFunctionUnitEnabled(String functionUnitIdOrCode) {
-        log.info("Checking if function unit {} is enabled", functionUnitIdOrCode);
-        
+        String catalogId = toCatalogId(functionUnitIdOrCode);
+        if (catalogId == null) {
+            log.warn("Function unit {} has no deployed catalog entry, treating as disabled", functionUnitIdOrCode);
+            return false;
+        }
+
         try {
-            // Try fetching by ID first
-            String url = adminCenterUrl + "/api/v1/admin/function-units/" + SafeUrlInput.requirePathToken(functionUnitIdOrCode);
-            log.info("Fetching function unit info from: {}", url);
-            
+            String url = adminCenterUrl + "/api/v1/admin/function-units/" + SafeUrlInput.requirePathToken(catalogId);
+
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                     url,
                     HttpMethod.GET,
                     null,
                     new ParameterizedTypeReference<Map<String, Object>>() {}
             );
-            
-            if (response.getBody() != null) {
-                Map<String, Object> payload = ApiResponseBodyUnwrap.unwrapDataMap(response.getBody());
-                Boolean enabled = parseEnabledFlag(payload.get("enabled"));
-                log.info("Function unit {} enabled status: {}", functionUnitIdOrCode, enabled);
-                // Default to true (if field does not exist)
-                return enabled == null || enabled;
+
+            Map<String, Object> payload = response.getBody() != null
+                    ? ApiResponseBodyUnwrap.unwrapDataMap(response.getBody())
+                    : Collections.emptyMap();
+            if (payload.isEmpty()) {
+                log.warn("Empty function unit detail for {} (requested {}), treating as disabled",
+                        catalogId, functionUnitIdOrCode);
+                return false;
             }
-            
-            return true;
-            
+
+            Boolean enabled = parseEnabledFlag(payload.get("enabled"));
+            log.debug("Function unit {} (catalog {}) enabled status: {}", functionUnitIdOrCode, catalogId, enabled);
+            // Absent flag means a catalog row that predates the column; treat those as enabled.
+            return enabled == null || enabled;
+
         } catch (Exception e) {
-            log.error("Failed to check function unit enabled status for {}: {}", functionUnitIdOrCode, e.getMessage(), e);
-            // Default to allowing access on error to avoid blocking the user
-            return true;
+            // Fail-closed: an unreachable admin-center must not silently grant access to a
+            // function unit that may have been disabled.
+            log.warn("Failed to check enabled status for {} (catalog {}), treating as disabled: {}",
+                    functionUnitIdOrCode, catalogId, e.getMessage());
+            return false;
         }
+    }
+
+    /**
+     * Map an id / dw code / processDefinitionKey onto a deployed catalog UUID, or null when it does
+     * not resolve. {@link #resolveFunctionUnitId} echoes its argument back when every lookup misses,
+     * so a non-UUID result is the "unresolved" signal.
+     */
+    private String toCatalogId(String functionUnitIdOrCode) {
+        if (functionUnitIdOrCode == null || functionUnitIdOrCode.isBlank()) {
+            return null;
+        }
+        // Already a catalog id: resolving again would only re-verify it over HTTP.
+        if (functionUnitIdOrCode.matches(LOWERCASE_UUID_REGEX)) {
+            return functionUnitIdOrCode;
+        }
+        String resolved = resolveFunctionUnitId(functionUnitIdOrCode);
+        return resolved != null && resolved.matches(LOWERCASE_UUID_REGEX) ? resolved : null;
     }
     
     /**
@@ -333,6 +365,27 @@ public class FunctionUnitAccessComponent {
             throw new FunctionUnitDisabledException("Function unit is disabled");
         }
         return functionUnitId;
+    }
+
+    /**
+     * Aligns the process-key cache with Admin {@code active-for-start}. Import/redeploy
+     * changes the enabled catalog id while this cache can still hold the previous id
+     * for up to {@link #CACHE_TTL}; Email Monitor and Portal start must not wait for
+     * TTL or a user-portal restart.
+     */
+    public String resolveFunctionUnitIdAlignedWithActiveCatalog(String processKey, String activeCatalogId) {
+        String resolved = resolveFunctionUnitId(processKey);
+        if (activeCatalogId != null && activeCatalogId.equals(resolved)) {
+            return resolved;
+        }
+        if (!mayResolveViaProcessKeyCache(processKey)) {
+            return resolved;
+        }
+        log.info(
+                "Active catalog {} differs from resolved {}; invalidating process-key cache for [{}]",
+                activeCatalogId, resolved, processKey);
+        clearProcessKeyCache(processKey);
+        return resolveFunctionUnitId(processKey);
     }
     
     /**

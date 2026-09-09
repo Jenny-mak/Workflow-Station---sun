@@ -6,11 +6,12 @@ import {
 } from '../email/useProcessFormSubBindings'
 import type { TableBinding, TableDefinition } from '@/api/functionUnit'
 
-function field(name: string, pk = false): TableDefinition['fieldDefinitions'][number] {
+function field(name: string, pk = false, dataType = 'VARCHAR'): TableDefinition['fieldDefinitions'][number] {
   return {
     fieldName: name,
     displayName: name.replace('_', ' '),
     isPrimaryKey: pk,
+    dataType,
   } as TableDefinition['fieldDefinitions'][number]
 }
 
@@ -74,5 +75,17 @@ describe('useProcessFormSubBindings field mapping', () => {
 
     const mainOptions = loadMainFieldOptions(bindings, tableById)
     expect(mainOptions.map((o) => o.fieldName)).toContain('case_number')
+  })
+
+  it('keeps FILE dataType on mappable main fields', () => {
+    const table: TableDefinition = {
+      id: 113,
+      tableName: 'HMDC_Case',
+      tableType: 'MAIN',
+      fieldDefinitions: [field('quote_files', false, 'FILE'), field('title')],
+    } as TableDefinition
+
+    const options = extractMappableFields(table, true)
+    expect(options.find((o) => o.fieldName === 'quote_files')?.dataType).toBe('FILE')
   })
 })

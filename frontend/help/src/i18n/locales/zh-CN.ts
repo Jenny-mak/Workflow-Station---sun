@@ -391,6 +391,20 @@ export default {
     extractFieldCatalogLead: '字段目录 — 监听对话框「字段映射」页签上的每一个控件。',
     extractAttributeSample:
       '示例：来源选「发件人 (From)」→ 主表 sender_email；运行时写入 IMAP 返回的原始 From 字符串（可含显示名与地址）。',
+    extractAttachmentsTitle: '字段映射 — 存储邮件附件',
+    extractAttachmentsBody:
+      '在字段映射增加一行，来源选「附件」。目标必须是主表 FILE 列。一封邮件的全部附件写入该字段（1 个文件=URL；多个=JSON [{url,name}]）。内嵌 CID 图片仍在 HTML 正文，不当附件存储。超过 50MB 或超过 10 个的文件会跳过并记录；若勾选必填且结果为空，邮件进入人工审核。',
+    extractAttachmentsCatalogLead: '字段目录 — 字段映射页签上的「附件」来源。',
+    fSourceAttachments:
+      '来源分组「附件」。把入站邮件的全部非内嵌附件写入同一个 FILE 字段。方式锁定为直接映射（整值）。',
+    fAttachmentsTarget:
+      '目标下拉只列出主表 FILE 列。保存和 Deploy 会拒绝非 FILE 目标。列表为空时，请先在表设计中增加 FILE 列。',
+    fAttachmentsMethod:
+      '方式为直接映射（整值）。整包附件一起存储；本版本不按文件名或 MIME 拆分。',
+    fAttachmentsRequired:
+      '勾选后，没有可用附件（没有附件、全部超限或全部存储失败）的邮件会进入人工审核，不会自动发起流程。',
+    fSampleAttachments:
+      '样例邮件中的可选文件名（逗号分隔），仅用于预览。运行时使用真实附件；此框不会上传文件。',
     extractSubTableTitle: '子表（HTML 表格）页签',
     extractSubTableBody:
       '可选第三个页签。把邮件里的一张 HTML 表映射到表单子表（一行一条记录）。若绑定列表为空，请先在主流程表单添加子表。',

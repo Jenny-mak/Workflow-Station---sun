@@ -32,6 +32,7 @@ const jumpLinks: GuideJump[] = [
   { anchor: 'template', titleKey: 'emailMonitorGuide.templateTitle' },
   { anchor: 'extract-sample', titleKey: 'emailMonitorGuide.extractSampleTitle' },
   { anchor: 'extract-fields', titleKey: 'emailMonitorGuide.extractFieldMappingTitle' },
+  { anchor: 'extract-attachments', titleKey: 'emailMonitorGuide.extractAttachmentsTitle' },
   { anchor: 'extract-subtable', titleKey: 'emailMonitorGuide.extractSubTableTitle' },
   { anchor: 'start-event', titleKey: 'emailMonitorGuide.startEventTitle' },
   { anchor: 'deploy', titleKey: 'emailMonitorGuide.deployTitle' },
@@ -146,6 +147,20 @@ const sections: GuideSection[] = [
       { code: 'Required', hintKey: 'emailMonitorGuide.fRequired' },
       { code: 'Preview', hintKey: 'emailMonitorGuide.fPreview' },
       { code: 'sender_email', hintKey: 'emailMonitorGuide.extractAttributeSample' },
+    ],
+  },
+  {
+    anchor: 'extract-attachments',
+    titleKey: 'emailMonitorGuide.extractAttachmentsTitle',
+    bodyKey: 'emailMonitorGuide.extractAttachmentsBody',
+    bodyKeys: ['emailMonitorGuide.extractAttachmentsCatalogLead'],
+    ...catalog,
+    samples: [
+      { code: 'Source · Attachments', hintKey: 'emailMonitorGuide.fSourceAttachments' },
+      { code: 'Target Field (FILE only)', hintKey: 'emailMonitorGuide.fAttachmentsTarget' },
+      { code: 'Method · Direct (whole value)', hintKey: 'emailMonitorGuide.fAttachmentsMethod' },
+      { code: 'Required', hintKey: 'emailMonitorGuide.fAttachmentsRequired' },
+      { code: 'Attachment filenames (preview)', hintKey: 'emailMonitorGuide.fSampleAttachments' },
     ],
   },
   {

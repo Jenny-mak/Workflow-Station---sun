@@ -141,7 +141,8 @@ class TaskProcessProperties {
         );
         ProcessInstanceSyncComponent processInstanceSyncComponent =
             new ProcessInstanceSyncComponent(workflowEngineClient, processInstanceRepository,
-                    Mockito.mock(com.portal.component.OwnerFieldComponent.class));
+                    Mockito.mock(com.portal.component.OwnerFieldComponent.class),
+                    Mockito.mock(com.portal.component.MiOuterStepResolver.class));
         MiCollectionVariableBuilder miCollectionVariableBuilder =
             new MiCollectionVariableBuilder(workflowEngineClient, jdbcTemplate);
         TaskApprovalCompletionComponent taskApprovalCompletionComponent = new TaskApprovalCompletionComponent(

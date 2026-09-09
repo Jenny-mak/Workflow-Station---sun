@@ -30,6 +30,7 @@ public class ProcessInstanceSyncComponent {
     private final WorkflowEngineClient workflowEngineClient;
     private final ProcessInstanceRepository processInstanceRepository;
     private final OwnerFieldComponent ownerFieldComponent;
+    private final MiOuterStepResolver miOuterStepResolver;
 
     /**
      * Generic catch blocks must not swallow exceptions that already poisoned the Spring transaction;
@@ -56,6 +57,12 @@ public class ProcessInstanceSyncComponent {
      */
     void updateProcessInstanceAssignee(String processInstanceId, String assigneeUserId,
                                        String candidateUserIds, String currentNode) {
+        updateProcessInstanceAssignee(processInstanceId, assigneeUserId, candidateUserIds, currentNode, null);
+    }
+
+    void updateProcessInstanceAssignee(String processInstanceId, String assigneeUserId,
+                                       String candidateUserIds, String currentNode,
+                                       Map<String, Object> taskCurrentItem) {
         if (processInstanceId == null) {
             return;
         }
@@ -72,8 +79,15 @@ public class ProcessInstanceSyncComponent {
                 Map<String, Object> vars = instance.getVariables() == null
                         ? new HashMap<>()
                         : new HashMap<>(instance.getVariables());
+                if (taskCurrentItem != null && !taskCurrentItem.isEmpty()) {
+                    vars.put(OwnerFieldComponent.CURRENT_ITEM_KEY, taskCurrentItem);
+                }
+                String nodeForMi = currentNode != null ? currentNode : instance.getCurrentNode();
                 ownerFieldComponent.applyAssigneeSnapshot(
-                        instance.getFunctionUnitCode(), vars, assigneeUserId, candidateUserIds);
+                        instance.getFunctionUnitCode(), vars, assigneeUserId, candidateUserIds,
+                        instance.getStatus(),
+                        miOuterStepResolver.lookup(instance.getProcessDefinitionKey(), nodeForMi));
+                OwnerFieldComponent.stripProcessWideCurrentItem(vars);
                 instance.setVariables(vars);
                 processInstanceRepository.save(instance);
                 log.info("Updated process instance {} with currentAssignee={}, candidateUsers={}, currentNode={}",

@@ -8,9 +8,14 @@
       <span
         v-for="(chip, index) in chips"
         :key="`${chip.kind}-${index}-${chip.label}`"
-        class="lookup-selected-tag"
+        :class="chip.kind === 'step' ? 'owner-step-text' : 'lookup-selected-tag'"
       >
-        <OwnerChip :kind="chip.kind" :label="chip.label" :size="22" />
+        <OwnerChip
+          v-if="chip.kind !== 'step'"
+          :label="chip.label"
+          :size="22"
+        />
+        <span v-else>{{ chip.label }}</span>
       </span>
     </div>
     <el-input
@@ -83,6 +88,12 @@ const chips = computed(() => ownerChips(props.modelValue, props.display))
   font-size: 13px;
   color: #909399;
   line-height: 24px;
+}
+
+.owner-step-text {
+  font-size: 13px;
+  line-height: 24px;
+  color: var(--el-text-color-regular, #606266);
 }
 
 .owner-config-error {

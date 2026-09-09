@@ -137,7 +137,8 @@ public class FunctionUnit {
     }
 
     /**
-     * {@code true} if validation may be run (draft only).
+     * {@code true} if successful validation may transition status to VALIDATED (draft only).
+     * Content checks on VALIDATED/DEPLOYED units do not use this flag.
      */
     public boolean isValidatable() {
         return status == FunctionUnitStatus.DRAFT;

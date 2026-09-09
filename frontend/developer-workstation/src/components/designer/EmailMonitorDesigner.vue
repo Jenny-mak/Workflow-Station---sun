@@ -110,7 +110,11 @@
 
         <el-divider>{{ t('emailMonitor.wizard.title') }}</el-divider>
         <div class="form-tip" style="margin-bottom: 8px;">{{ t('emailMonitor.templateFiltersHint') }}</div>
-        <EmailExtractionWizard v-model="form.extractionRules" :function-unit-id="functionUnitId" />
+        <EmailExtractionWizard
+          ref="wizardRef"
+          v-model="form.extractionRules"
+          :function-unit-id="functionUnitId"
+        />
       </el-form>
       <template #footer>
         <el-button @click="showFormDialog = false">{{ t('common.cancel') }}</el-button>
@@ -166,6 +170,7 @@ const defaultForm = (): EmailMonitorRuleRequest => ({
 })
 
 const form = reactive<EmailMonitorRuleRequest>(defaultForm())
+const wizardRef = ref<{ attachmentTargetErrors: () => string[] } | null>(null)
 
 function connectionName(uid: string): string {
   return connections.value.find(c => c.connectionUid === uid)?.name ?? uid
@@ -257,6 +262,11 @@ async function handleSave() {
   }
   if (!form.connectionUid) {
     ElMessage.warning(t('emailMonitor.connectionRequired'))
+    return
+  }
+  const attachmentErrors = wizardRef.value?.attachmentTargetErrors() ?? []
+  if (attachmentErrors.length) {
+    ElMessage.warning(t('emailMonitor.wizard.attachmentsTargetMustBeFile', { field: attachmentErrors[0] }))
     return
   }
   saving.value = true

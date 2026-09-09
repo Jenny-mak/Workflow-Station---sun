@@ -4,7 +4,6 @@ import com.portal.client.WorkflowEngineClient;
 import com.portal.dto.TaskInfo;
 import com.portal.enums.ChangeType;
 import com.portal.exception.PortalException;
-import com.portal.service.ProcessAssigneeSnapshot;
 import com.portal.util.BuRolePoolTasks;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -64,7 +63,7 @@ public class TaskReassignComponent {
         TaskInfo task = taskQueryComponent.getTaskById(taskId)
                 .orElseThrow(() -> new PortalException("404", "Task not found: " + taskId));
         processInstanceSyncComponent.updateProcessInstanceAssignee(task.getProcessInstanceId(), target, null,
-                task.getTaskName());
+                task.getTaskName(), OwnerFieldComponent.taskScopedCurrentItem(task.getVariables()));
         taskQueryComponent.invalidateMineTaskListCache();
         taskAssignmentHistoryRecorder.record(taskBefore, userId, ChangeType.REASSIGN, target);
         log.info("Task {} reassigned by {} to {}", taskId, userId, target);

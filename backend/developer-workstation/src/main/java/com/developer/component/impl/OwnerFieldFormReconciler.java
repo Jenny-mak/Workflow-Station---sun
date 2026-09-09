@@ -39,6 +39,7 @@ public class OwnerFieldFormReconciler {
 
     static final String OWNER_TYPE = "owner";
     static final String SOURCE_CREATOR = "CREATOR";
+    static final String SOURCE_CASE_HANDLER = "CASE_HANDLER";
     static final String SOURCE_CURRENT_ASSIGNEE = "CURRENT_ASSIGNEE";
 
     private final FormDefinitionRepository formDefinitionRepository;
@@ -243,7 +244,8 @@ public class OwnerFieldFormReconciler {
     }
 
     /**
-     * {@code ownerConfig} contract (§4.1): JSON {@code {"source":"CREATOR"|"CURRENT_ASSIGNEE"}}.
+     * {@code ownerConfig} contract (§4.1): JSON {@code {"source":"CREATOR"|"CASE_HANDLER"}}.
+     * Legacy {@code CURRENT_ASSIGNEE} is accepted as {@code CASE_HANDLER}.
      * Missing source (including leftover {@code allowGroup}-only configs) defaults to CREATOR.
      * Invalid JSON / unknown source fails the save.
      */
@@ -267,7 +269,10 @@ public class OwnerFieldFormReconciler {
             return SOURCE_CREATOR;
         }
         String normalized = s.trim().toUpperCase(Locale.ROOT);
-        if (SOURCE_CREATOR.equals(normalized) || SOURCE_CURRENT_ASSIGNEE.equals(normalized)) {
+        if (SOURCE_CURRENT_ASSIGNEE.equals(normalized)) {
+            return SOURCE_CASE_HANDLER;
+        }
+        if (SOURCE_CREATOR.equals(normalized) || SOURCE_CASE_HANDLER.equals(normalized)) {
             return normalized;
         }
         if (strict) {

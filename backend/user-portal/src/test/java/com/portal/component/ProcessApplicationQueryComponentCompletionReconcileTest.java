@@ -50,7 +50,8 @@ class ProcessApplicationQueryComponentCompletionReconcileTest {
                 mainTableViewInvolvementChecker,
                 mainTableViewAccessResolver,
                 org.mockito.Mockito.mock(FunctionUnitAccessComponent.class),
-                jdbcTemplate);
+                jdbcTemplate,
+                org.mockito.Mockito.mock(MiOuterStepResolver.class));
     }
 
     @Test

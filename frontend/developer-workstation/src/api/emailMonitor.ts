@@ -14,6 +14,7 @@ export interface ExtractionFieldRule {
     | 'TEXT'
     | 'HTML'
     | 'TEXT_AND_HTML'
+    | 'ATTACHMENTS'
     | 'HEADER'
     | 'CONST'
   type: 'DIRECT' | 'CONST' | 'LABEL' | 'BETWEEN' | 'REGEX' | 'HEADER'
@@ -55,6 +56,8 @@ export interface ExtractionSampleEmail {
   messageId?: string
   text?: string
   html?: string
+  /** Read-only filename preview for ATTACHMENTS mappings; not sent to the runtime. */
+  attachmentNames?: string
 }
 
 export interface ExtractionRules {

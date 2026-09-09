@@ -120,7 +120,7 @@ class OwnerFieldFormReconcilerTest {
             Map<String, Object> config = new HashMap<>();
             config.put("rule", List.of(
                     ownerNode("case_owner", "{\"source\":\"CREATOR\"}"),
-                    ownerNode("current_handler", "{\"source\":\"CURRENT_ASSIGNEE\"}")));
+                    ownerNode("current_handler", "{\"source\":\"CASE_HANDLER\"}")));
 
             assertThatCode(() -> reconciler.reconcile(FU_ID, currentForm, config))
                     .doesNotThrowAnyException();
@@ -146,12 +146,25 @@ class OwnerFieldFormReconcilerTest {
         }
 
         @Test
-        @DisplayName("CURRENT_ASSIGNEE on a sub-table form succeeds")
-        void subCurrentAssigneeOk() {
+        @DisplayName("CASE_HANDLER on a sub-table form succeeds")
+        void subCaseHandlerOk() {
             assertThatCode(() -> reconciler.reconcile(FU_ID, currentForm,
-                    configWithSubOwner("row_owner", "{\"source\":\"CURRENT_ASSIGNEE\"}")))
+                    configWithSubOwner("row_owner", "{\"source\":\"CASE_HANDLER\"}")))
                     .doesNotThrowAnyException();
             verify(fieldDefinitionRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("legacy CURRENT_ASSIGNEE is the same source as CASE_HANDLER")
+        void legacyAssigneeAliasMatchesCaseHandler() {
+            FormDefinition otherForm = FormDefinition.builder().id(2L).boundTable(mainTable).build();
+            otherForm.setConfigJson(configWithMainOwner("current_handler", "{\"source\":\"CURRENT_ASSIGNEE\"}"));
+            when(formDefinitionRepository.findByFunctionUnitIdWithBindings(FU_ID))
+                    .thenReturn(List.of(currentForm, otherForm));
+
+            assertThatCode(() -> reconciler.reconcile(FU_ID, currentForm,
+                    configWithMainOwner("current_handler", "{\"source\":\"CASE_HANDLER\"}")))
+                    .doesNotThrowAnyException();
         }
 
         @Test
@@ -226,10 +239,15 @@ class OwnerFieldFormReconcilerTest {
         }
 
         @Test
-        @DisplayName("unknown source fails the save")
+        @DisplayName("unknown source fails the save; CURRENT_HANDLER is no longer an alias")
         void unknownSource() {
             assertThatThrownBy(() -> reconciler.reconcile(FU_ID, currentForm,
                     configWithMainOwner("case_owner", "{\"source\":\"TEAM\"}")))
+                    .isInstanceOf(DeveloperBusinessException.class)
+                    .hasMessageContaining("form.owner.config_invalid");
+
+            assertThatThrownBy(() -> reconciler.reconcile(FU_ID, currentForm,
+                    configWithMainOwner("case_owner", "{\"source\":\"CURRENT_HANDLER\"}")))
                     .isInstanceOf(DeveloperBusinessException.class)
                     .hasMessageContaining("form.owner.config_invalid");
         }

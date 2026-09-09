@@ -1,5 +1,6 @@
 package com.developer.component.impl;
 
+import com.developer.component.EmailExtractionAttachmentRulesValidator;
 import com.developer.dto.EmailMonitorRuleRequest;
 import com.developer.dto.EmailMonitorRuleResponse;
 import com.developer.dto.EmailMonitorStartEventBindRequest;
@@ -48,6 +49,9 @@ class EmailMonitorRuleComponentImplTest {
 
     @Mock
     private FunctionUnitRepository functionUnitRepository;
+
+    @Mock
+    private EmailExtractionAttachmentRulesValidator attachmentRulesValidator;
 
     @Mock
     private I18nService i18nService;
