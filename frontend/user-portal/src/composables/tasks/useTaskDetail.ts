@@ -32,6 +32,7 @@ export function useTaskDetail(options: {
       })
       options.historyRecords.value = filtered.map((item: any) => ({
         id: item.id || '',
+        taskId: item.taskId || item.id || '',
         nodeId: item.activityId || item.taskId || '',
         nodeName: item.activityName || item.taskName || item.nodeName || '',
         activityType: item.activityType || '',

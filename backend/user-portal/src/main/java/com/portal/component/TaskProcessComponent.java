@@ -92,7 +92,9 @@ public class TaskProcessComponent {
         TaskInfo task = getTaskOrThrow(taskId);
 
         // Update process instance current assignee (portal stores JWT userId)
-        processInstanceSyncComponent.updateProcessInstanceAssignee(task.getProcessInstanceId(), userId, null, task.getTaskName());
+        processInstanceSyncComponent.updateProcessInstanceAssignee(
+                task.getProcessInstanceId(), userId, null, task.getTaskName(),
+                OwnerFieldComponent.taskScopedCurrentItem(task.getVariables()));
 
         taskQueryComponent.invalidateMineTaskListCache();
         taskAssignmentHistoryRecorder.record(taskBefore, userId, ChangeType.CLAIM, userId);
@@ -150,7 +152,8 @@ public class TaskProcessComponent {
                 task.getProcessInstanceId(),
                 snapshot.getAssigneeUserId(),
                 snapshot.getCandidateUserIds(),
-                task.getTaskName());
+                task.getTaskName(),
+                OwnerFieldComponent.taskScopedCurrentItem(task.getVariables()));
 
         taskQueryComponent.invalidateMineTaskListCache();
         boolean force = BuRolePoolTasks.isClaimPoolTask(taskBefore) && !holder;
@@ -314,7 +317,9 @@ public class TaskProcessComponent {
 
         // Update process instance current assignee
         TaskInfo task = getTaskOrThrow(taskId);
-        processInstanceSyncComponent.updateProcessInstanceAssignee(task.getProcessInstanceId(), toUserId, null, task.getTaskName());
+        processInstanceSyncComponent.updateProcessInstanceAssignee(
+                task.getProcessInstanceId(), toUserId, null, task.getTaskName(),
+                OwnerFieldComponent.taskScopedCurrentItem(task.getVariables()));
 
         // Record audit log
         DelegationAudit audit = DelegationAudit.builder()

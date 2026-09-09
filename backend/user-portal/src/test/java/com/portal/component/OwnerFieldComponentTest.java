@@ -2,9 +2,13 @@ package com.portal.component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.common.i18n.I18nService;
+import com.portal.client.WorkflowEngineClient;
 import com.portal.component.OwnerFieldComponent.OwnerWriteContext;
+import com.portal.entity.ProcessInstance;
 import com.portal.exception.PortalException;
+import com.portal.repository.ProcessInstanceRepository;
 import com.portal.service.UserDisplayNameResolver;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -34,13 +38,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Owner write-path: Creator pins startUserId; Current Assignee follows the snapshot;
- * later submits must not turn Creator into the current actor.
+ * Owner write-path: Creator pins the first-Save actor; Case Handler follows assignee
+ * in progress, the actual operator on Complete, and step: during MI.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -138,14 +143,14 @@ class OwnerFieldComponentTest {
     class Creator {
 
         @Test
-        @DisplayName("empty main Creator is filled with startUserId, not the current actor")
-        void fillsStartUserNotActor() {
+        @DisplayName("empty main Creator is filled with the first-Save actor")
+        void fillsActorOnFirstSave() {
             Map<String, Object> variables = new HashMap<>(Map.of("title", "Laptop"));
 
             component.applyOnSubmit(FU, approvalContext(null), variables);
 
-            assertThat(variables.get("case_owner")).isEqualTo("user:" + START);
-            assertThat(variables.get("case_owner__display")).isEqualTo("Initiator");
+            assertThat(variables.get("case_owner")).isEqualTo("user:" + ACTOR);
+            assertThat(variables.get("case_owner__display")).isEqualTo("Approver");
         }
 
         @Test
@@ -182,6 +187,18 @@ class OwnerFieldComponentTest {
         }
 
         @Test
+        @DisplayName("canonical dw: slice key still fills empty sub-table Creator")
+        void fillsSubRowsWhenSliceKeyIsCanonicalDw() {
+            Map<String, Object> variables = variablesWithCanonicalSubRows(
+                    new HashMap<>(Map.of("qty", 1, "row_id", "r1")));
+
+            component.applyOnSubmit(FU, startContext(), variables);
+
+            assertThat(canonicalSubRows(variables).get(0).get("row_owner"))
+                    .isEqualTo("user:" + START);
+        }
+
+        @Test
         @DisplayName("unknown user is a validation error, not a silently stored id")
         void userNotFound() {
             when(userDisplayNameResolver.resolveIfExists("ghost")).thenReturn(Optional.empty());
@@ -209,19 +226,60 @@ class OwnerFieldComponentTest {
     }
 
     @Nested
-    @DisplayName("CURRENT_ASSIGNEE")
-    class CurrentAssignee {
+    @DisplayName("CASE_HANDLER")
+    class CaseHandler {
 
         @Test
-        @DisplayName("submit overwrites Current Assignee from the snapshot")
-        void submitOverwritesFromSnapshot() {
+        @DisplayName("submit does not write the current-task assignee onto MAIN Case Handler")
+        void submitDoesNotPaintMainFromTaskAssignee() {
             Map<String, Object> variables = new HashMap<>();
             variables.put("current_handler", "user:forged");
 
             component.applyOnSubmit(FU, new OwnerWriteContext(ACTOR, START, ASSIGNEE, null, Map.of()), variables);
 
-            assertThat(variables.get("current_handler")).isEqualTo("user:" + ASSIGNEE);
-            assertThat(variables.get("current_handler__display")).isEqualTo("Name-" + ASSIGNEE);
+            assertThat(variables.get("current_handler")).isEqualTo("");
+        }
+
+        @Test
+        @DisplayName("MI inner Save keeps previous MAIN step: and does not write the inner assignee")
+        void submitKeepsMainStepAndIgnoresInnerAssignee() {
+            Map<String, Object> previous = new HashMap<>();
+            previous.put("current_handler", "step:multi");
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("current_handler", "user:" + ASSIGNEE);
+
+            component.applyOnSubmit(FU, new OwnerWriteContext(ACTOR, START, ASSIGNEE, null, previous), variables);
+
+            assertThat(variables.get("current_handler")).isEqualTo("step:multi");
+            assertThat(variables.get("current_handler__display")).isEqualTo("multi");
+        }
+
+        @Test
+        @DisplayName("MI inner lookup writes MAIN step: even when previous is empty")
+        void submitWritesMainStepFromInnerLookup() {
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("current_handler", "user:" + ASSIGNEE);
+
+            component.applyOnSubmit(FU, new OwnerWriteContext(
+                    ACTOR, START, ASSIGNEE, null, Map.of(),
+                    MiOuterStepResolver.OuterLookup.known("multi")), variables);
+
+            assertThat(variables.get("current_handler")).isEqualTo("step:multi");
+            assertThat(variables.get("current_handler__display")).isEqualTo("multi");
+        }
+
+        @Test
+        @DisplayName("ordinary submit keeps the previous MAIN person and ignores the current-task assignee")
+        void submitKeepsPreviousMainPerson() {
+            Map<String, Object> previous = new HashMap<>();
+            previous.put("current_handler", "user:" + START);
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("current_handler", "user:" + ASSIGNEE);
+
+            component.applyOnSubmit(FU, new OwnerWriteContext(ACTOR, START, ASSIGNEE, null, previous), variables);
+
+            assertThat(variables.get("current_handler")).isEqualTo("user:" + START);
+            assertThat(variables.get("current_handler__display")).isEqualTo("Name-" + START);
         }
 
         @Test
@@ -237,26 +295,170 @@ class OwnerFieldComponentTest {
         }
 
         @Test
-        @DisplayName("submit writes Current Assignee onto sub-table rows")
-        void submitWritesSubCurrentAssignee() {
+        @DisplayName("submit does not paint unmatched non-MI sub-table Case Handler rows")
+        void submitSkipsUnmatchedSubHandler() {
             Map<String, Object> variables = variablesWithSubRows(new HashMap<>(Map.of("qty", 1)));
 
             component.applyOnSubmit(FU, approvalContext(null), variables);
 
-            assertThat(subRows(variables).get(0).get("row_handler")).isEqualTo("user:" + ASSIGNEE);
-            assertThat(subRows(variables).get(0).get("row_handler__display")).isEqualTo("Name-" + ASSIGNEE);
+            assertThat(subRows(variables).get(0).get("row_handler")).isNull();
         }
 
         @Test
-        @DisplayName("applyAssigneeSnapshot writes Current Assignee onto existing sub-table rows")
-        void snapshotWritesSubRows() {
+        @DisplayName("submit writes Case Handler onto the MI row matching _currentItem")
+        void submitWritesMatchedSubHandler() {
+            Map<String, Object> row = new HashMap<>();
+            row.put("qty", 1);
+            row.put("row_id", "r1");
+            Map<String, Object> variables = variablesWithSubRows(row);
+            variables.put("_currentItem", Map.of("row_id", "r1"));
+
+            component.applyOnSubmit(FU, approvalContext(null), variables);
+
+            assertThat(subRows(variables).get(0).get("row_handler")).isEqualTo("user:" + ASSIGNEE);
+        }
+
+        @Test
+        @DisplayName("canonical dw: slice key still writes Case Handler on the matched MI row")
+        void submitWritesMatchedSubHandlerOnCanonicalDwKey() {
+            Map<String, Object> row = new HashMap<>();
+            row.put("qty", 1);
+            row.put("row_id", "r1");
+            Map<String, Object> variables = variablesWithCanonicalSubRows(row);
+            variables.put("_currentItem", Map.of("row_id", "r1"));
+
+            component.applyOnSubmit(FU, approvalContext(null), variables);
+
+            assertThat(canonicalSubRows(variables).get(0).get("row_handler"))
+                    .isEqualTo("user:" + ASSIGNEE);
+        }
+
+        @Test
+        @DisplayName("submit matches MI Case Handler by designer PK, not a coincidental id column")
+        void submitMatchesSubHandlerByDesignerPrimaryKey() {
+            when(jdbcTemplate.queryForList(anyString(), eq(String.class),
+                    org.mockito.ArgumentMatchers.<Object>any()))
+                    .thenReturn(List.of("correspondence_id"));
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", "same-as-other");
+            row.put("correspondence_id", "Test-000012");
+            Map<String, Object> variables = variablesWithCanonicalSubRows(row);
+            variables.put("_currentItem", Map.of("correspondence_id", "Test-000012", "id", "other"));
+
+            component.applyOnSubmit(FU, approvalContext(null), variables);
+
+            assertThat(canonicalSubRows(variables).get(0).get("row_handler"))
+                    .isEqualTo("user:" + ASSIGNEE);
+        }
+
+        @Test
+        @DisplayName("submit does not match MI row on a non-PK id column")
+        void submitDoesNotMatchSubHandlerOnNonPrimaryKeyId() {
+            when(jdbcTemplate.queryForList(anyString(), eq(String.class),
+                    org.mockito.ArgumentMatchers.<Object>any()))
+                    .thenReturn(List.of("correspondence_id"));
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", "same");
+            row.put("correspondence_id", "Test-000012");
+            Map<String, Object> variables = variablesWithCanonicalSubRows(row);
+            variables.put("_currentItem", Map.of("id", "same"));
+
+            component.applyOnSubmit(FU, approvalContext(null), variables);
+
+            assertThat(canonicalSubRows(variables).get(0).get("row_handler")).isNull();
+        }
+
+        @Test
+        @DisplayName("applyAssigneeSnapshot writes MAIN people and does not paint unmatched sub rows")
+        void snapshotWritesMainNotUnmatchedSub() {
             Map<String, Object> variables = variablesWithSubRows(new HashMap<>(Map.of("qty", 1)));
 
             component.applyAssigneeSnapshot(FU, variables, ASSIGNEE, null);
 
             assertThat(variables.get("current_handler")).isEqualTo("user:" + ASSIGNEE);
-            assertThat(subRows(variables).get(0).get("row_handler")).isEqualTo("user:" + ASSIGNEE);
+            assertThat(subRows(variables).get(0).get("row_handler")).isNull();
             assertThat(subRows(variables).get(0).get("row_owner")).isNull();
+        }
+
+        @Test
+        @DisplayName("canonical dw: slice + task-scoped currentItem writes the MI row Case Handler")
+        void snapshotWritesMatchedSubHandlerOnCanonicalDwKey() {
+            Map<String, Object> row = new HashMap<>();
+            row.put("qty", 1);
+            row.put("row_id", "r1");
+            Map<String, Object> variables = variablesWithCanonicalSubRows(row);
+            variables.put("_currentItem", Map.of("row_id", "r1"));
+
+            component.applyAssigneeSnapshot(FU, variables, ASSIGNEE, null);
+
+            assertThat(canonicalSubRows(variables).get(0).get("row_handler"))
+                    .isEqualTo("user:" + ASSIGNEE);
+        }
+
+        @Test
+        @DisplayName("MI in-progress writes step: on MAIN")
+        void miWritesStepOnMain() {
+            Map<String, Object> variables = new HashMap<>();
+
+            component.applyAssigneeSnapshot(FU, variables, ASSIGNEE, null, "RUNNING", "multi");
+
+            assertThat(variables.get("current_handler")).isEqualTo("step:multi");
+            assertThat(variables.get("current_handler__display")).isEqualTo("multi");
+        }
+
+        @Test
+        @DisplayName("Complete writes the actor; terminal clears MAIN only")
+        void completeThenClear() {
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("current_handler", "user:" + ASSIGNEE);
+
+            component.applyOnComplete(FU, variables, ACTOR);
+            assertThat(variables.get("current_handler")).isEqualTo("user:" + ACTOR);
+
+            component.clearMainCaseHandler(FU, variables);
+            assertThat(variables.get("current_handler")).isEqualTo("");
+        }
+
+        @Test
+        @DisplayName("the Complete write reaches the task snapshot subset")
+        void completeValueLandsInSnapshot() {
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("current_handler", "user:" + ASSIGNEE);
+            Map<String, Object> snapshotFields = new HashMap<>();
+
+            component.applyOnComplete(FU, variables, ACTOR);
+            component.copyOwnerValuesIntoSnapshot(FU, variables, snapshotFields);
+
+            assertThat(snapshotFields.get("current_handler")).isEqualTo("user:" + ACTOR);
+            assertThat(snapshotFields.get("current_handler__display")).isEqualTo("Name-" + ACTOR);
+        }
+
+        @Test
+        @DisplayName("unknown MI lookup does not overwrite MAIN Case Handler")
+        void unknownLookupLeavesMain() {
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("current_handler", "step:multi");
+
+            component.applyAssigneeSnapshot(FU, variables, ASSIGNEE, null, "RUNNING",
+                    MiOuterStepResolver.OuterLookup.unknown());
+
+            assertThat(variables.get("current_handler")).isEqualTo("step:multi");
+        }
+
+        @Test
+        @DisplayName("MI Complete keeps step: on MAIN and writes the actor on the matched row")
+        void miCompleteKeepsStepOnMain() {
+            Map<String, Object> row = new HashMap<>();
+            row.put("qty", 1);
+            row.put("row_id", "r1");
+            Map<String, Object> variables = variablesWithSubRows(row);
+            variables.put("_currentItem", Map.of("row_id", "r1"));
+            variables.put("current_handler", "step:multi");
+
+            component.applyOnComplete(FU, variables, ACTOR, "multi");
+
+            assertThat(variables.get("current_handler")).isEqualTo("step:multi");
+            assertThat(subRows(variables).get(0).get("row_handler")).isEqualTo("user:" + ACTOR);
         }
 
         @Test
@@ -280,7 +482,7 @@ class OwnerFieldComponentTest {
                     .containsExactly("u-a", "u-b");
             assertThat(OwnerFieldComponent.parseStoredUserIds("user:" + ASSIGNEE))
                     .containsExactly(ASSIGNEE);
-            assertThat(OwnerFieldComponent.parseStoredUserIds("group:bu|role")).isEmpty();
+            assertThat(OwnerFieldComponent.parseStoredUserIds("step:multi")).isEmpty();
             assertThat(OwnerFieldComponent.parseStoredUserIds("")).isEmpty();
         }
 
@@ -399,18 +601,80 @@ class OwnerFieldComponentTest {
         return rs;
     }
 
+    @Nested
+    @DisplayName("withdraw")
+    class Withdraw {
+
+        @Test
+        @DisplayName("withdrawProcess clears MAIN Case Handler on the instance variables")
+        void withdrawClearsMainCaseHandler() {
+            ProcessInstance instance = new ProcessInstance();
+            instance.setId("pi-1");
+            instance.setStartUserId(START);
+            instance.setStatus("RUNNING");
+            instance.setFunctionUnitCode(FU);
+            instance.setVariables(new HashMap<>(Map.of("current_handler", "user:" + ASSIGNEE)));
+
+            ProcessInstanceRepository repo = mock(ProcessInstanceRepository.class);
+            when(repo.findById("pi-1")).thenReturn(Optional.of(instance));
+            when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            WorkflowEngineClient engine = mock(WorkflowEngineClient.class);
+            when(engine.isAvailable()).thenReturn(false);
+
+            ProcessComponent processComponent = new ProcessComponent(
+                    mock(com.portal.repository.FavoriteProcessRepository.class),
+                    repo,
+                    mock(com.portal.repository.ActionDefinitionRepository.class),
+                    mock(FunctionUnitAccessComponent.class),
+                    engine,
+                    mock(ProcessDraftComponent.class),
+                    mock(org.springframework.web.client.RestTemplate.class),
+                    mock(JdbcTemplate.class),
+                    i18nService,
+                    mock(ProcessStartComponent.class),
+                    mock(ProcessApplicationQueryComponent.class),
+                    mock(SubTableEnrichmentComponent.class));
+            ReflectionTestUtils.setField(processComponent, "ownerFieldComponent", component);
+
+            assertThat(processComponent.withdrawProcess(START, "pi-1", "n/a")).isTrue();
+            assertThat(instance.getStatus()).isEqualTo("WITHDRAWN");
+            assertThat(instance.getVariables().get("current_handler")).isEqualTo("");
+        }
+    }
+
     @SafeVarargs
     private static Map<String, Object> variablesWithSubRows(Map<String, Object>... rows) {
+        return variablesWithSlice("64", rows);
+    }
+
+    @SafeVarargs
+    private static Map<String, Object> variablesWithCanonicalSubRows(Map<String, Object>... rows) {
+        return variablesWithSlice("dw:asset_items", rows);
+    }
+
+    @SafeVarargs
+    private static Map<String, Object> variablesWithSlice(String sliceKey, Map<String, Object>... rows) {
         Map<String, Object> variables = new HashMap<>();
         Map<String, Object> slices = new LinkedHashMap<>();
-        slices.put("64", new ArrayList<>(List.of(rows)));
+        slices.put(sliceKey, new ArrayList<>(List.of(rows)));
         variables.put("__subTables__", slices);
         return variables;
     }
 
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> subRows(Map<String, Object> variables) {
+        return sliceRows(variables, "64");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> canonicalSubRows(Map<String, Object> variables) {
+        return sliceRows(variables, "dw:asset_items");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> sliceRows(Map<String, Object> variables, String sliceKey) {
         Map<String, Object> slices = (Map<String, Object>) variables.get("__subTables__");
-        return (List<Map<String, Object>>) slices.get("64");
+        return (List<Map<String, Object>>) slices.get(sliceKey);
     }
 }

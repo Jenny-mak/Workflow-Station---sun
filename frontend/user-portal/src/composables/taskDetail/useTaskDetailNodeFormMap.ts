@@ -23,6 +23,7 @@ import type { NodeFormInfo, PreviousFormEntry } from './useTaskDetailState'
 import type { TaskDetailCtx } from './context'
 import { stampMiCollectionFromBpmn } from './miCollectionStamp'
 import { attachAssignmentConfigsToBindings } from '@/utils/miAssignmentConfig'
+import { overlayCompletedNodeOwner } from '@/composables/owner/overlayOwnerFromCompletedSnapshot'
 
 export interface TaskDetailNodeFormMapFns {
   buildNodeFormMapIfNeeded: () => Promise<void>
@@ -44,6 +45,33 @@ export function createTaskDetailNodeFormMap(ctx: TaskDetailCtx): TaskDetailNodeF
     lastBindingRelationTableMap,
   } = ctx
   const { formData } = ctx.taskForm
+  const { historyRecords } = ctx
+
+  function withCompletedOwnerOverlay(
+    nodeId: string,
+    info: Pick<NodeFormInfo, 'isCurrentTask' | 'fields' | 'tabs' | 'bpmnNodeName'>,
+    values: Record<string, unknown>,
+    bindings: NodeFormInfo['subTableBindings'],
+  ): Pick<NodeFormInfo, 'values' | 'subTableBindings'> {
+    if (info.isCurrentTask) {
+      return { values, subTableBindings: bindings }
+    }
+    const variables = (taskInfo.value as { variables?: Record<string, unknown> }).variables
+    const overlaid = overlayCompletedNodeOwner({
+      values,
+      fields: info.fields,
+      tabs: info.tabs,
+      bindings,
+      nodeId,
+      nodeName: info.bpmnNodeName,
+      variables,
+      history: historyRecords.value,
+    })
+    return {
+      values: overlaid.values,
+      subTableBindings: overlaid.bindings as NodeFormInfo['subTableBindings'],
+    }
+  }
 
   async function buildNodeFormMapIfNeeded() {
     const pending = ctx.deferredNodeFormMapContent
@@ -214,13 +242,20 @@ export function createTaskDetailNodeFormMap(ctx: TaskDetailCtx): TaskDetailNodeF
       const nodeName = el.getAttribute('name') || nodeId
       const currentDefKey = (taskInfo.value as any).taskDefinitionKey || ''
       const isCurrentTask = !isCompletedTask.value && (nodeId === currentDefKey || nodeName === taskInfo.value.taskName)
+      const ownerLayer = withCompletedOwnerOverlay(
+        nodeId,
+        { isCurrentTask, fields: nodeFields, tabs: nodeTabs, bpmnNodeName: nodeName },
+        { ...formData.value },
+        nodeBindings,
+      )
       newMap.set(nodeId, {
         formName: matchedForm.name || nodeName,
+        bpmnNodeName: nodeName,
         isCurrentTask,
         fields: nodeFields,
         tabs: nodeTabs,
-        values: { ...formData.value },
-        subTableBindings: nodeBindings,
+        values: ownerLayer.values,
+        subTableBindings: ownerLayer.subTableBindings,
         formConfig: nodeFormConfig,
         nativeSubTableBindingIds: nodeNativeIds,
       })
@@ -254,7 +289,8 @@ export function createTaskDetailNodeFormMap(ctx: TaskDetailCtx): TaskDetailNodeF
           flattened: null,
           bindingTableById: lastBindingRelationTableMap.value,
         })
-        nextEarly.set(nodeId, { ...info, values: { ...valuesBase }, subTableBindings: bindings })
+        const ownerLayer = withCompletedOwnerOverlay(nodeId, info, { ...valuesBase }, bindings)
+        nextEarly.set(nodeId, { ...info, values: ownerLayer.values, subTableBindings: ownerLayer.subTableBindings })
       }
       nodeFormMap.value = nextEarly
       return
@@ -282,10 +318,11 @@ export function createTaskDetailNodeFormMap(ctx: TaskDetailCtx): TaskDetailNodeF
         flattened,
         bindingTableById: lastBindingRelationTableMap.value,
       })
+      const ownerLayer = withCompletedOwnerOverlay(nodeId, info, { ...valuesBase }, bindings)
       next.set(nodeId, {
         ...info,
-        values: { ...valuesBase },
-        subTableBindings: bindings,
+        values: ownerLayer.values,
+        subTableBindings: ownerLayer.subTableBindings,
       })
     }
     nodeFormMap.value = next

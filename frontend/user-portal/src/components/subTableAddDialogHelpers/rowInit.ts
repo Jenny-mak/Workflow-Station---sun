@@ -2,6 +2,7 @@ import type { FormRules } from 'element-plus'
 import { isSystemAuditField, normalizeAuditFieldName } from '@platform-shared/systemAuditFields'
 import type { DialogColumn } from './types'
 import { getUser, type UserInfo } from '@/api/auth'
+import { applyCreatorPrefill } from '@/composables/owner/useOwnerFieldModel'
 
 /** Format the current instant as {@code YYYY-MM-DD HH:mm:ss} in UTC+8 (Asia/Shanghai). */
 function formatTimestampLocal(): string {
@@ -146,6 +147,22 @@ export function buildInitialRow(columns: DialogColumn[]): Record<string, unknown
 
   // Audit fields (created_at / created_by / updated_at / updated_by) stay empty here:
   // they are filled by applyAuditFieldDefaults at dialog SAVE time, never on open.
+  // Owner Creator is the opposite: §3.3.1 pre-fills the current user when the row is created.
+  let cachedUser: UserInfo | null | undefined
+  for (const col of columns) {
+    if (col.type !== 'owner') continue
+    if (cachedUser === undefined) {
+      try {
+        cachedUser = getUser()
+      } catch {
+        cachedUser = null
+      }
+    }
+    const ownerConfig = typeof col.props?.ownerConfig === 'string'
+      ? col.props.ownerConfig
+      : JSON.stringify(col.props?.ownerConfig ?? {})
+    applyCreatorPrefill(row, col.field, ownerConfig, cachedUser)
+  }
 
   return row
 }

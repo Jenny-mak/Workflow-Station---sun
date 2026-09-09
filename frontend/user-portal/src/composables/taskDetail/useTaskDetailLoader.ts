@@ -14,6 +14,7 @@ import {
   yieldToMain,
 } from './subTableRowUtils'
 import { seedTaskFormFromProcessValues } from './seedTaskFormFromProcessValues'
+import { settleHistoryThenRefreshOwnerOverlay } from '@/composables/owner/overlayOwnerFromCompletedSnapshot'
 import type { TaskDetailCtx } from './context'
 
 /**
@@ -115,8 +116,9 @@ export function createTaskDetailLoader(
         }
 
         // Parallel fetch: history, FU content, process/task forms — do not block FU/form CPU on history.
-        const historyPromise = ctx.loadTaskHistory().then(() => {
+        const historyPromise = settleHistoryThenRefreshOwnerOverlay(ctx.loadTaskHistory(), () => {
           if (bpmnXml.value) parseBpmnXml(bpmnXml.value)
+          ctx.refreshNodeFormMapFromFormData()
         })
         const fuFetchPromise = data.processDefinitionKey
           ? processApi
@@ -297,8 +299,9 @@ export function createTaskDetailLoader(
               if (stP) {
                 formData.value = { ...formData.value, __subTables__: stP }
               }
-              const historyPromise = ctx.loadTaskHistory().then(() => {
+              const historyPromise = settleHistoryThenRefreshOwnerOverlay(ctx.loadTaskHistory(), () => {
                 if (bpmnXml.value) parseBpmnXml(bpmnXml.value)
+                ctx.refreshNodeFormMapFromFormData()
               })
               const key = (taskInfo.value as any).processDefinitionKey
               const fuFetchPromise = key

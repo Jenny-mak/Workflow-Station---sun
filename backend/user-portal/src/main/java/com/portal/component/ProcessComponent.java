@@ -67,6 +67,9 @@ public class ProcessComponent {
     @Autowired(required = false)
     private RequestIdEnricher requestIdEnricher;
 
+    @Autowired(required = false)
+    private OwnerFieldComponent ownerFieldComponent;
+
     /**
      * In-memory cache for function unit content payloads (forms + BPMN + data tables).
      * Key: resolved functionUnitId. TTL: 5 minutes (matching FunctionUnitAccessComponent).
@@ -255,6 +258,7 @@ public class ProcessComponent {
         // Set status to withdrawn
         instance.setStatus("WITHDRAWN");
         instance.setEndTime(LocalDateTime.now());
+        clearMainCaseHandlerOnWithdraw(instance);
         processInstanceRepository.save(instance);
 
         // Cancel process instance via Flowable engine
@@ -276,6 +280,17 @@ public class ProcessComponent {
         }
 
         return true;
+    }
+
+    private void clearMainCaseHandlerOnWithdraw(ProcessInstance instance) {
+        if (ownerFieldComponent == null) {
+            return;
+        }
+        Map<String, Object> vars = instance.getVariables() == null
+                ? new HashMap<>()
+                : new HashMap<>(instance.getVariables());
+        ownerFieldComponent.clearMainCaseHandler(instance.getFunctionUnitCode(), vars);
+        instance.setVariables(vars);
     }
 
     /**

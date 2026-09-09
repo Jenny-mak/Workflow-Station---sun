@@ -617,7 +617,7 @@ FcDesigner.addDragRule({
 })
 
 // Owner field (docs/design/owner-field-component.md): control type on an existing
-// VARCHAR column. Source is CREATOR or CURRENT_ASSIGNEE. Multiple per table/form.
+// VARCHAR column. Source is CREATOR or CASE_HANDLER. Multiple per table/form.
 FcDesigner.addDragRule({
   name: 'owner',
   label: String(i18n.global.t('form.ownerTitle')),

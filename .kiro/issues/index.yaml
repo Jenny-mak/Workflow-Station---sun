@@ -3559,3 +3559,61 @@
     dev 重建 user-portal 后 —— atm-20260623-gaevus 零日志且 Data 菜单仍在、
     fu-20260422-23tfag 打一条 WARN 并隐藏、旧 ERROR 计数 0、
     任务详情 /processes/function-units/atm-20260623-gaevus/content 200（回归 requireEnabledFunctionUnit）。
+
+- id: "1613"
+  status: fixed
+  fixed_at: "2026-09-07"
+  severity: major
+  category: bug
+  summary: "MI Participants Owner Creator/Case Handler never wrote under dw:subtable"
+  file: "backend/user-portal/src/main/java/com/portal/component/OwnerFieldMetadata.java"
+  note: |
+    反例：application 1eb0b1b4-aa83-11f1-9768-463ece98de68（fu-20260422-23tfag），
+    __subTables__ 只有 dw:subtable / dw:attachment；Test-000012/013 有 lookup
+    assignee，row_owner / row_case_handler 均为空。
+    根因：1) Owner 元数据只按 bindingId/表名 identify，认不到规范 key dw:<table>；
+    2) 任务 Save 在 applyOnSubmit 前丢掉 execution 级 _currentItem，Complete/claim
+    同步也没把任务级 currentItem 临时挂上，子表 Case Handler 对不上行。
+    修复：identify 用 SubTableStoreKeys.tableNameOf；catalog 增加 dw: 别名；
+    Save/Complete/claim 写 Owner 时临时 overlay currentItem，persist 前再剥掉。
+    存量单已过 MI 写窗口，不回填。新发起的 MI Demo 首次 Save 写 Creator，
+    认领/保存/完成子任务写该行 Case Handler。
+    验证：OwnerFieldComponentTest 22 绿（含 dw:asset_items 三例）；
+    user-portal 已重建 healthy。
+
+- id: "1614"
+  status: fixed
+  fixed_at: "2026-09-07"
+  severity: major
+  category: bug
+  summary: "流程图点已完成节点，Owner 字段显示活数据而非该节点快照"
+  file: "frontend/user-portal/src/composables/taskDetail/useTaskDetailFormsLoader.ts"
+  note: |
+    反例：task c23c2609-aa85-11f1-b0b7-dafa4142d7ca（fu-20260422-23tfag）点
+    assignment 节点，Case Handler 显示活值 step:multi / multi；
+    正例：应显示该节点完成时冻结的 张伟（设计 §6.6）。
+    根因（三处叠加）：
+    1) loadTaskHistory 把 TaskHistoryInfo 映射成 HistoryRecord 时丢掉 taskId，
+       lastCompletedTaskIdForNode 退化用合成行 id `history_N`，
+       _snapshot_{taskId} 永远查不到；
+    2) 覆盖层拿 matchedForm.name（"Assign Task"）当 BPMN 节点名传下去，
+       nodeName 兜底匹配对不上 flow-history 的 nodeName（"assignment"）；
+    3) ProcessStartComponent 自动完成首个任务时没先调
+       ownerFieldComponent.applyOnComplete，导致 submit 节点快照里
+       case_handler 是空串。
+    修复：HistoryRecord 增 taskId 并在 loader 透传；lastCompletedTaskIdForNode
+    只认真实 taskId（查不到即清空 Owner，不再回落活数据）；NodeFormInfo 增
+    bpmnNodeName 供名称兜底；ProcessStartComponent 新增
+    applyOwnerOnFirstTaskComplete，在 captureTaskFormSnapshot 之前写实际操作人。
+    验证：overlayOwnerFromCompletedSnapshot.test.ts 8 绿（含"只认真实 taskId"
+    与"节点名兜底"两条新例）；OwnerFieldComponentTest completeValueLandsInSnapshot 绿；
+    前端 build + compose 重建 user-portal / user-portal-frontend；
+    Playwright verify-owner-completed-node-snapshot.mjs PASS，截图
+    frontend/user-portal/verification-screenshots/2026-09-07_owner-completed-node-assignment-owner-rows.png
+    显示 Case Owner / Case Handler 均为 张伟；
+    新发起实例 f9aace08-aa8c-11f1-80ec-22af4e2ce74d 的
+    _snapshot_f9b1abf8-… 中 case_handler = user:user-e2e-zhangwei（原为空串）。
+    regression:mi：unit 层全绿，6 个截图场景 5 过；#1438 attachment-rows 失败系
+    fixture 缺口（bb6a9c8a 实例 __subTables__ 里 dw:attachment 行数为 0，
+    与本次改动无关，归 #1522）。
+

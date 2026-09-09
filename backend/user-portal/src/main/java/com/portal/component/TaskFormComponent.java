@@ -127,6 +127,10 @@ public class TaskFormComponent {
     @Autowired
     private OwnerFieldComponent ownerFieldComponent;
 
+    @Lazy
+    @Autowired
+    private MiOuterStepResolver miOuterStepResolver;
+
     /**
      * Display name for audit fields; falls back to the raw user id when the
      * resolver is unavailable.
@@ -680,8 +684,15 @@ public class TaskFormComponent {
 
             updatedVariables.putAll(inbound);
 
-            // Owner fields: Creator pins startUserId; Current Assignee follows snapshot.
+            // Owner fields: Creator = actor at this Save; MAIN Case Handler is not
+            // taken from the current-task assignee (MI inner people stay off MAIN).
+            // Overlay THIS task's MI loop variable only for the write, then drop it —
+            // never persist execution-scoped _currentItem on the process-wide blob.
             if (ownerFieldComponent != null) {
+                Object taskCurrentItem = OwnerFieldComponent.taskScopedCurrentItem(formData);
+                if (taskCurrentItem instanceof Map) {
+                    updatedVariables.put("_currentItem", taskCurrentItem);
+                }
                 ownerFieldComponent.applyOnSubmit(
                         processInstance.getFunctionUnitCode(),
                         new OwnerFieldComponent.OwnerWriteContext(
@@ -689,8 +700,10 @@ public class TaskFormComponent {
                                 processInstance.getStartUserId(),
                                 processInstance.getCurrentAssignee(),
                                 processInstance.getCandidateUsers(),
-                                currentVariables),
+                                currentVariables,
+                                ownerMiLookup(processInstance)),
                         updatedVariables);
+                OwnerFieldComponent.stripProcessWideCurrentItem(updatedVariables);
             }
 
             // System audit fields: refresh updated_at/updated_by at real update
@@ -946,6 +959,11 @@ public class TaskFormComponent {
         boolean formResolved = formDefinition != null && !formDefinition.isEmpty();
         Map<String, Object> fieldValues = CompletedTaskSnapshotAssembler.assembleFieldValues(
                 mergedVariables, snapshotKeys, formResolved, fieldMapper(), objectMapper);
+        if (ownerFieldComponent != null) {
+            processInstanceRepository.findById(processInstanceId).ifPresent(instance ->
+                    ownerFieldComponent.copyOwnerValuesIntoSnapshot(
+                            instance.getFunctionUnitCode(), mergedVariables, fieldValues));
+        }
 
         TaskFormSnapshot snapshot = TaskFormSnapshot.builder()
                 .taskId(taskId)
@@ -1102,6 +1120,13 @@ public class TaskFormComponent {
      */
     private Map<String, Object> fetchTaskFormByStageId(String stageId, String processInstanceId) {
         return formDefinitionLoader().fetchTaskFormByStageId(stageId, processInstanceId, developerWorkstationUrl);
+    }
+
+    private MiOuterStepResolver.OuterLookup ownerMiLookup(ProcessInstance instance) {
+        if (miOuterStepResolver == null || instance == null) {
+            return MiOuterStepResolver.OuterLookup.known(null);
+        }
+        return miOuterStepResolver.lookup(instance.getProcessDefinitionKey(), instance.getCurrentNode());
     }
 
     // ========== Inner data class ==========

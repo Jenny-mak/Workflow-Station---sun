@@ -9,7 +9,7 @@
 |------|------|------|
 | 🔓 Open | **15** | `index.yaml` |
 | ⏸️ Wontfix | **2** | `index.yaml` |
-| ✅ Fixed | **见 index.yaml** | `index.yaml` 内 `status: fixed` 条目（含 #1403–#1404、#1409+、#1461–#1495、#1497–#1500、#1504、#1512–#1519、#1521、#1523–#1530、#1532–#1539、#1541–#1605、#1606–#1612 等） |
+| ✅ Fixed | **见 index.yaml** | `index.yaml` 内 `status: fixed` 条目（含 #1403–#1404、#1409+、#1461–#1495、#1497–#1500、#1504、#1512–#1519、#1521、#1523–#1530、#1532–#1539、#1541–#1614 等） |
 
 
 按严重度的分布见 `index.yaml` 各条目的 `severity` 字段（`status: open` / `fixed` / `wontfix`）。
@@ -28,6 +28,7 @@
 | 1501 | major | bug | Main Table View / Relation Tables 列表未应用 Input 敏感打码 |
 | 1522 | major | deploy | dev 库流程实例数据全空，regression:mi 截图门禁全部无法执行（环境 fixture 缺口） |
 | 1531 | minor | quality | Form Business Rules 未交付脚手架（DW 无入口 / Portal 无传参 / 库内 0 数据）— 技术债，非线上缺陷 |
+| 1599 | minor | bug | FU 部署新 catalog 版本后 Portal 发起 403 version mismatch，最长持续 5 分钟（processKeyCache 未失效） |
 | 1540 | minor | quality | Views CSV export：FE 注释称不分页但 body 仍带 size；BE 用 maxRows 覆盖 — 契约需澄清 |
 
 ### Wontfix

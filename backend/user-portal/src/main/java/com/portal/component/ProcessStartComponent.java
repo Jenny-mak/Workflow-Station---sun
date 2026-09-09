@@ -78,6 +78,11 @@ public class ProcessStartComponent {
     @Autowired
     private ChangeHistorySubmissionFilter changeHistorySubmissionFilter;
 
+    /** Lazy: first-task Case Handler MI lookup; null in {@code new}-constructed tests. */
+    @Lazy
+    @Autowired
+    private MiOuterStepResolver miOuterStepResolver;
+
     private ChangeHistorySubmissionFilter changeHistorySubmissionFilter() {
         ChangeHistorySubmissionFilter filter = changeHistorySubmissionFilter;
         if (filter == null) {
@@ -628,6 +633,12 @@ public class ProcessStartComponent {
         String failure = firstStepErrorOf(completeResult);
         if (failure == null) {
             log.info("First task completed successfully: {}", taskId);
+            // §6.3: this node's Case Handler must hold the actual operator *before* the
+            // snapshot freezes. The initiator's own first step is a Complete too, and the
+            // next-task assignee write below only touches live data — without this the
+            // completed node's snapshot keeps whatever Case Handler held at submit time.
+            applyOwnerOnFirstTaskComplete(
+                    flowableProcessInstanceId, (String) firstTask.get("taskName"), userId, variables);
             taskFormComponent.captureTaskFormSnapshot(
                     taskId, userId, firstTaskDefKey, flowableProcessInstanceId, variables);
 
@@ -637,6 +648,22 @@ public class ProcessStartComponent {
             log.warn("Failed to complete first task: {} — {}", taskId, failure);
             outcome.firstStepError = failure;
         }
+    }
+
+    /**
+     * Writes the actual operator into MAIN {@code CASE_HANDLER} for the auto-completed
+     * initiator task (§3.3.3 / §6.3), so the node's {@code _snapshot_{taskId}} freezes
+     * who submitted it rather than an empty handler.
+     */
+    private void applyOwnerOnFirstTaskComplete(String flowableProcessInstanceId, String firstTaskName,
+                                               String userId, Map<String, Object> variables) {
+        processInstanceRepository.findById(flowableProcessInstanceId).ifPresent(instance -> {
+            MiOuterStepResolver.OuterLookup miLookup = miOuterStepResolver == null
+                    ? MiOuterStepResolver.OuterLookup.unknown()
+                    : miOuterStepResolver.lookup(instance.getProcessDefinitionKey(), firstTaskName);
+            ownerFieldComponent.applyOnComplete(
+                    instance.getFunctionUnitCode(), variables, userId, miLookup);
+        });
     }
 
     /** Opaque marker returned to the browser; the real reason stays in the server log. */
@@ -705,11 +732,17 @@ public class ProcessStartComponent {
                 Map<String, Object> vars = instance.getVariables() == null
                         ? new HashMap<>()
                         : new HashMap<>(instance.getVariables());
+                MiOuterStepResolver.OuterLookup miLookup = miOuterStepResolver == null
+                        ? MiOuterStepResolver.OuterLookup.unknown()
+                        : miOuterStepResolver.lookup(
+                                instance.getProcessDefinitionKey(), outcome.currentNodeName);
                 ownerFieldComponent.applyAssigneeSnapshot(
                         instance.getFunctionUnitCode(),
                         vars,
                         outcome.nextAssigneeSnapshot.getAssigneeUserId(),
-                        outcome.nextAssigneeSnapshot.getCandidateUserIds());
+                        outcome.nextAssigneeSnapshot.getCandidateUserIds(),
+                        instance.getStatus(),
+                        miLookup);
                 instance.setVariables(vars);
                 processInstanceRepository.save(instance);
             });

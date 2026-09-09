@@ -57,7 +57,8 @@ class ProcessApplicationQueryComponentDetailAccessTest {
                 mainTableViewInvolvementChecker,
                 mainTableViewAccessResolver,
                 functionUnitAccessComponent,
-                jdbcTemplate);
+                jdbcTemplate,
+                org.mockito.Mockito.mock(MiOuterStepResolver.class));
         lenient().when(workflowEngineClient.isAvailable()).thenReturn(false);
     }
 

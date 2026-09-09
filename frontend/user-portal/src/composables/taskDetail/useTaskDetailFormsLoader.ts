@@ -171,6 +171,9 @@ export function createTaskDetailFormsLoader(ctx: TaskDetailCtx): TaskDetailForms
         // Convert to HistoryRecord format (keep gateway records for diagram status determination)
         historyRecords.value = visibleHistory.map((item: TaskHistoryInfo, index: number) => ({
           id: `history_${index}`,
+          // Completed diagram nodes read `_snapshot_{taskId}` for Owner (§6.6) — dropping
+          // this made every lookup miss and silently blank the frozen Case Handler.
+          taskId: item.taskId,
           nodeId: item.activityId || `node_${index}`,
           nodeName: item.activityName || t('task.unknownNode'),
           status: getHistoryStatus(item.operationType),
