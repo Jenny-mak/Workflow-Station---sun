@@ -265,7 +265,8 @@ public class ProcessStartComponent {
                     outcome.initiatorTaskIdForHistory,
                     outcome.initiatorTaskDefKeyForHistory,
                     userId,
-                    userChanges);
+                    userChanges,
+                    pin.code());
             updateInstanceNodeAndRecordStartHistory(flowableProcessInstanceId, outcome, userId, startUserDisplayName);
         });
 
@@ -874,7 +875,8 @@ public class ProcessStartComponent {
             String taskInstanceId,
             String taskDefinitionKey,
             String userId,
-            Map<String, Object> userChanges) {
+            Map<String, Object> userChanges,
+            String functionUnitCode) {
         if (userChanges == null || userChanges.isEmpty()) {
             return;
         }
@@ -926,7 +928,7 @@ public class ProcessStartComponent {
                     // Text keys exist — record only those (normalization merges aliases, dedup
                     // handles duplicates)
                     for (String subTableKey : textKeys) {
-                        recordStartSubTableAdds(context, subTables, subTableKey);
+                        recordStartSubTableAdds(context, subTables, subTableKey, functionUnitCode);
                     }
                 } else if (!numericKeys.isEmpty()) {
                     // Only numeric keys — merge all rows and record under one virtual name
@@ -945,7 +947,8 @@ public class ProcessStartComponent {
                             // slice — a table keyed by `correspondence_id` is matched by no list of
                             // likely column names.
                             String rowId = ChangeHistoryComponent.resolveRowIdentifier(rowMap,
-                                    changeHistoryComponent.designerPrimaryKeyFieldsForSliceKey(subTableKey));
+                                    changeHistoryComponent.designerPrimaryKeyFieldsForSliceKey(
+                                            functionUnitCode, subTableKey));
                             if (rowId != null && seen.add(rowId)) {
                                 allChanges.add(SubTableChange.builder()
                                         .changeType("ROW_ADD")
@@ -969,7 +972,7 @@ public class ProcessStartComponent {
     }
 
     private void recordStartSubTableAdds(ChangeHistoryContext context,
-            Map<String, Object> subTables, String subTableKey) {
+            Map<String, Object> subTables, String subTableKey, String functionUnitCode) {
         Object rowsObj = subTables.get(subTableKey);
         if (!(rowsObj instanceof List<?>))
             return;
@@ -980,7 +983,8 @@ public class ProcessStartComponent {
         List<SubTableChange> changes = new ArrayList<>();
         // Resolved once per slice: identity is the primary key this table declares, not a column
         // whose name happens to look like one.
-        List<String> pkFields = changeHistoryComponent.designerPrimaryKeyFieldsForSliceKey(subTableKey);
+        List<String> pkFields = changeHistoryComponent.designerPrimaryKeyFieldsForSliceKey(
+                functionUnitCode, subTableKey);
         for (Map<String, Object> row : rows) {
             String rowId = ChangeHistoryComponent.resolveRowIdentifier(row, pkFields);
             changes.add(SubTableChange.builder()

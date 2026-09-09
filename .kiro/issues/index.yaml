@@ -3617,3 +3617,70 @@
     fixture 缺口（bb6a9c8a 实例 __subTables__ 里 dw:attachment 行数为 0，
     与本次改动无关，归 #1522）。
 
+- id: "1615"
+  status: fixed
+  fixed_at: "2026-09-09"
+  severity: major
+  category: bug
+  summary: "Sub-table Change History paired rows by business values, so default stage OPEN repeated and ADD was recorded as UPDATE"
+  file: "backend/user-portal/src/main/java/com/portal/component/SubTableChangeHistoryDiff.java"
+  note: |
+    合入 common_0731_SELF_AP 时对面已占用 #1608–#1614，本条由 topic branch #1608 顺延为 #1615。
+    反例：两行只共享默认 stage=OPEN 时，pairByFingerprint / pairRemainingRowsAsUpdates
+    把新行配成旧行的 UPDATE；同一逻辑行在后续 stage 因 UUID 变化再记一次 OPEN。
+    根因：diff 用业务字段指纹和剩余行重叠分配对，而不是设计器主键 / platformRowUuid。
+    修复：只按 dw_field_definitions.is_primary_key 然后平台键配对，禁止用业务值认行。
+    未猜列名。存量 CH 不回填。
+    验证：TaskApprovalCompletionChangeHistoryTest
+    sharedDefaultStageDoesNotTurnAddIntoUpdate / unchangedDefaultStageIsNotRecordedAgain /
+    newRowSharingOnlyDefaultStageIsAddNotUpdate；ChangeHistoryAuditRowKeyTest；
+    ChangeHistoryPrimaryKeySliceLookupTest；ChangeHistorySubmissionFilterTest
+    topLevelLookupBaselineUsesConfiguredDisplayColumnNotObjectJson。
+    ATM 全链 `node frontend/scripts/verify-all-fu-change-history.mjs`
+    process=1438e890-abff-11f1-924d-7e698774d79f requestId=ATM-DC-PW-000028 COMPLETED：
+    case_status/case_stage/urge_status 仅 Case Submission 各记一次 display 值
+    （Open / Case Submission / Normal），后续 Assignment/Investigation 未再记；
+    correspondence ADD rowIdentifier=Corr-000021（非 platform UUID）。
+    ATM identity `node frontend/scripts/verify-atm-correspondence-ch.mjs` PASS
+    process=7a3c2c61-abff-11f1-924d-7e698774d79f requestId=ATM-DC-PW-000029
+    first=Corr-000022 ADD，second=Corr-000023 ADD 非 UPDATE，Email 未在后续 stage 重写。
+    跟进：history 切片名原先解析不到 is_primary_key；
+    ChangeHistoryDesignerPrimaryKeyLookup 按表名解析。lookup 对象 vs display
+    由 projectTaskAuditBaseline 对齐。rowIdentifier 优先设计器 PK。
+    2026-09-09 去掉剩余猜测：不按字段名跳过 assignee 空→填、不把 id/rowid
+    当元数据、lookup 不猜 id、PK 查询按 fu.code 限定、禁止发明 __index_ 身份、
+    复合 PK 必须全填。ATM 复验 PASS process=9dc07bee-ac04-11f1-a5e1-66a567277ec1
+    requestId=ATM-DC-PW-000032 first=Corr-000029 second=Corr-000030；
+    up_change_history 12 条 correspondence，row_identifier 均为设计器 PK。
+    脚本从表/BPMN/is_primary_key/FK ref_table_id 读 catalog，不再猜 process_key 列。
+    2026-09-09 脚本再去猜测：待办只按 processInstanceId 等，不配英文任务名；
+    子表样例/断言用 catalog 字段类型与 sort_order，不用 correspondence_channel 等列名；
+    分配全部 is_primary_key 且 strategy 需 allocate 的列；FK 用 ref_primary_key_fields；
+    主表重复断言按 field+value 计数，不再 /open/i。all-fu 按 pk_generation_json.strategy
+    分配，不用 includes('prefixedSequence')。
+    ATM 复验 PASS process=f0331233-ac17-11f1-a8ab-52e514deeb31
+    requestId=ATM-DC-PW-000034 first=Corr-000033 second=Corr-000034 COMPLETED。
+- id: "1616"
+  status: open
+  severity: major
+  category: bug
+  summary: "Meeting Assign Participants 500: engine SubTableDataInjector queries physical table participants.main_record_id"
+  file: "backend/workflow-engine-core/src/main/java/com/workflow/component/SubTableDataInjector.java"
+  note: |
+    fu-20260403-a1b2c5 完成 Assign Participants 时引擎 SQL
+    SELECT id, assignee_user_id, row_version FROM participants WHERE main_record_id = ?
+    物理表/列不存在（设计器 FK 是 meeting_id，表有前缀）。事务 aborted → portal 500。
+    Portal 已按 BPMN assignmentConfig.assigneeField 写入 __subTables__。
+    2026-09-09 验证 process=169f1305-abff-11f1-924d-7e698774d79f。
+- id: "1617"
+  status: open
+  severity: major
+  category: bug
+  summary: "Showcase Submit Application 500: DMN showcase_amount_tier missing from parent deployment"
+  file: "backend/workflow-engine-core"
+  note: |
+    fu-20260403-a1b2c4 完成 Submit Application：
+    No decision found for key: showcase_amount_tier and parent deployment id da443cd6-...
+    决策表未打进该部署。Change History 本身未触发。
+    2026-09-09 验证 process=162772c4-abff-11f1-924d-7e698774d79f。
+

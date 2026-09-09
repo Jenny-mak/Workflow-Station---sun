@@ -416,8 +416,8 @@ class ChangeHistorySubmissionFilterTest {
         when(jdbcTemplate.queryForList(
                 argThat(sql -> sql != null && sql.contains("WHERE form.id = ?")), eq(321L)))
                 .thenReturn(List.of(
-                        bindingRow(1144L, "SUB", "EDITABLE", "ATM_Transaction", "Transaction", 1144L),
-                        bindingRow(1149L, "SUB", "EDITABLE", "atm_correspondence", "ATM Correspondence", 1149L)));
+                        bindingRow(1144L, "SUB", "EDITABLE", "ATM_Transaction", "Transaction", 1144L, "row_id"),
+                        bindingRow(1149L, "SUB", "EDITABLE", "atm_correspondence", "ATM Correspondence", 1149L, "row_id")));
         Map<String, Object> form = new java.util.LinkedHashMap<>(formDefinition(List.of(), Map.of(
                 "1144", Map.of("rule", List.of(rule("card_number", false))),
                 "1149", Map.of("rule", List.of(
@@ -459,8 +459,8 @@ class ChangeHistorySubmissionFilterTest {
         when(jdbcTemplate.queryForList(
                 argThat(sql -> sql != null && sql.contains("WHERE form.id = ?")), eq(321L)))
                 .thenReturn(List.of(
-                        bindingRow(1144L, "SUB", "EDITABLE", "ATM_Transaction", "Transaction", 1144L),
-                        bindingRow(1149L, "SUB", "EDITABLE", "atm_correspondence", "ATM Correspondence", 1149L)));
+                        bindingRow(1144L, "SUB", "EDITABLE", "ATM_Transaction", "Transaction", 1144L, "row_id"),
+                        bindingRow(1149L, "SUB", "EDITABLE", "atm_correspondence", "ATM Correspondence", 1149L, "row_id")));
         Map<String, Object> form = new java.util.LinkedHashMap<>(formDefinition(List.of(), Map.of(
                 "1144", Map.of("rule", List.of(rule("card_number", false))),
                 "1149", Map.of("rule", List.of(
@@ -476,7 +476,7 @@ class ChangeHistorySubmissionFilterTest {
         transactionRow.put("card_number", "1");
         transactionRow.put("__subTables__", Map.of("dw:atm_correspondence", List.of(nestedRow)));
         Map<String, Object> topLevelShadow = new java.util.LinkedHashMap<>();
-        topLevelShadow.put("row_id", "top-level-stale");
+        topLevelShadow.put("row_id", "nested-live");
         topLevelShadow.put("correspondence_channel", "Email");
         topLevelShadow.put("correspondence_type", "Customer Notification");
         Map<String, Object> submitted = Map.of("__subTables__", Map.of(
@@ -503,8 +503,8 @@ class ChangeHistorySubmissionFilterTest {
         when(jdbcTemplate.queryForList(
                 argThat(sql -> sql != null && sql.contains("WHERE form.id = ?")), eq(321L)))
                 .thenReturn(List.of(
-                        bindingRow(1144L, "SUB", "EDITABLE", "ATM_Transaction", "Transaction", 1144L),
-                        bindingRow(1149L, "SUB", "EDITABLE", "atm_correspondence", "ATM Correspondence", 1149L)));
+                        bindingRow(1144L, "SUB", "EDITABLE", "ATM_Transaction", "Transaction", 1144L, "row_id"),
+                        bindingRow(1149L, "SUB", "EDITABLE", "atm_correspondence", "ATM Correspondence", 1149L, "row_id")));
         Map<String, Object> form = new java.util.LinkedHashMap<>(formDefinition(List.of(), Map.of(
                 "1144", Map.of("rule", List.of(rule("card_number", false))),
                 "1149", Map.of("rule", List.of(
@@ -560,6 +560,25 @@ class ChangeHistorySubmissionFilterTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> rows = (List<Map<String, Object>>) tables.get("participants");
         assertThat(rows.get(0).get("correspondence_channel")).isEqualTo("Email");
+    }
+
+    @Test
+    void topLevelLookupBaselineUsesConfiguredDisplayColumnNotObjectJson() {
+        Map<String, Object> lookupRule = new java.util.LinkedHashMap<>();
+        lookupRule.put("field", "item_status");
+        lookupRule.put("readonly", false);
+        lookupRule.put("lookupConfig", Map.of("selectedDisplayField", "status_name"));
+        Map<String, Object> form = formDefinition(List.of(lookupRule), Map.of());
+        Map<String, Object> stored = Map.of(
+                "item_status", Map.of(
+                        "id", "st-open",
+                        "status_name", "Open",
+                        "created_by", "system"));
+        Map<String, Object> projected = filter.projectAuditBaseline(stored, form);
+        assertThat(projected.get("item_status")).isEqualTo("Open");
+        Map<String, Object> submitted = Map.of("item_status", "Open");
+        Map<String, Object> current = filter.retainUserEditableSubmission(submitted, submitted, form);
+        assertThat(current.get("item_status")).isEqualTo(projected.get("item_status"));
     }
 
     @Test
@@ -798,12 +817,10 @@ class ChangeHistorySubmissionFilterTest {
     }
 
     /**
-     * @param primaryKeyFields the table's DESIGNER primary key
-     *                         ({@code dw_field_definitions.is_primary_key}), which is what row
-     *                         identity is resolved from. The default names both {@code id} and
-     *                         {@code row_id} because these fixtures key rows by either — in
-     *                         production that is a real configured key, not an assumption about
-     *                         what columns with those names mean.
+     * @param primaryKeyFields every column marked {@code is_primary_key} on this
+     *                         table. Composite keys require all of them filled;
+     *                         a fixture that only stamps {@code row_id} must pass
+     *                         {@code "row_id"} alone, not {@code "id","row_id"}.
      */
     private static Map<String, Object> bindingRow(long id, String type, String mode,
             String tableName, String displayName, long siblingId, String... primaryKeyFields) {

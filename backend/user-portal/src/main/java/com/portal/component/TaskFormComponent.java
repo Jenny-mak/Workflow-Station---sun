@@ -216,6 +216,13 @@ public class TaskFormComponent {
                 processInstanceId, stageId, storedSubTables);
     }
 
+    Map<String, Object> filterTaskFieldBaselineForChangeHistory(String processInstanceId,
+            String stageId,
+            Map<String, Object> storedValues) {
+        return changeHistorySubmissionFilter().projectTaskAuditBaseline(
+                processInstanceId, stageId, storedValues);
+    }
+
     private RequestIdEnricher requestIdEnricher() {
         RequestIdEnricher r = requestIdEnricher;
         if (r == null) {
@@ -752,8 +759,13 @@ public class TaskFormComponent {
                 changeHistoryComponent.recordConcurrentModificationWarning(
                         taskInfo.processInstanceId, field, "unknown", userId);
             }
-            // Record top-level field changes
-            changeHistoryComponent.recordFieldChanges(context, snapshotOldVars, userChanges);
+            // Record top-level field changes against the same lookup-display projection
+            // used for the new payload — otherwise a stored lookup object compares as a
+            // change against the display string the filter already wrote.
+            changeHistoryComponent.recordFieldChanges(context,
+                    changeHistorySubmissionFilter().projectTaskAuditBaseline(
+                            taskInfo.processInstanceId, taskInfo.taskDefinitionKey, snapshotOldVars),
+                    userChanges);
             // Record sub-table row changes immediately so users see per-save
             // history; completion-time consolidation against the first-save
             // baseline is still recorded (cross-save dedup prevents identical
@@ -765,8 +777,11 @@ public class TaskFormComponent {
                 Object filteredOldSubTables = changeHistorySubmissionFilter()
                         .filterTaskSubTableBaseline(taskInfo.processInstanceId,
                                 taskInfo.taskDefinitionKey, oldSubTables);
+                String functionUnitCode = processInstanceRepository.findById(taskInfo.processInstanceId)
+                        .map(ProcessInstance::getFunctionUnitCode)
+                        .orElse(null);
                 subTableChangeRecorder().recordSubTableChangeHistory(
-                        context, filteredOldSubTables, newSubTables);
+                        context, filteredOldSubTables, newSubTables, functionUnitCode);
             }
         } catch (RuntimeException ex) {
             log.warn("task form change-history skipped for task {}: {}", taskId, ex.getMessage());

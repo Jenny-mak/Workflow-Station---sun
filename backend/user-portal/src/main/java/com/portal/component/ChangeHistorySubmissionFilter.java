@@ -110,6 +110,30 @@ public class ChangeHistorySubmissionFilter {
                 loadTaskFormDefinition(processInstanceId, stageId));
     }
 
+    /**
+     * Project stored process variables through the same editable-field + lookup-display
+     * contract as the current submission, so Change History compares display values
+     * rather than raw lookup objects against already-projected new values.
+     */
+    public Map<String, Object> projectTaskAuditBaseline(String processInstanceId,
+            String stageId,
+            Map<String, Object> stored) {
+        return projectAuditBaseline(stored, loadTaskFormDefinition(processInstanceId, stageId));
+    }
+
+    public Map<String, Object> projectProcessAuditBaseline(String functionUnitCode,
+            Map<String, Object> stored) {
+        return projectAuditBaseline(stored, loadProcessFormDefinition(functionUnitCode));
+    }
+
+    Map<String, Object> projectAuditBaseline(Map<String, Object> stored,
+            Map<String, Object> formDefinition) {
+        if (stored == null || stored.isEmpty()) {
+            return Map.of();
+        }
+        return retainUserEditableSubmission(stored, stored, formDefinition);
+    }
+
     private Object filterSubTableBaseline(Object storedSubTables, Map<String, Object> formDefinition) {
         if (!(storedSubTables instanceof Map<?, ?> tables))
             return null;

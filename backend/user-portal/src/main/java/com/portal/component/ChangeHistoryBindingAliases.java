@@ -18,4 +18,12 @@ record ChangeHistoryBindingAliases(
          * "this table declares no primary key", not "use a likely column name".
          */
         Map<String, List<String>> primaryKeyFieldsByBinding) {
+
+    List<String> primaryKeyFields(String bindingId) {
+        if (bindingId == null || primaryKeyFieldsByBinding() == null) {
+            return List.of();
+        }
+        List<String> fields = primaryKeyFieldsByBinding().get(bindingId);
+        return fields == null ? List.of() : fields;
+    }
 }
