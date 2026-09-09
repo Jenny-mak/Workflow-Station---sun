@@ -50,10 +50,11 @@ import {
   toElUploadFileList,
 } from '@platform-shared/upload/uploadFieldValue'
 import { queuedUploadRequest } from '@platform-shared/upload/queuedUploadRequest'
+import type { UploadFileListItem } from '@platform-shared/upload/uploadFieldValue'
 import { isUploadUnauthorizedError } from '@platform-shared/upload/uploadAuthRefresh'
 import { clearUploadWidgetState, setUploadWidgetState } from '@platform-shared/upload/uploadSubmitGate'
 
-type LiveFile = { url?: string; name?: string; status?: string; response?: unknown; percentage?: number }
+type LiveFile = UploadFileListItem
 
 const props = defineProps<{
   modelValue?: unknown
@@ -64,7 +65,7 @@ const props = defineProps<{
   maxFileSizeMb?: number
   multiple?: boolean
   disabled?: boolean
-  httpRequest?: (options: UploadRequestOptions) => XMLHttpRequest | Promise<unknown> | void
+  httpRequest?: (options: UploadRequestOptions) => XMLHttpRequest | Promise<unknown>
   onChange?: (_file: unknown, list?: LiveFile[]) => void
   onSuccess?: (res: unknown, file?: LiveFile, list?: LiveFile[]) => void
   onRemove?: (_file: unknown, list?: LiveFile[]) => void
@@ -105,7 +106,7 @@ watch(fileList, (next) => {
 watch(liveList, (list) => setUploadWidgetState(widgetId, list), { deep: true, immediate: true })
 onBeforeUnmount(() => clearUploadWidgetState(widgetId))
 
-function resolvedRequest(options: UploadRequestOptions): XMLHttpRequest | Promise<unknown> | void {
+function resolvedRequest(options: UploadRequestOptions): XMLHttpRequest | Promise<unknown> {
   if (typeof props.httpRequest === 'function') return props.httpRequest(options)
   return queuedUploadRequest(options)
 }

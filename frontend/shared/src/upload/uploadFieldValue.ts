@@ -101,7 +101,7 @@ export function persistUploadValue(
 }
 
 export function persistFromUploadFileList(
-  fileList: Array<{ url?: string; name?: string; status?: string; response?: unknown }>,
+  fileList: UploadFileListItem[],
   maxFiles: number,
 ): string {
   const files: StoredUploadFile[] = []
@@ -116,6 +116,24 @@ export function persistFromUploadFileList(
   return persistUploadValue(files, maxFiles)
 }
 
+/**
+ * One row of a live el-upload file list, as every upload surface passes it around.
+ *
+ * Every field is optional because el-upload hands back rows mid-flight (no url yet) and the
+ * designer seeds rows from stored values (no uid yet); narrowing any of them would reject
+ * states that legitimately occur. Named here rather than spelled inline at each call site
+ * because template attributes cannot parse a bare object type literal — vue-tsc reads
+ * `{ name?: string }` there as an object *literal* and fails on the `?:`.
+ */
+export interface UploadFileListItem {
+  url?: string
+  name?: string
+  status?: string
+  percentage?: number
+  response?: unknown
+  uid?: number
+}
+
 export function isInflightUploadStatus(status?: string): boolean {
   return Boolean(status && status !== 'success')
 }
@@ -124,12 +142,7 @@ export function isInflightUploadStatus(status?: string): boolean {
  * Persist only finished files, but keep the live el-upload rows (including uploading)
  * so the first success cannot wipe the rest of a multi-file batch.
  */
-export function splitUploadFileList<T extends {
-  url?: string
-  name?: string
-  status?: string
-  response?: unknown
-}>(
+export function splitUploadFileList<T extends UploadFileListItem>(
   liveList: T[],
   maxFiles: number,
 ): { stored: string; display: T[] } {

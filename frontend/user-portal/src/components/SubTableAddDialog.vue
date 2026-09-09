@@ -375,11 +375,11 @@
                       :remove-label="t('common.delete')"
                       :success-status-label="t('upload.statusUploaded')"
                       :uploading-status-label="t('upload.statusUploading')"
-                      :handle-success="(res: unknown, file: UploadedFile, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadSuccess(res, file, col, list)"
-                      :handle-change="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadChange(col, list)"
-                      :handle-remove="(_file: unknown, list: Array<{ url?: string; name?: string; status?: string; response?: unknown }>) => handleUploadRemove(col, list)"
+                      :handle-success="(res, file, list) => handleUploadSuccess(res, file, col, list)"
+                      :handle-change="(_file, list) => handleUploadChange(col, list)"
+                      :handle-remove="(_file, list) => handleUploadRemove(col, list)"
                       :handle-exceed="() => handleUploadExceed(col)"
-                      :handle-error="(error: unknown) => handleUploadError(col, error)"
+                      :handle-error="(error) => handleUploadError(col, error)"
                       :handle-size-exceed="() => handleSizeExceed(col)"
                       :handle-duplicate="(name: string) => handleDuplicate(col, name)"
                       :handle-open-details="(file) => openDialogDetails(col, file)"
@@ -719,7 +719,6 @@ import { useSubTableDialogSignature } from '@/composables/subTableAddDialog/useS
 import { useSubTableDialogEditor } from '@/composables/subTableAddDialog/useSubTableDialogEditor'
 import { useSubTableDialogRelations } from '@/composables/subTableAddDialog/useSubTableDialogRelations'
 import { useSubTableDialogUpload } from '@/composables/subTableAddDialog/useSubTableDialogUpload'
-import type { UploadedFile } from '@/composables/subTableAddDialog/useSubTableDialogUpload'
 import { useSubTableDialogForm } from '@/composables/subTableAddDialog/useSubTableDialogForm'
 import { useSubTableDialogComponentEvents } from '@/composables/subTableAddDialog/useSubTableDialogComponentEvents'
 import { useSubTableDialogSensitiveMask } from '@/composables/subTableAddDialog/useSubTableDialogSensitiveMask'

@@ -13,25 +13,16 @@ import {
 import { queuedUploadRequest } from '@platform-shared/upload/queuedUploadRequest'
 import { isUploadUnauthorizedError } from '@platform-shared/upload/uploadAuthRefresh'
 import { clearUploadWidgetState, setUploadWidgetState } from '@platform-shared/upload/uploadSubmitGate'
+import type { UploadFileListItem } from '@platform-shared/upload/uploadFieldValue'
 
 type DialogT = (key: string, named?: Record<string, unknown>) => string
-type UploadListItem = { name: string; url: string; status?: string; response?: unknown }
-
-/**
- * One finished upload as el-upload hands it back.
- *
- * Named rather than written inline because `SubTableAddDialog`'s `:handle-success` has to state
- * this same shape: a bare object type literal in a template attribute is unparseable — vue-tsc
- * reads `{ name?: string }` there as an object *literal* and fails on the `?:`.
- */
-export type UploadedFile = { name?: string; url?: string }
 
 export function useSubTableDialogUpload(
   formData: Ref<Record<string, any>>,
   columns: () => DialogColumn[],
   t: DialogT,
 ) {
-  const uploadFileLists = ref<Record<string, UploadListItem[]>>({})
+  const uploadFileLists = ref<Record<string, UploadFileListItem[]>>({})
 
   function maxFilesOf(col: DialogColumn): number {
     return resolveUploadMaxFiles(col.props)
@@ -56,7 +47,7 @@ export function useSubTableDialogUpload(
     }
   })
 
-  function writeLiveList(col: DialogColumn, list: UploadListItem[]) {
+  function writeLiveList(col: DialogColumn, list: UploadFileListItem[]) {
     const { stored, display } = splitUploadFileList(list, maxFilesOf(col))
     formData.value[col.field] = stored
     const links = extractFileLinks(stored)
@@ -68,7 +59,7 @@ export function useSubTableDialogUpload(
   }
 
   function backfillUploadNames() {
-    const next: Record<string, UploadListItem[]> = {}
+    const next: Record<string, UploadFileListItem[]> = {}
     for (const col of columns()) {
       if (!isUploadColumn(col, formData.value[col.field])) continue
       next[col.field] = toElUploadFileList(formData.value[col.field])
@@ -85,9 +76,9 @@ export function useSubTableDialogUpload(
 
   function handleUploadSuccess(
     res: unknown,
-    file: UploadedFile,
+    file: UploadFileListItem,
     col: DialogColumn,
-    uploadFiles?: UploadListItem[],
+    uploadFiles?: UploadFileListItem[],
   ) {
     const list = uploadFiles ?? [
       ...toElUploadFileList(formData.value[col.field]),
@@ -96,11 +87,11 @@ export function useSubTableDialogUpload(
     writeLiveList(col, list)
   }
 
-  function handleUploadRemove(col: DialogColumn, uploadFiles?: UploadListItem[]) {
+  function handleUploadRemove(col: DialogColumn, uploadFiles?: UploadFileListItem[]) {
     writeLiveList(col, uploadFiles ?? [])
   }
 
-  function handleUploadChange(col: DialogColumn, uploadFiles?: UploadListItem[]) {
+  function handleUploadChange(col: DialogColumn, uploadFiles?: UploadFileListItem[]) {
     if (!uploadFiles) return
     writeLiveList(col, uploadFiles)
   }
