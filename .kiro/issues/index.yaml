@@ -3684,3 +3684,20 @@
     决策表未打进该部署。Change History 本身未触发。
     2026-09-09 验证 process=162772c4-abff-11f1-924d-7e698774d79f。
 
+- id: "1618"
+  status: fixed
+  fixed_at: "2026-09-09"
+  severity: major
+  category: bug
+  summary: "Completed Task Snapshot hid sub-tables after __subTables__ switched to dw:/rt: keys"
+  file: "frontend/user-portal/src/components/snapshotDiffSubTables.ts"
+  note: |
+    a7d009018 stored one slice per table as dw:<name>/rt:<name>. SnapshotDiffRenderer
+    still looked up rec[bindingId], so Mark Completed (task 4fffcc9e) showed only
+    main-table fields while the frozen snapshot already had dw:atm_transaction (1 row)
+    and dw:atm_correspondence (4 rows). Reader now uses subTableStoreKey / readSubTableRows;
+    numeric bindingId keys are ignored. Grid restored to 3c9771e94 el-table columns.
+    验证：snapshotDiffSubTables.test.ts 11 pass; pnpm run build; compose rebuild
+    user-portal-frontend; Playwright #tab-completed-snapshot .snapshot-sub-table count=2.
+    screenshot 2026-09-09_completed-snapshot-canonical-keys.png.
+

@@ -7,11 +7,11 @@ import {
   buildSnapshotSubTableSections,
   formatSnapshotSubTableCell,
   snapshotSubTableRows,
-  snapshotTableSiblingBindingIds,
   type SnapshotSubTableBindingSource,
   type SnapshotSubTableColumn,
   type SnapshotSubTableSection,
 } from './snapshotDiffSubTables'
+import { subTableStoreKey } from '@/composables/tasks/subTableStore'
 import { readRowIdentityToken } from '@/utils/subTableRowIdentity'
 
 export interface SnapshotSubTableDiffBlock {
@@ -21,7 +21,7 @@ export interface SnapshotSubTableDiffBlock {
 }
 
 export interface SnapshotSubTableDiffGroup {
-  bindingId: number
+  storeKey: string
   tableLabel: string
   blocks: SnapshotSubTableDiffBlock[]
 }
@@ -30,34 +30,19 @@ function columnAsField(col: SnapshotSubTableColumn): FormField {
   return { key: col.field, label: col.label, type: col.type || 'text' }
 }
 
-/**
- * 这个 section 所属表配置的主键列。快照行与实时行按身份配对，身份来自配置而非列名猜测。
- */
 function sectionPrimaryKeyFields(
   section: SnapshotSubTableSection,
   bindings?: SnapshotSubTableBindingSource[],
 ): string[] | null {
-  const self = (bindings || []).find(b => Number(b.bindingId) === Number(section.bindingId))
+  const self = (bindings || []).find(b => subTableStoreKey(b) === section.storeKey)
   return self?.primaryKeyFields ?? null
 }
 
 function liveRowsForSection(
   liveValues: Record<string, unknown>,
   section: SnapshotSubTableSection,
-  bindings?: SnapshotSubTableBindingSource[],
 ): Record<string, unknown>[] {
-  const seen = new Set<string>()
-  const rows: Record<string, unknown>[] = []
-  const pk = sectionPrimaryKeyFields(section, bindings)
-  for (const bindingId of snapshotTableSiblingBindingIds(section.bindingId, bindings)) {
-    for (const row of snapshotSubTableRows(liveValues, bindingId)) {
-      const token = readRowIdentityToken(row, pk) ?? `idx:${bindingId}:${rows.length}`
-      if (seen.has(token)) continue
-      seen.add(token)
-      rows.push(row)
-    }
-  }
-  return rows
+  return snapshotSubTableRows(liveValues, section.storeKey)
 }
 
 function matchLiveRow(
@@ -96,7 +81,7 @@ function snapshotRowToDiffRows(
     const sv = snapRow[col.field]
     const lv = liveRow ? liveRow[col.field] : undefined
     return {
-      key: `${section.bindingId}:${rowIndex}:${col.field}`,
+      key: `${section.storeKey}:${rowIndex}:${col.field}`,
       label: col.label,
       snapshotValue: sv,
       liveValue: lv,
@@ -117,7 +102,7 @@ export function buildSnapshotSubTableDiffGroups(
     fields, snapshotValues, bindings, tabs, fieldsAfterTabs,
   ).map(section => {
     const sectionPk = sectionPrimaryKeyFields(section, bindings)
-    const liveRows = liveRowsForSection(liveValues, section, bindings)
+    const liveRows = liveRowsForSection(liveValues, section)
     const liveMap = new Map<string, Record<string, unknown>>()
     for (const row of liveRows) {
       const token = readRowIdentityToken(row, sectionPk)
@@ -133,6 +118,6 @@ export function buildSnapshotSubTableDiffGroups(
         rows: snapshotRowToDiffRows(section, snapRow, liveRow, rowIndex),
       }
     })
-    return { bindingId: section.bindingId, tableLabel: section.tableLabel, blocks }
+    return { storeKey: section.storeKey, tableLabel: section.tableLabel, blocks }
   })
 }
