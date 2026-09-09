@@ -1,6 +1,12 @@
 import type { FormField, FormTab } from './formRendererHelpers'
 import { flattenAllFormFieldSegments } from './formRendererHelpers'
 import { formatSnapshotDisplayValue } from './snapshotDiffHelpers'
+import {
+  isCanonicalStoreKey,
+  readSubTableRows,
+  subTableStoreKey,
+  type SubTableStoreBindingLike,
+} from '@/composables/tasks/subTableStore'
 
 export interface SnapshotSubTableColumnSource {
   field?: string
@@ -12,10 +18,12 @@ export interface SnapshotSubTableColumnSource {
   props?: Record<string, unknown>
 }
 
-export interface SnapshotSubTableBindingSource {
+/**
+ * Form-widget → table connection. {@code bindingId} only finds the binding on the canvas;
+ * row identity is {@link subTableStoreKey} (`dw:<name>` / `rt:<name>`).
+ */
+export interface SnapshotSubTableBindingSource extends SubTableStoreBindingLike {
   bindingId: number
-  tableId?: number | null
-  tableName?: string
   tableType?: string
   bindingType?: string
   columns?: SnapshotSubTableColumnSource[]
@@ -29,7 +37,7 @@ export interface SnapshotSubTableBindingSource {
 }
 
 export interface SnapshotSubTableTarget {
-  bindingId: number
+  storeKey: string
   fallbackLabel: string
 }
 
@@ -40,7 +48,7 @@ export interface SnapshotSubTableColumn {
 }
 
 export interface SnapshotSubTableSection {
-  bindingId: number
+  storeKey: string
   tableLabel: string
   columns: SnapshotSubTableColumn[]
   snapshotRows: Record<string, unknown>[]
@@ -53,34 +61,66 @@ function designerLabel(raw: string): string {
   return label && !label.startsWith('__') ? label : ''
 }
 
-/** Form-order sub-table / inline-sub-form widgets (designer labels, not `__subTable_*` keys). */
+function snapshotBag(snapshotValues: Record<string, unknown>): Record<string, unknown> | null {
+  const bag = snapshotValues.__subTables__
+  if (!bag || typeof bag !== 'object' || Array.isArray(bag)) return null
+  return bag as Record<string, unknown>
+}
+
+function asPlainRows(raw: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((row): row is Record<string, unknown> =>
+    !!row && typeof row === 'object' && !Array.isArray(row))
+}
+
+function widgetBinding(
+  bindings: SnapshotSubTableBindingSource[] | undefined,
+  bindingId: number,
+): SnapshotSubTableBindingSource | undefined {
+  return (bindings || []).find(item => Number(item.bindingId) === bindingId)
+}
+
+function bindingForStoreKey(
+  bindings: SnapshotSubTableBindingSource[] | undefined,
+  storeKey: string,
+): SnapshotSubTableBindingSource | undefined {
+  return (bindings || []).find(item => subTableStoreKey(item) === storeKey)
+}
+
+/** Form-order sub-table widgets, keyed by the table store key (not bindingId). */
 export function collectSnapshotSubTableTargets(
   fields: FormField[],
+  bindings?: SnapshotSubTableBindingSource[],
   tabs?: FormTab[],
   fieldsAfterTabs?: FormField[],
 ): SnapshotSubTableTarget[] {
   const out: SnapshotSubTableTarget[] = []
-  const seen = new Set<number>()
+  const seen = new Set<string>()
   for (const field of flattenAllFormFieldSegments(fields, tabs, fieldsAfterTabs)) {
     if (field.type !== 'subTable' && field.type !== 'inlineSubForm') continue
     const bindingId = field._bindingId != null ? Number(field._bindingId) : Number.NaN
-    if (!Number.isFinite(bindingId) || seen.has(bindingId)) continue
-    seen.add(bindingId)
-    out.push({ bindingId, fallbackLabel: designerLabel(field.label) })
+    if (!Number.isFinite(bindingId)) continue
+    const binding = widgetBinding(bindings, bindingId)
+    if (!binding || isSnapshotRelationLikeBinding(binding)) continue
+    const storeKey = subTableStoreKey(binding)
+    if (!storeKey || seen.has(storeKey)) continue
+    seen.add(storeKey)
+    out.push({ storeKey, fallbackLabel: designerLabel(field.label) })
   }
   return out
 }
 
+/** Rows for one designer table. BindingId keys are not a data identity. */
 export function snapshotSubTableRows(
   snapshotValues: Record<string, unknown>,
-  bindingId: number,
+  bindingOrStoreKey: SnapshotSubTableBindingSource | string,
 ): Record<string, unknown>[] {
-  const bag = snapshotValues.__subTables__
-  if (!bag || typeof bag !== 'object' || Array.isArray(bag)) return []
-  const rec = bag as Record<string, unknown>
-  const raw = rec[bindingId] ?? rec[String(bindingId)]
-  if (!Array.isArray(raw)) return []
-  return raw.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row))
+  const bag = snapshotBag(snapshotValues)
+  if (!bag) return []
+  if (typeof bindingOrStoreKey === 'string') {
+    return isCanonicalStoreKey(bindingOrStoreKey) ? asPlainRows(bag[bindingOrStoreKey]) : []
+  }
+  return asPlainRows(readSubTableRows(bag, bindingOrStoreKey))
 }
 
 function columnField(col: SnapshotSubTableColumnSource): string {
@@ -122,40 +162,6 @@ function columnsFromRowKeys(rows: Record<string, unknown>[]): SnapshotSubTableCo
     .map(field => ({ field, label: field.replace(/_/g, ' '), type: 'text' }))
 }
 
-function bindingById(
-  bindings: SnapshotSubTableBindingSource[] | undefined,
-  bindingId: number,
-): SnapshotSubTableBindingSource | undefined {
-  return (bindings || []).find(item => Number(item.bindingId) === bindingId)
-}
-
-function normalizeTableName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-/** Same physical table may appear as several binding ids (MI sibling / alias). */
-export function snapshotTableSiblingBindingIds(
-  bindingId: number,
-  bindings?: SnapshotSubTableBindingSource[],
-): number[] {
-  const ids = new Set<number>([bindingId])
-  const self = bindingById(bindings, bindingId)
-  if (!self) return [...ids]
-  const tableId = self.tableId != null ? Number(self.tableId) : Number.NaN
-  const name = normalizeTableName(String(self.tableName || ''))
-  for (const item of bindings || []) {
-    const otherId = Number(item.bindingId)
-    if (!Number.isFinite(otherId)) continue
-    const otherTableId = item.tableId != null ? Number(item.tableId) : Number.NaN
-    if (Number.isFinite(tableId) && tableId > 0 && otherTableId === tableId) {
-      ids.add(otherId)
-      continue
-    }
-    if (name && normalizeTableName(String(item.tableName || '')) === name) ids.add(otherId)
-  }
-  return [...ids]
-}
-
 /** Lookup catalogs and main-table bindings are not process sub-tables. */
 export function isSnapshotRelationLikeBinding(binding?: SnapshotSubTableBindingSource): boolean {
   const bindingType = String(binding?.bindingType || '').toUpperCase()
@@ -164,57 +170,37 @@ export function isSnapshotRelationLikeBinding(binding?: SnapshotSubTableBindingS
   return tableType === 'RELATION' || tableType === 'MAIN' || tableType === 'LOOKUP'
 }
 
-function sectionDedupeKey(
-  section: SnapshotSubTableSection,
-  binding?: SnapshotSubTableBindingSource,
-): string {
-  const tableId = binding?.tableId != null ? Number(binding.tableId) : Number.NaN
-  if (Number.isFinite(tableId) && tableId > 0) return `tid:${tableId}`
-  const name = normalizeTableName(section.tableLabel)
-  return name ? `name:${name}` : `bid:${section.bindingId}`
-}
-
 function toSnapshotSubTableSection(
-  bindingId: number,
+  storeKey: string,
   fallbackLabel: string,
   snapshotValues: Record<string, unknown>,
   bindings?: SnapshotSubTableBindingSource[],
 ): SnapshotSubTableSection | null {
-  const binding = bindingById(bindings, bindingId)
+  const binding = bindingForStoreKey(bindings, storeKey)
   if (isSnapshotRelationLikeBinding(binding)) return null
   const tableLabel = String(binding?.tableName || fallbackLabel || '').trim()
-  const snapshotRows = snapshotSubTableRows(snapshotValues, bindingId)
+  const snapshotRows = snapshotSubTableRows(snapshotValues, storeKey)
   if (snapshotRows.length === 0) return null
   let columns = snapshotSubTableColumns(binding)
   if (columns.length === 0) columns = columnsFromRowKeys(snapshotRows)
   if (!tableLabel && columns.length === 0) return null
-  return { bindingId, tableLabel, columns, snapshotRows }
+  return { storeKey, tableLabel, columns, snapshotRows }
 }
 
-function snapshotBagBindingIds(snapshotValues: Record<string, unknown>): number[] {
-  const bag = snapshotValues.__subTables__
-  if (!bag || typeof bag !== 'object' || Array.isArray(bag)) return []
-  return Object.keys(bag as Record<string, unknown>)
-    .map(key => Number(key))
-    .filter(id => Number.isFinite(id))
+function snapshotBagStoreKeys(snapshotValues: Record<string, unknown>): string[] {
+  const bag = snapshotBag(snapshotValues)
+  if (!bag) return []
+  return Object.keys(bag).filter(isCanonicalStoreKey)
 }
 
 function pushUniqueSection(
   sections: SnapshotSubTableSection[],
-  seenKeys: Map<string, number>,
+  seenKeys: Set<string>,
   section: SnapshotSubTableSection,
-  bindings?: SnapshotSubTableBindingSource[],
 ): void {
-  const key = sectionDedupeKey(section, bindingById(bindings, section.bindingId))
-  const existingIdx = seenKeys.get(key)
-  if (existingIdx == null) {
-    seenKeys.set(key, sections.length)
-    sections.push(section)
-    return
-  }
-  if (section.snapshotRows.length > sections[existingIdx].snapshotRows.length) {
-    sections[existingIdx] = section
-  }
+  if (seenKeys.has(section.storeKey)) return
+  seenKeys.add(section.storeKey)
+  sections.push(section)
 }
 
 export function buildSnapshotSubTableSections(
@@ -225,22 +211,18 @@ export function buildSnapshotSubTableSections(
   fieldsAfterTabs?: FormField[],
 ): SnapshotSubTableSection[] {
   const sections: SnapshotSubTableSection[] = []
-  const seenIds = new Set<number>()
-  const seenKeys = new Map<string, number>()
-  for (const target of collectSnapshotSubTableTargets(fields, tabs, fieldsAfterTabs)) {
+  const seenKeys = new Set<string>()
+  for (const target of collectSnapshotSubTableTargets(fields, bindings, tabs, fieldsAfterTabs)) {
     const section = toSnapshotSubTableSection(
-      target.bindingId, target.fallbackLabel, snapshotValues, bindings,
+      target.storeKey, target.fallbackLabel, snapshotValues, bindings,
     )
-    if (!section) continue
-    seenIds.add(section.bindingId)
-    pushUniqueSection(sections, seenKeys, section, bindings)
+    if (section) pushUniqueSection(sections, seenKeys, section)
   }
-  for (const bindingId of snapshotBagBindingIds(snapshotValues)) {
-    if (seenIds.has(bindingId)) continue
-    const section = toSnapshotSubTableSection(bindingId, '', snapshotValues, bindings)
+  for (const storeKey of snapshotBagStoreKeys(snapshotValues)) {
+    if (seenKeys.has(storeKey)) continue
+    const section = toSnapshotSubTableSection(storeKey, '', snapshotValues, bindings)
     if (!section || !section.tableLabel) continue
-    seenIds.add(bindingId)
-    pushUniqueSection(sections, seenKeys, section, bindings)
+    pushUniqueSection(sections, seenKeys, section)
   }
   return sections
 }

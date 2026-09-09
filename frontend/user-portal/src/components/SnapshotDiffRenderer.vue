@@ -6,31 +6,32 @@
       :format-value="formatValue"
     />
     <div
-      v-for="group in subTableGroups"
-      :key="group.bindingId"
+      v-for="section in subTableSections"
+      :key="section.storeKey"
       class="snapshot-sub-table"
     >
       <div class="snapshot-sub-table-title">
-        {{ group.tableLabel }}
+        {{ t('changeHistory.subTable') }}: {{ section.tableLabel || t('changeHistory.subTable') }}
       </div>
-      <div
-        v-for="block in group.blocks"
-        :key="`${group.bindingId}:${block.rowIndex}`"
-        class="snapshot-sub-table-block"
+      <el-table
+        :data="section.snapshotRows"
+        border
+        stripe
+        size="small"
+        :empty-text="t('snapshotDiff.noSubTableRows')"
       >
-        <div
-          v-if="group.blocks.length > 1"
-          class="snapshot-sub-table-row-title"
+        <el-table-column
+          v-for="col in section.columns"
+          :key="col.field"
+          :label="col.label"
+          min-width="120"
+          show-overflow-tooltip
         >
-          {{ block.preview || t('snapshotDiff.subTableRow', { n: block.rowIndex + 1 }) }}
-        </div>
-        <SnapshotDiffTable
-          :rows="block.rows"
-          :show-live-values="showLiveValues"
-          :format-value="formatValue"
-          :empty-text="t('snapshotDiff.noSubTableRows')"
-        />
-      </div>
+          <template #default="{ row }">
+            {{ formatSubTableCell(row, col) }}
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
   </div>
 </template>
@@ -47,9 +48,11 @@ import {
   type DiffRow,
 } from './snapshotDiffHelpers'
 import {
-  buildSnapshotSubTableDiffGroups,
-} from './snapshotDiffSubTableGroups'
-import type { SnapshotSubTableBindingSource } from './snapshotDiffSubTables'
+  buildSnapshotSubTableSections,
+  formatSnapshotSubTableCell,
+  type SnapshotSubTableBindingSource,
+  type SnapshotSubTableColumn,
+} from './snapshotDiffSubTables'
 import {
   applySensitiveMask,
   isSensitiveMaskActive,
@@ -86,11 +89,10 @@ const diffRows = computed<DiffRow[]>(() =>
   )
 )
 
-const subTableGroups = computed(() =>
-  buildSnapshotSubTableDiffGroups(
+const subTableSections = computed(() =>
+  buildSnapshotSubTableSections(
     props.fields,
     props.snapshotValues,
-    props.liveValues,
     props.subTableBindings,
     props.tabs,
     props.fieldsAfterTabs,
@@ -120,6 +122,10 @@ function formatValue(value: unknown, fieldKey?: string): string {
   if (isSensitiveMaskActive(cfg) && s !== '-') return applySensitiveMask(s, cfg!)
   return s
 }
+
+function formatSubTableCell(row: Record<string, unknown>, col: SnapshotSubTableColumn): string {
+  return formatSnapshotSubTableCell(row, col.field, col.type)
+}
 </script>
 
 <style scoped lang="scss">
@@ -134,16 +140,6 @@ function formatValue(value: unknown, fieldKey?: string): string {
     margin-bottom: 8px;
     font-weight: 500;
     color: var(--text-primary, #303133);
-  }
-
-  .snapshot-sub-table-block + .snapshot-sub-table-block {
-    margin-top: 12px;
-  }
-
-  .snapshot-sub-table-row-title {
-    margin-bottom: 8px;
-    font-size: 13px;
-    color: var(--text-secondary, #606266);
   }
 }
 </style>
