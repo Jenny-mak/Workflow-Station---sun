@@ -3701,3 +3701,40 @@
     user-portal-frontend; Playwright #tab-completed-snapshot .snapshot-sub-table count=2.
     screenshot 2026-09-09_completed-snapshot-canonical-keys.png.
 
+- id: "1619"
+  status: fixed
+  fixed_at: "2026-09-10"
+  severity: major
+  category: bug
+  summary: "Relation Tables 两个 Function Unit 侧栏按 sys_function_units.id 分组，同一单元每发布一个版本就多一条重复项"
+  file: "backend/admin-center/src/main/java/com/admin/component/RelationTableStructureListQueryComponent.java"
+  note: |
+    0731 已占用 #1615–#1618，本条由 topic 上的 #1615 顺延为 #1619。
+    反例：dev 库 atm-20260623-gaevus 有 5 个已发布版本行、fu-20260422-23tfag 有 6 个，
+    Table Structure 左栏渲染 11 条（"ATM (4)" ×5、"Multi-Instance Subtask Demo (2)" ×6），
+    Table Data 导航子菜单同样重复；UAT 上表现为 "ACQ" 连续出现 4 次。
+    正例：每个 Function Unit code 只出一条，count 为该单元关联的去重表数。
+    根因（两处独立引入，同一错误）：
+    1) RelationTableDataServiceImpl#getDeployedTableFunctionUnitGroups 按
+       RelationTableFunctionUnit.functionUnitId 分组（Qing 7c65bac1e, 2026-08-21）；
+    2) RelationTableStructureListQueryComponent 的侧栏 SQL
+       GROUP BY l.function_unit_id（Jenny a6e359538, 2026-08-25）。
+    每次 publish / import 都会往 sys_function_units 写一行同 code 新版本，
+    rt_table_function_units 又逐版本累积 link（RelationTableStructureImporter#bindFunctionUnit
+    只追加不清理），于是 N 个版本 = N 条外观完全相同的侧栏项。
+    修复：两处统一按 fu.code 收敛，共用一份规则——
+    分组键换 code，label 取该 code 最高 semver 版本的 name（与 FU 目录页
+    FunctionUnitColumnSpec.VERSION_ORDER_SQL 的 DISTINCT ON 规则一致），
+    count 改 COUNT(DISTINCT relation_table_id)；过滤谓词 join sys_function_units 按
+    fu.code 匹配（原按 l.function_unit_id，会漏掉挂在旧版本下的表）。
+    Table Data 的分组逻辑抽到 RelationTableFunctionUnitResolver#groupByFunctionUnitCode，
+    FunctionUnitTableGroupResponse 去掉无意义的 functionUnitId（code 级分组没有单一版本 id），
+    请求 DTO functionUnitId → functionUnitCode，前端 :key / 查询参数同步。
+    验证：mvn -pl backend/admin-center -am test 868 绿（新增
+    getDeployedTableFunctionUnitGroups_collapsesEveryVersionOfOneCode、
+    theRailGroupsByFunctionUnitCodeNotByVersionId、
+    functionUnitRailMatchesEveryVersionOfTheSelectedCode）；
+    admin-center 前端 vite build + vitest 50 绿；compose 重建 admin-center 健康；
+    Playwright verify-admin-relation-table-fu-rail.mjs PASS，侧栏 11 条 → 2 条，
+    截图 frontend/admin-center/verification-screenshots/2026-09-10_admin-rt-fu-rail-structure-page.png
+    与 2026-09-10_admin-rt-fu-rail-table-data-nav.png。

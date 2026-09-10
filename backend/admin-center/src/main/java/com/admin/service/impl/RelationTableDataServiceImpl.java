@@ -112,23 +112,7 @@ public class RelationTableDataServiceImpl implements RelationTableDataService {
                 tables.stream().map(RelationTableDefinition::getId).toList());
         Map<String, FunctionUnit> functionUnitsById = relationTableFunctionUnitResolver.loadFunctionUnitsById(linksByTable);
         // A table linked to multiple Function Units counts toward each of their groups.
-        Map<String, Long> countByFuId = linksByTable.values().stream()
-                .flatMap(List::stream)
-                .collect(Collectors.groupingBy(RelationTableFunctionUnit::getFunctionUnitId, Collectors.counting()));
-        return countByFuId.entrySet().stream()
-                .map(e -> {
-                    FunctionUnit fu = functionUnitsById.get(e.getKey());
-                    return com.admin.dto.response.FunctionUnitTableGroupResponse.builder()
-                            .functionUnitId(e.getKey())
-                            .functionUnitCode(fu != null ? fu.getCode() : null)
-                            .functionUnitName(fu != null ? fu.getName() : null)
-                            .tableCount(e.getValue())
-                            .build();
-                })
-                .sorted(Comparator.comparing(
-                        g -> g.getFunctionUnitName() != null ? g.getFunctionUnitName() : g.getFunctionUnitCode(),
-                        Comparator.nullsLast(Comparator.naturalOrder())))
-                .collect(Collectors.toList());
+        return relationTableFunctionUnitResolver.groupByFunctionUnitCode(linksByTable, functionUnitsById);
     }
 
     /**

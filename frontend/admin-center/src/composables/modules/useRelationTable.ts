@@ -36,6 +36,7 @@ export function useRelationTable() {
   const showAccessDialog = ref(false)
   const showCompareDialog = ref(false)
 
+  /** Left-rail selection: a Function Unit code, COMMON_KEY, or '' for all tables. */
   const selectedGroupKey = ref('')
   const COMMON_KEY = '__common__'
   const functionUnitGroups = ref<RelationTableFuGroup[]>([])
@@ -53,7 +54,7 @@ export function useRelationTable() {
     try {
       const page = await relationTableStructureApi.query({
         ...grid.buildQuery(),
-        functionUnitId: selectedGroupKey.value || undefined,
+        functionUnitCode: selectedGroupKey.value || undefined,
       })
       if (!grid.isCurrentQuery(seq)) return
       grid.applyPage(page, 'relation-tables/structures/query response is missing its column declaration')

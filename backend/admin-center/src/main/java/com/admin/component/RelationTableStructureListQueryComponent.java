@@ -8,6 +8,7 @@ import com.admin.entity.FunctionUnit;
 import com.admin.entity.RelationTableDefinition;
 import com.admin.entity.RelationTableFunctionUnit;
 
+import com.admin.list.FunctionUnitColumnSpec;
 import com.admin.list.ListQuerySupport;
 import com.admin.list.RelationTableStructureColumnSpec;
 import com.admin.repository.RelationTableDefinitionRepository;
@@ -50,7 +51,7 @@ public class RelationTableStructureListQueryComponent {
         ListFilterSql filterSql = RelationTableStructureColumnSpec.sql();
         List<Object> params = new ArrayList<>();
         StringBuilder where = new StringBuilder(FROM);
-        appendFunctionUnit(where, params, request.functionUnitId());
+        appendFunctionUnit(where, params, request.functionUnitCode());
         where.append(filterSql.whereClause(request.filters(), params));
 
         ResultSetExtractor<Long> countExtractor = rs -> rs.next() ? rs.getLong(1) : 0L;
@@ -116,13 +117,24 @@ public class RelationTableStructureListQueryComponent {
         ResultSetExtractor<Long> countExtractor = rs -> rs.next() ? rs.getLong(1) : 0L;
         long commonCount = ListQuerySupport.requireCount(
                 ListQuerySupport.query(jdbcTemplate, commonSql, List.of(), countExtractor), LIST_KEY);
+        // Grouped by code, not by l.function_unit_id: every publish/import writes another
+        // sys_function_units row for the same unit, so an id-keyed rail repeated the same unit once
+        // per version. The label comes from the newest version of the code (same DISTINCT ON rule as
+        // the Function Unit catalog list) and the count is DISTINCT so a table linked to two versions
+        // of one unit is still one table.
         String fuSql = """
-                SELECT l.function_unit_id AS fu_id, fu.name AS fu_name, fu.code AS fu_code, COUNT(*) AS group_count
+                SELECT fu.code AS fu_code, newest.name AS fu_name,
+                       COUNT(DISTINCT l.relation_table_id) AS group_count
                 FROM rt_table_function_units l
                 JOIN sys_function_units fu ON fu.id = l.function_unit_id
-                GROUP BY l.function_unit_id, fu.name, fu.code
-                ORDER BY fu.name ASC NULLS LAST, fu.code ASC
-                """;
+                JOIN (
+                    SELECT DISTINCT ON (fu.code) fu.code, fu.name
+                    FROM sys_function_units fu
+                    ORDER BY fu.code, %s, fu.updated_at DESC NULLS LAST
+                ) newest ON newest.code = fu.code
+                GROUP BY fu.code, newest.name
+                ORDER BY newest.name ASC NULLS LAST, fu.code ASC
+                """.formatted(FunctionUnitColumnSpec.VERSION_ORDER_SQL);
         ResultSetExtractor<List<RelationTableFuGroup>> extractor = rs -> {
             List<RelationTableFuGroup> groups = new ArrayList<>();
             if (commonCount > 0) {
@@ -133,7 +145,7 @@ public class RelationTableStructureListQueryComponent {
                 String name = rs.getString("fu_name");
                 String code = rs.getString("fu_code");
                 String label = (name == null || name.isBlank()) ? code : name;
-                groups.add(new RelationTableFuGroup(rs.getString("fu_id"), label, rs.getLong("group_count")));
+                groups.add(new RelationTableFuGroup(code, label, rs.getLong("group_count")));
             }
             return groups;
         };
@@ -141,18 +153,20 @@ public class RelationTableStructureListQueryComponent {
     }
 
 
-    private static void appendFunctionUnit(StringBuilder where, List<Object> params, String functionUnitId) {
-        if (functionUnitId == null || functionUnitId.isBlank()) {
+    private static void appendFunctionUnit(StringBuilder where, List<Object> params, String functionUnitCode) {
+        if (functionUnitCode == null || functionUnitCode.isBlank()) {
             return;
         }
-        if (RelationTableStructureListQueryRequest.COMMON_KEY.equals(functionUnitId)) {
+        if (RelationTableStructureListQueryRequest.COMMON_KEY.equals(functionUnitCode)) {
             where.append(" AND NOT EXISTS (SELECT 1 FROM rt_table_function_units l")
                     .append(" WHERE l.relation_table_id = t.id)");
             return;
         }
+        // Match on code so the rail keeps listing tables that were linked under an earlier version.
         where.append(" AND EXISTS (SELECT 1 FROM rt_table_function_units l")
-                .append(" WHERE l.relation_table_id = t.id AND l.function_unit_id = ?)");
-        params.add(functionUnitId);
+                .append(" JOIN sys_function_units fu ON fu.id = l.function_unit_id")
+                .append(" WHERE l.relation_table_id = t.id AND fu.code = ?)");
+        params.add(functionUnitCode);
     }
 
 

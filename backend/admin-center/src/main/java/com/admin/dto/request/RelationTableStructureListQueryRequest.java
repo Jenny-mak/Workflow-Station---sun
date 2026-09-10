@@ -5,13 +5,14 @@ import com.platform.common.list.ListColumnFilter;
 import java.util.List;
 
 /**
- * One page of Relation Table Structure. Toolbar {@code functionUnitId} AND with header filters.
- * Blank = all tables; {@code __common__} = tables with no Function Unit link.
+ * One page of Relation Table Structure. Toolbar {@code functionUnitCode} AND with header filters.
+ * Blank = all tables; {@code __common__} = tables with no Function Unit link. The rail selects a
+ * Function Unit <em>code</em>, not a catalog row id, so every published version of that unit matches.
  */
 public record RelationTableStructureListQueryRequest(
         int page,
         int size,
-        String functionUnitId,
+        String functionUnitCode,
         List<ListColumnFilter> filters,
         String sortField,
         String sortDirection) {

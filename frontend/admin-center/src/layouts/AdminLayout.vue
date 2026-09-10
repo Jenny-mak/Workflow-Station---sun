@@ -139,7 +139,7 @@
               </el-menu-item>
               <el-menu-item
                 v-for="fu in tableDataFunctionUnits"
-                :key="fu.functionUnitId"
+                :key="fu.functionUnitCode"
                 :index="`/relation-tables/data/${fu.functionUnitCode}`"
               >
                 {{ fu.functionUnitName || fu.functionUnitCode }}
