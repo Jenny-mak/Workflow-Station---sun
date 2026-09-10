@@ -76,12 +76,32 @@ class RelationTableStructureListQuerySqlTest {
         assertThat(preparedSql.get(0)).doesNotContain("l.function_unit_id = ?");
     }
 
+    /**
+     * The rail selects a Function Unit code, so the predicate joins the catalog and matches on code:
+     * matching l.function_unit_id would hide tables linked under an earlier version of the same unit.
+     */
     @Test
-    void functionUnitRailUsesExistsOnTheJunction() {
-        component.query(request("fu-1", List.of()));
+    void functionUnitRailMatchesEveryVersionOfTheSelectedCode() {
+        component.query(request("ACQ-20260821-a1b2c3", List.of()));
 
         assertThat(preparedSql.get(0)).contains("EXISTS");
-        assertThat(preparedSql.get(0)).contains("l.function_unit_id = ?");
+        assertThat(preparedSql.get(0)).contains("JOIN sys_function_units fu ON fu.id = l.function_unit_id");
+        assertThat(preparedSql.get(0)).contains("fu.code = ?");
+        assertThat(preparedSql.get(0)).doesNotContain("l.function_unit_id = ?");
+    }
+
+    /** One rail entry per code, not per published version, and a table counted once per code. */
+    @Test
+    void theRailGroupsByFunctionUnitCodeNotByVersionId() {
+        component.query(request(null, List.of()));
+
+        String railSql = preparedSql.stream()
+                .filter(sql -> sql.contains("GROUP BY"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(railSql).contains("GROUP BY fu.code");
+        assertThat(railSql).contains("COUNT(DISTINCT l.relation_table_id)");
+        assertThat(railSql).doesNotContain("GROUP BY l.function_unit_id");
     }
 
     @Test
@@ -92,9 +112,9 @@ class RelationTableStructureListQuerySqlTest {
     }
 
     private static RelationTableStructureListQueryRequest request(
-            String functionUnitId, List<ListColumnFilter> filters) {
+            String functionUnitCode, List<ListColumnFilter> filters) {
         return new RelationTableStructureListQueryRequest(
-                0, 20, functionUnitId, filters, null, null);
+                0, 20, functionUnitCode, filters, null, null);
     }
 
     private String pageSql() {

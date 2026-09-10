@@ -296,7 +296,11 @@ class RelationTableDataPropertyTest {
     // ==================== getDeployedTableFunctionUnitGroups: grouping / sorting / count ====================
 
     private com.admin.entity.FunctionUnit functionUnit(String id, String code, String name) {
-        return com.admin.entity.FunctionUnit.builder().id(id).code(code).name(name).build();
+        return functionUnit(id, code, name, "1.0.0");
+    }
+
+    private com.admin.entity.FunctionUnit functionUnit(String id, String code, String name, String version) {
+        return com.admin.entity.FunctionUnit.builder().id(id).code(code).name(name).version(version).build();
     }
 
     private RelationTableDefinition deployedTable(long id, String tableName) {
@@ -345,14 +349,42 @@ class RelationTableDataPropertyTest {
 
         assertThat(groups).hasSize(2);
         com.admin.dto.response.FunctionUnitTableGroupResponse fu1Group = groups.stream()
-                .filter(g -> "fu-1".equals(g.getFunctionUnitId())).findFirst().orElseThrow();
+                .filter(g -> "FU-CODE-1".equals(g.getFunctionUnitCode())).findFirst().orElseThrow();
         assertThat(fu1Group.getTableCount()).isEqualTo(2L);
         assertThat(fu1Group.getFunctionUnitName()).isEqualTo("Alpha Unit");
         com.admin.dto.response.FunctionUnitTableGroupResponse fu2Group = groups.stream()
-                .filter(g -> "fu-2".equals(g.getFunctionUnitId())).findFirst().orElseThrow();
+                .filter(g -> "FU-CODE-2".equals(g.getFunctionUnitCode())).findFirst().orElseThrow();
         assertThat(fu2Group.getTableCount()).isEqualTo(1L);
         // Ungrouped (Common) table must not surface as a group of its own.
-        assertThat(groups).noneMatch(g -> g.getFunctionUnitId() == null);
+        assertThat(groups).noneMatch(g -> g.getFunctionUnitCode() == null);
+    }
+
+    /**
+     * Publishing/importing a Function Unit again writes another sys_function_units row under the
+     * same code. The nav must stay at one entry per code (id grouping repeated the unit once per
+     * version), labelled with the newest version's name, counting a table linked to two versions once.
+     */
+    @Example
+    void getDeployedTableFunctionUnitGroups_collapsesEveryVersionOfOneCode() {
+        List<RelationTableDefinition> tables = List.of(deployedTable(1, "rt_a"), deployedTable(2, "rt_b"));
+        when(tableDefinitionRepository.findByStatusInAndEnabledTrue(anyList())).thenReturn(tables);
+        when(relationTableFunctionUnitRepository.findByRelationTableIdIn(anyList())).thenReturn(List.of(
+                link(1, "fu-v1"), link(1, "fu-v2"), link(2, "fu-v2")));
+        when(functionUnitRepository.findAllById(anyCollection())).thenReturn(List.of(
+                functionUnit("fu-v1", "ACQ-20260821-a1b2c3", "Acquisition", "1.0.0"),
+                functionUnit("fu-v2", "ACQ-20260821-a1b2c3", "Acquisition Renamed", "2.0.0")));
+
+        List<com.admin.dto.response.FunctionUnitTableGroupResponse> groups =
+                service.getDeployedTableFunctionUnitGroups();
+
+        assertThat(groups).hasSize(1);
+        assertThat(groups.get(0).getFunctionUnitCode()).isEqualTo("ACQ-20260821-a1b2c3");
+        assertThat(groups.get(0).getFunctionUnitName())
+                .as("newest version wins the label so a renamed re-import shows its current name")
+                .isEqualTo("Acquisition Renamed");
+        assertThat(groups.get(0).getTableCount())
+                .as("rt_a is linked to two versions of the same code but is still one table")
+                .isEqualTo(2L);
     }
 
     /** Groups sort by function unit name (falling back to code when name is null), ascending. */
@@ -373,9 +405,9 @@ class RelationTableDataPropertyTest {
         List<com.admin.dto.response.FunctionUnitTableGroupResponse> groups =
                 service.getDeployedTableFunctionUnitGroups();
 
-        assertThat(groups).extracting(com.admin.dto.response.FunctionUnitTableGroupResponse::getFunctionUnitId)
+        assertThat(groups).extracting(com.admin.dto.response.FunctionUnitTableGroupResponse::getFunctionUnitCode)
                 .as("Alpha Unit < M-CODE (name-less FU falls back to code) < Zebra Unit")
-                .containsExactly("fu-alpha", "fu-no-name", "fu-zebra");
+                .containsExactly("A-CODE", "M-CODE", "Z-CODE");
     }
 
     /** No deployed tables at all → no groups, and the batch FU lookup is skipped entirely (no N+1). */

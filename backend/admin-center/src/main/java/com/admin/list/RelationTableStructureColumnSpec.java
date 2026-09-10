@@ -12,7 +12,7 @@ import java.util.Map;
 
 /**
  * Relation Table Structure columns. Left-rail Function Unit selection stays outside
- * this spec (toolbar {@code functionUnitId}) and AND with header filters.
+ * this spec (toolbar {@code functionUnitCode}) and AND with header filters.
  * Outer alias is {@code t} on {@code rt_table_definitions}.
  */
 public final class RelationTableStructureColumnSpec {

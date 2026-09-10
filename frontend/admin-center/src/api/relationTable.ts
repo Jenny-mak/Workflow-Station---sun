@@ -243,6 +243,7 @@ export interface RollbackRequest {
   targetVersionId: number
 }
 
+/** 表结构页左栏分组：`key` 是 Function Unit code（覆盖该单元的所有版本）或 `__common__`。 */
 export interface RelationTableFuGroup {
   key: string
   label: string | null
@@ -252,7 +253,8 @@ export interface RelationTableFuGroup {
 export interface RelationTableStructureListQuery {
   page: number
   size: number
-  functionUnitId?: string
+  /** Left-rail selection: a Function Unit code (matches every published version), or `__common__`. */
+  functionUnitCode?: string
   filters?: Array<ListColumnFilter & { field: string }>
   sortField?: string
   sortDirection?: 'ASC' | 'DESC'
@@ -335,10 +337,12 @@ export const relationTableStructureApi = {
     del<void>(`/relation-tables/structures/${id}/access/${accessId}`)
 }
 
-/** 已部署表按 Function Unit 分组的轻量清单（导航侧边栏用） */
+/**
+ * 已部署表按 Function Unit 分组的轻量清单（导航侧边栏用）。
+ * 按 code 去重：同一单元发布多个版本只出一条，所以这里没有单一的 sys_function_units.id。
+ */
 export interface FunctionUnitTableGroup {
-  functionUnitId: string
-  functionUnitCode?: string
+  functionUnitCode: string
   functionUnitName?: string
   tableCount: number
 }
