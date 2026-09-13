@@ -197,27 +197,6 @@
   flex-shrink: 0;
 }
 
-/* Audit lists: shrink-wrap so pagination sits under the last row. The table
- * still caps at leftover viewport height (useListTableFitHeight) and scrolls. */
-.audit-list-page .table-card {
-  flex: 0 1 auto;
-  justify-content: flex-start;
-}
-
-.audit-list-page .list-data-grid-scroll {
-  flex: 0 1 auto;
-}
-
-.audit-list-page .list-data-grid-inner {
-  flex: 0 0 auto;
-  height: auto;
-}
-
-.audit-list-page .list-data-grid.el-table,
-.audit-list-page .list-data-grid .el-table__inner-wrapper {
-  height: auto;
-}
-
 /* Action cells only — do not lift overflow on every right-fixed column. */
 .list-data-grid .el-table__cell:has(.row-actions) .cell {
   overflow: visible !important;

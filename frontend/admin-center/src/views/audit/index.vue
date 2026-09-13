@@ -170,7 +170,6 @@
     </div>
 
     <div
-      ref="tableCardRef"
       v-loading="loading"
       class="table-card"
     >
@@ -194,7 +193,7 @@
           class="list-data-grid"
           :class="{ 'list-data-grid--fit': gridFits }"
           scrollbar-always-on
-          :height="tableHeight"
+          :height="gridTableHeight || '100%'"
           @selection-change="handleSelectionChange"
         >
           <template #empty>
@@ -360,7 +359,7 @@
 </template>
 
 <script setup lang="ts">
-import { onActivated, ref } from 'vue'
+import { onActivated } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Download, Search, InfoFilled, RefreshRight, VideoPause } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -371,7 +370,6 @@ import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
 import type { ListColumnFilter } from '@platform-shared/list/columnMeta'
 import { useAudit } from '@/composables/modules/useAudit'
-import { useListTableFitHeight } from '@/composables/list/useListTableFitHeight'
 
 const { t } = useI18n()
 
@@ -404,6 +402,7 @@ const {
   activeFilter,
   gridScrollRef,
   gridFits,
+  gridTableHeight,
   gridInnerStyle,
   widthOf,
   setWidth,
@@ -415,9 +414,6 @@ const {
   applySort,
   clearSort,
 } = useAudit()
-
-const tableCardRef = ref<HTMLElement | null>(null)
-const { tableHeight } = useListTableFitHeight(tableCardRef, gridScrollRef, () => displayRows.value.length)
 
 function onSort(field: string, direction: 'ASC' | 'DESC') {
   applySort(field, direction)
