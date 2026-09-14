@@ -15,6 +15,9 @@ description: >-
 
 具体到 MI 的判据表见规则 `portal-mi-subtable-my-request.mdc`；本文只讲**怎么做这类改造**。
 
+> 子表的**身份 / 外键 / MI 判定**这三条契约的正确答案，以及 15 处历史写错点的清单，
+> 见 skill `subtable-identity-and-binding-contract` —— 动这些代码前先读那篇，省得重新推导。
+
 ## 0. 先判断是不是这类问题
 
 命中任一即适用：
