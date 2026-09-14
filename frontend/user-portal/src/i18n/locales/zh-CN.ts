@@ -380,6 +380,7 @@ export default {
     reasonDescription: '原因说明',
     urgeMessagePlaceholder: '请输入催办消息（可选）',
     reasonPlaceholder: '请输入原因',
+    reasonRequired: '请输入原因',
     detail: '任务详情',
     basicInfo: '基本信息',
     workflowDiagram: '工作流程图',

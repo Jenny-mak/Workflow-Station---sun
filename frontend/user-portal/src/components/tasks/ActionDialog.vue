@@ -127,6 +127,7 @@
       <el-form-item
         :label="currentAction === 'urge' ? $t('task.urgeMessage') : $t('task.reasonDescription')"
         class="task-action-reason-item"
+        :required="reasonRequired && currentAction !== 'urge'"
       >
         <el-input
           v-model="formData.reason"
@@ -201,6 +202,7 @@ const props = defineProps<{
   formData: TaskActionForm
   userOptions: UserOption[]
   submitting: boolean
+  reasonRequired?: boolean
 }>()
 
 const emit = defineEmits<{

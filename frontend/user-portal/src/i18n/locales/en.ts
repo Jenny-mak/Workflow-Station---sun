@@ -380,6 +380,7 @@ export default {
     reasonDescription: 'Reason Description',
     urgeMessagePlaceholder: 'Please enter urge message (optional)',
     reasonPlaceholder: 'Please enter reason',
+    reasonRequired: 'Please enter a reason',
     detail: 'Task Detail',
     basicInfo: 'Basic Info',
     workflowDiagram: 'Workflow Diagram',

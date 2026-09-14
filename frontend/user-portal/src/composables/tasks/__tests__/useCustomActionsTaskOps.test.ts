@@ -13,6 +13,9 @@ vi.mock('element-plus', () => ({
     warning: vi.fn(),
     error: vi.fn(),
   },
+  ElMessageBox: {
+    confirm: vi.fn(async () => {}),
+  },
 }))
 vi.mock('../customActionReturnFlows', () => ({
   createCustomActionReturnFlows: () => ({
@@ -28,7 +31,7 @@ vi.mock('../customActionFormPopup', () => ({
     submitFormPopup: vi.fn(),
   }),
 }))
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useCustomActions } from '../useCustomActions'
 
 /**
@@ -84,5 +87,79 @@ describe('useCustomActions task-operation dispatch', () => {
     const { handleCustomAction } = createComposable({ onUrge: vi.fn() })
     handleCustomAction({ actionId: 1, actionName: 'x', actionType: 'NOT_A_TYPE' } as never)
     expect(ElMessage.warning).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens approve dialog without confirm when confirmMessage is empty', async () => {
+    const approveDialogVisible = ref(false)
+    const approveCommentRequired = ref(false)
+    const { handleCustomAction } = useCustomActions({
+      taskInfo: ref({}),
+      subTableBindings: ref([]),
+      formData: ref({}),
+      submitting: ref(false),
+      saveCurrentTaskForm: vi.fn(async () => {}),
+      validateSubTableAssigneesForComplete: () => true,
+      approveDialogVisible,
+      approveDialogTitle: ref(''),
+      currentApproveAction: ref(''),
+      approveForm: { comment: '' },
+      approveCommentRequired,
+      loadTaskDetail: vi.fn(async () => {}),
+    })
+    handleCustomAction({
+      actionId: '1',
+      actionName: 'Approve',
+      actionType: 'APPROVE',
+      configJson: '{"requireComment":true}',
+    })
+    await Promise.resolve()
+    expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+    expect(approveDialogVisible.value).toBe(true)
+    expect(approveCommentRequired.value).toBe(true)
+  })
+
+  it('shows confirmMessage then skips dialog when the user cancels', async () => {
+    vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel')
+    const approveDialogVisible = ref(false)
+    const { handleCustomAction } = useCustomActions({
+      taskInfo: ref({}),
+      subTableBindings: ref([]),
+      formData: ref({}),
+      submitting: ref(false),
+      saveCurrentTaskForm: vi.fn(async () => {}),
+      validateSubTableAssigneesForComplete: () => true,
+      approveDialogVisible,
+      approveDialogTitle: ref(''),
+      currentApproveAction: ref(''),
+      approveForm: { comment: '' },
+      loadTaskDetail: vi.fn(async () => {}),
+    })
+    handleCustomAction({
+      actionId: '1',
+      actionName: 'Approve',
+      actionType: 'APPROVE',
+      configJson: '{"confirmMessage":"Sure?"}',
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(ElMessageBox.confirm).toHaveBeenCalledWith(
+      'Sure?',
+      'common.confirm',
+      expect.objectContaining({ type: 'warning' }),
+    )
+    expect(approveDialogVisible.value).toBe(false)
+  })
+
+  it('passes the action into onDelegate so Require Comment can be applied', () => {
+    const spy = vi.fn()
+    const action = {
+      actionId: '9',
+      actionName: 'Delegate',
+      actionType: 'DELEGATE',
+      configJson: '{"requireComment":true}',
+    }
+    const { handleCustomAction } = createComposable({ onDelegate: spy })
+    handleCustomAction(action as never)
+    expect(spy).toHaveBeenCalledWith(action)
   })
 })

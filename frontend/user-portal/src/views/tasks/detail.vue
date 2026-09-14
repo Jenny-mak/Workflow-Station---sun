@@ -446,6 +446,7 @@
       :title="approveDialogTitle"
       :form-data="approveForm"
       :submitting="submitting"
+      :comment-required="approveCommentRequired"
       @confirm="submitApprove"
     />
 
@@ -457,6 +458,7 @@
       :form-data="actionForm"
       :user-options="userOptions"
       :submitting="submitting"
+      :reason-required="actionReasonRequired"
       @confirm="submitAction"
       @opened="onActionDialogOpened"
     />
@@ -846,7 +848,9 @@ const {
   handleTransfer,
   handleUrge,
   submitApprove,
-  submitAction
+  submitAction,
+  approveCommentRequired,
+  actionReasonRequired,
 } = taskActions
 
 /** FORM_POPUP helper callbacks — extracted to composables/taskDetail/useTaskDetailPopup.ts (behavior unchanged). */
@@ -863,6 +867,7 @@ const customActions = useCustomActions({
   approveDialogTitle,
   currentApproveAction,
   approveForm,
+  approveCommentRequired,
   loadTaskDetail,
   resolveFormPopupContent: popupHelpers.resolveFormPopupContent,
   preparePopupContext: popupHelpers.preparePopupContext,

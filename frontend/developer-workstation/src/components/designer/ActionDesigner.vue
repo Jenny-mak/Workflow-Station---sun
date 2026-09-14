@@ -104,7 +104,7 @@
       
       <el-form
         :model="selectedAction"
-        label-width="100px"
+        label-width="auto"
         label-position="left"
         style="max-width: 600px;"
       >

@@ -32,6 +32,7 @@ vi.mock('@/utils/subTableAssignment', () => ({
   allSubTableRowsHaveAssignee: () => true,
 }))
 import { ElMessage } from 'element-plus'
+import { completeTask } from '@/api/task'
 import { useTaskActions } from '../useTaskActions'
 
 describe('useTaskActions submitAction delegate payload', () => {
@@ -101,6 +102,73 @@ describe('useTaskActions submitAction delegate payload', () => {
     })
     await actions.submitAction()
     expect(delegateTaskMock).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalled()
+  })
+
+  it('blocks delegate submit when Require Comment is on and reason is empty', async () => {
+    const actions = createActions({
+      targetUserId: 'user-b',
+      reason: '',
+      targetType: 'USER',
+    })
+    actions.handleDelegate({
+      actionId: '1',
+      actionName: 'Delegate',
+      actionType: 'DELEGATE',
+      configJson: '{"requireComment":true}',
+    })
+    await actions.submitAction()
+    expect(delegateTaskMock).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalled()
+  })
+
+  it('allows empty reason when Require Comment is off', async () => {
+    const actionForm = {
+      targetUserId: 'user-b',
+      reason: '',
+      targetType: 'USER',
+    }
+    const actions = createActions(actionForm)
+    actions.handleDelegate({
+      actionId: '1',
+      actionName: 'Delegate',
+      actionType: 'DELEGATE',
+      configJson: '{}',
+    })
+    actionForm.targetUserId = 'user-b'
+    actionForm.targetType = 'USER'
+    await actions.submitAction()
+    expect(delegateTaskMock).toHaveBeenCalled()
+  })
+})
+
+describe('useTaskActions submitApprove Require Comment', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('blocks complete when comment is required and empty', async () => {
+    const actions = useTaskActions({
+      taskId: 'task-1',
+      taskInfo: ref({}),
+      subTableBindings: ref([]),
+      formData: ref({}),
+      submitting: ref(false),
+      approveDialogVisible: ref(true),
+      approveDialogTitle: ref(''),
+      currentApproveAction: ref('APPROVE'),
+      approveForm: { comment: '' },
+      actionDialogVisible: ref(false),
+      actionDialogTitle: ref(''),
+      currentAction: ref(''),
+      actionForm: { targetUserId: '', reason: '' } as never,
+      userOptions: ref([]),
+      userSearchLoading: ref(false),
+      loadTaskDetail: vi.fn(async () => {}),
+    })
+    actions.approveCommentRequired.value = true
+    await actions.submitApprove()
+    expect(completeTask).not.toHaveBeenCalled()
     expect(ElMessage.warning).toHaveBeenCalled()
   })
 })
