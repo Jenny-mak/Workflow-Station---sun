@@ -7,14 +7,12 @@ const here = dirname(fileURLToPath(import.meta.url))
 const frontendRoot = join(here, '../../../../../')
 
 describe('admin audit list viewport', () => {
-  it('shrinks Audit filter and batch bars instead of the grid', () => {
+  it('keeps filter and batch bars from shrinking the grid', () => {
     const scss = readFileSync(join(here, '../../../styles/listDataGrid.scss'), 'utf8')
     expect(scss).toContain('.page-container:has(.list-data-grid-scroll) > .filter-card')
     expect(scss).toContain('.page-container:has(.list-data-grid-scroll) > .batch-bar')
-    expect(scss).toContain('.audit-list-page .table-card')
-    expect(scss).toContain('.audit-list-page .list-data-grid-scroll')
-    expect(scss).toContain('flex: 0 1 auto')
-    expect(scss).toContain('.audit-list-page .list-data-grid-inner')
+    expect(scss).not.toContain('.audit-list-page .table-card')
+    expect(scss).not.toContain('.audit-list-page .list-data-grid-inner')
   })
 
   it('hosts both Audit lists on table-card with in-table empty state', () => {
@@ -32,13 +30,15 @@ describe('admin audit list viewport', () => {
     expect(portalAudit).not.toContain('class="empty-state"')
   })
 
-  it('fits table height to rows instead of stretching to 100%', () => {
+  it('fills leftover viewport so el-table owns the scrollbars', () => {
     const adminAudit = readFileSync(join(here, '../index.vue'), 'utf8')
     const portalAudit = readFileSync(join(here, '../user-portal/index.vue'), 'utf8')
-    expect(adminAudit).toContain(':height="tableHeight"')
-    expect(portalAudit).toContain(':height="tableHeight"')
-    expect(adminAudit).not.toContain("gridTableHeight || '100%'")
-    expect(portalAudit).not.toContain("gridTableHeight || '100%'")
+    expect(adminAudit).toContain("gridTableHeight || '100%'")
+    expect(portalAudit).toContain("gridTableHeight || '100%'")
+    expect(adminAudit).not.toContain('useListTableFitHeight')
+    expect(portalAudit).not.toContain('useListTableFitHeight')
+    expect(adminAudit).not.toContain(':height="tableHeight"')
+    expect(portalAudit).not.toContain(':height="tableHeight"')
   })
 
   it('waits for pinned layout instead of a fixed sleep', () => {
@@ -47,7 +47,8 @@ describe('admin audit list viewport', () => {
       'utf8',
     )
     expect(script).toContain('waitUntilLayoutPinned')
-    expect(script).toContain('pagination under last row')
+    expect(script).toContain('pagination at viewport bottom')
+    expect(script).toContain('constrained table body')
     expect(script).not.toContain('waitForTimeout')
   })
 })

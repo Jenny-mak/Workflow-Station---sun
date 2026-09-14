@@ -1,6 +1,7 @@
 /**
- * Admin Audit list viewport: pagination sits under the last row (not a blank
- * gap mid-card). Run after rebuilding admin-center-frontend.
+ * Admin Audit list viewport: table fills leftover height so Element Plus owns
+ * the scrollbars; pagination sits at the viewport bottom. Run after rebuilding
+ * admin-center-frontend.
  *
  * Usage (from frontend/):
  *   node scripts/verify-admin-audit-list-viewport.mjs
@@ -17,9 +18,9 @@ const ORIGIN = process.env.ORIGIN ?? 'http://localhost:3000'
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '../admin-center/verification-screenshots')
 const DATE = new Date().toISOString().slice(0, 10)
 const VIEWPORT = { width: 1400, height: 900 }
-/** Last data row (or table bottom when empty) to ListPagination. */
-const MAX_ROW_PAGER_GAP_PX = 48
 const MIN_GRID_HEIGHT_PX = 220
+/** admin-main 24px + page-container 20px padding, plus a few pixels of slack. */
+const MAX_PAGER_FROM_BOTTOM_PX = 56
 
 mkdirSync(OUT, { recursive: true })
 
@@ -35,7 +36,7 @@ async function waitUntilLayoutPinned(page, grid, pager) {
     throw new Error('grid or pagination handle missing')
   }
   await page.waitForFunction(
-    ([gridNode, pagerNode, maxGap, minGrid]) => {
+    ([gridNode, pagerNode, minGrid, maxFromBottom]) => {
       const loading = document.querySelector('.page-container .el-loading-mask')
       if (loading) {
         const style = window.getComputedStyle(loading)
@@ -43,13 +44,23 @@ async function waitUntilLayoutPinned(page, grid, pager) {
       }
       const gr = gridNode.getBoundingClientRect()
       const pr = pagerNode.getBoundingClientRect()
-      const lastRow = gridNode.querySelector('.el-table__body-wrapper tr.el-table__row:last-child')
-      const anchor = lastRow ?? gridNode.querySelector('.el-table')
-      if (!anchor) return false
-      const gap = pr.top - anchor.getBoundingClientRect().bottom
-      return gr.height > minGrid && gap >= -20 && gap <= maxGap && pr.bottom <= window.innerHeight + 1
+      const table = gridNode.querySelector('.el-table')
+      if (!table) return false
+      const tableH = table.getBoundingClientRect().height
+      const pagerFromBottom = window.innerHeight - pr.bottom
+      const inner = gridNode.querySelector('.el-table__inner-wrapper')
+      const wrap = gridNode.querySelector('.el-scrollbar__wrap')
+        || gridNode.querySelector('.el-table__body-wrapper')
+      const innerH = inner instanceof HTMLElement ? getComputedStyle(inner).height : ''
+      const constrained = innerH.endsWith('px') && parseFloat(innerH) > minGrid
+        && wrap instanceof HTMLElement && wrap.clientHeight > minGrid * 0.5
+      return gr.height > minGrid
+        && tableH > minGrid
+        && constrained
+        && pagerFromBottom >= -2
+        && pagerFromBottom <= maxFromBottom
     },
-    [gridEl, pagerEl, MAX_ROW_PAGER_GAP_PX, MIN_GRID_HEIGHT_PX],
+    [gridEl, pagerEl, MIN_GRID_HEIGHT_PX, MAX_PAGER_FROM_BOTTOM_PX],
     { timeout: 20000 },
   )
 }
@@ -83,16 +94,21 @@ try {
     const metrics = await page.evaluate(() => {
       const gridNode = document.querySelector('.page-container .list-data-grid-scroll')
       const pagerNode = document.querySelector('.page-container .list-pagination')
-      const lastRow = gridNode?.querySelector('.el-table__body-wrapper tr.el-table__row:last-child')
-      const anchor = lastRow ?? gridNode?.querySelector('.el-table')
+      const table = gridNode?.querySelector('.el-table')
       const gr = gridNode?.getBoundingClientRect()
       const pr = pagerNode?.getBoundingClientRect()
-      const ar = anchor?.getBoundingClientRect()
+      const inner = gridNode?.querySelector('.el-table__inner-wrapper')
+      const wrap = gridNode?.querySelector('.el-scrollbar__wrap')
+        || gridNode?.querySelector('.el-table__body-wrapper')
+      const innerH = inner instanceof HTMLElement ? getComputedStyle(inner).height : ''
       return {
         gridHeight: gr?.height ?? 0,
-        gap: pr && ar ? pr.top - ar.bottom : null,
+        tableHeight: table?.getBoundingClientRect().height ?? 0,
+        pagerFromBottom: pr ? window.innerHeight - pr.bottom : null,
         hasTableCard: document.querySelectorAll('.page-container .table-card .list-data-grid-scroll').length > 0,
         headerVisible: !!gridNode?.querySelector('.el-table__header'),
+        innerHeightCss: innerH,
+        wrapClientHeight: wrap instanceof HTMLElement ? wrap.clientHeight : 0,
       }
     })
 
@@ -104,13 +120,24 @@ try {
       `gridHeight=${metrics.gridHeight.toFixed(1)}`,
     )
     check(
-      `${item.slug} pagination under last row`,
-      metrics.gap != null && metrics.gap >= -20 && metrics.gap <= MAX_ROW_PAGER_GAP_PX,
-      `gap=${metrics.gap?.toFixed(1)}`,
+      `${item.slug} pagination at viewport bottom`,
+      metrics.pagerFromBottom != null
+        && metrics.pagerFromBottom >= -2
+        && metrics.pagerFromBottom <= MAX_PAGER_FROM_BOTTOM_PX,
+      `pagerFromBottom=${metrics.pagerFromBottom?.toFixed(1)}`,
+    )
+    check(
+      `${item.slug} constrained table body`,
+      typeof metrics.innerHeightCss === 'string'
+        && metrics.innerHeightCss.endsWith('px')
+        && parseFloat(metrics.innerHeightCss) > MIN_GRID_HEIGHT_PX
+        && metrics.wrapClientHeight > MIN_GRID_HEIGHT_PX * 0.5
+        && metrics.tableHeight > MIN_GRID_HEIGHT_PX,
+      `tableHeight=${metrics.tableHeight.toFixed(1)} innerHeightCss=${metrics.innerHeightCss} wrapClientHeight=${metrics.wrapClientHeight}`,
     )
   }
 } finally {
   await browser.close()
 }
 
-console.log('[OK] both Admin Audit menus keep pagination under the last log row')
+console.log('[OK] both Admin Audit menus fill leftover viewport with table scrollbars')

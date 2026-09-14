@@ -3972,3 +3972,21 @@
     先红后绿；portal+DW 相关 vitest。Guidelines runtimeBody 写明禁止下载时无 Callback URL。
     合并 common 时两次改号：本地原 #1623 → #1630 → #1631。
 
+- id: "1632"
+  status: fixed
+  fixed_at: "2026-09-13"
+  severity: major
+  category: bug
+  summary: "Admin Audit lists lost table scrollbars after snug-row height overrode fill-viewport"
+  file: "frontend/admin-center/src/views/audit/index.vue"
+  note: |
+    #1580 sized el-table to row sum and set .audit-list-page inner-wrapper
+    height:auto. Combined with admin-main overflow:hidden, Element Plus never
+    got a constrained body so neither axis showed a bar. Restored the shared
+    list fill (`gridTableHeight || '100%'`) like UserList; removed
+    useListTableFitHeight. Tests: auditListViewport.test.ts.
+    verify-admin-audit-list-viewport.mjs: pagination at viewport bottom +
+    constrained table body (not merely .el-scrollbar__bar presence).
+    Rebased onto origin/common_0731_SELF_AP; issue retargeted from #1592
+    which origin already used for ATM Correspondence lookup.
+
