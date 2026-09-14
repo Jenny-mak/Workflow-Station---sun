@@ -1,5 +1,5 @@
 /**
- * Leader Reassign: To Do Claimed By + Reassign, help #leader, Admin audit filters.
+ * Leader Reassign: To Do Current Assignee + Reassign, help #leader, Admin audit filters.
  */
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -44,8 +44,8 @@ try {
   await portalPage.goto(`${ORIGIN}/portal/tasks`, { waitUntil: 'domcontentloaded' })
   await portalPage.waitForSelector('.list-data-grid, .el-table', { timeout: 25000 })
   await portalPage.locator('.el-loading-mask').waitFor({ state: 'hidden', timeout: 20000 }).catch(() => {})
-  const claimedByHeader = await portalPage.getByText('Claimed By', { exact: true }).count()
-  check('To Do shows Claimed By column', claimedByHeader > 0)
+  const claimedByHeader = await portalPage.getByText('Current Assignee', { exact: true }).count()
+  check('To Do shows Current Assignee column', claimedByHeader > 0)
   const reassignCount = await portalPage.locator('[data-test="todo-reassign-btn"]').count()
   if (reassignCount === 0) {
     console.log('[WARN] No Reassign button on current To Do page (no authorized claim-pool row)')

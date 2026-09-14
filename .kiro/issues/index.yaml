@@ -3990,3 +3990,17 @@
     Rebased onto origin/common_0731_SELF_AP; issue retargeted from #1592
     which origin already used for ATM Correspondence lookup.
 
+- id: "1633"
+  status: fixed
+  fixed_at: "2026-09-14"
+  severity: minor
+  category: bug
+  summary: "To Do Current Assignee showed '-' on Direct Assignment / Process Initiator rows even when assignee was set"
+  file: "frontend/user-portal/src/views/tasks/index.vue"
+  note: |
+    列从 Claimed By 改名后，单元格仍只在 claimPoolTask && assignee 时画名字，
+    其它 assignment type（USER / INITIATOR 等）有 assignee 也显示 "-"。
+    修复：formatTodoCurrentAssignee 用 assigneeName||assignee；仅空闲角色池为 "-"；
+    角色池认领才用 You 标签。单测 todoCurrentAssignee.test.ts；
+    截图 2026-09-14_todo-current-assignee-direct.png（123456 Direct Assignment=liam）。
+
