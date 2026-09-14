@@ -29,7 +29,9 @@ const flowKeys = [
 ]
 
 const jumpLinks: GuideJump[] = [
+  { anchor: 'when', titleKey: 'formEventsGuide.jumpWhen' },
   { anchor: 'values', titleKey: 'formEventsGuide.jumpValues' },
+  { anchor: 'set-shapes', titleKey: 'formEventsGuide.jumpSetShapes' },
   { anchor: 'required', titleKey: 'formEventsGuide.jumpRequired' },
   { anchor: 'visibility', titleKey: 'formEventsGuide.jumpVis' },
   { anchor: 'errors', titleKey: 'formEventsGuide.jumpErrors' },
@@ -38,6 +40,7 @@ const jumpLinks: GuideJump[] = [
   { anchor: 'notify', titleKey: 'formEventsGuide.jumpNotify' },
   { anchor: 'lookup', titleKey: 'formEventsGuide.jumpLookup' },
   { anchor: 'chrome', titleKey: 'formEventsGuide.jumpChrome' },
+  { anchor: 'hooks', titleKey: 'formEventsGuide.jumpHooks' },
   { anchor: 'form-level', titleKey: 'formEventsGuide.jumpForm' },
 ]
 
@@ -65,12 +68,33 @@ const sections: GuideSection[] = [
   {
     titleKey: 'formEventsGuide.openTitle',
     bodyKey: 'formEventsGuide.openBody',
-    figure: { src: 'guides/dw-form-events.png', captionKey: 'formEventsGuide.openFigure' },
     samples: [
       { code: 'Edit', hintKey: 'formEventsGuide.openSample' },
       { code: 'Create', hintKey: 'formEventsGuide.createSample' },
       { code: 'Save', hintKey: 'formEventsGuide.saveSample' },
       { code: 'Ok', hintKey: 'formEventsGuide.okSample' },
+    ],
+  },
+  {
+    anchor: 'when',
+    titleKey: 'formEventsGuide.whenTitle',
+    bodyKey: 'formEventsGuide.whenBody',
+    figure: { src: 'guides/dw-form-events.png', captionKey: 'formEventsGuide.openFigure' },
+    figureBeside: true,
+    sampleLayout: 'block',
+    samples: [
+      { code: 'change', hintKey: 'formEventsGuide.whenChange' },
+      { code: 'blur', hintKey: 'formEventsGuide.whenBlur' },
+      { code: 'focus', hintKey: 'formEventsGuide.whenFocus' },
+      { code: 'click', hintKey: 'formEventsGuide.whenClick' },
+      { code: 'hook_load', hintKey: 'formEventsGuide.whenHookLoad' },
+      { code: 'hook_mounted', hintKey: 'formEventsGuide.whenHookMounted' },
+      { code: 'hook_deleted', hintKey: 'formEventsGuide.whenHookDeleted' },
+      { code: 'hook_watch', hintKey: 'formEventsGuide.whenHookWatch' },
+      { code: 'hook_value', hintKey: 'formEventsGuide.whenHookValue' },
+      { code: 'hook_hidden', hintKey: 'formEventsGuide.whenHookHidden' },
+      { code: 'hook_titleClick', hintKey: 'formEventsGuide.whenHookTitleClick' },
+      { code: 'Custom', hintKey: 'formEventsGuide.whenCustom' },
     ],
   },
   {
@@ -88,6 +112,23 @@ const sections: GuideSection[] = [
       { code: "var title = api.getValue('request_title')", hintKey: 'formEventsGuide.apiGetValue' },
       { code: "api.setValue({ requester: user && user.displayName, cost_center: '' })", hintKey: 'formEventsGuide.apiSetMany' },
       { code: 'var snapshot = api.form', hintKey: 'formEventsGuide.apiForm' },
+    ],
+  },
+  {
+    anchor: 'set-shapes',
+    titleKey: 'formEventsGuide.setShapesTitle',
+    bodyKey: 'formEventsGuide.setShapesBody',
+    bodyKeys: [
+      'formEventsGuide.setShapeString',
+      'formEventsGuide.setShapeNumber',
+      'formEventsGuide.setShapeOption',
+      'formEventsGuide.setShapeSwitch',
+      'formEventsGuide.setShapeKeys',
+      'formEventsGuide.setShapeDate',
+      'formEventsGuide.setShapeRange',
+      'formEventsGuide.setShapePath',
+      'formEventsGuide.setShapeUpload',
+      'formEventsGuide.setShapeClear',
     ],
   },
   {
@@ -302,6 +343,7 @@ const sections: GuideSection[] = [
       'formEventsGuide.failOptions',
       'formEventsGuide.failLookup',
       'formEventsGuide.failBlocks',
+      'formEventsGuide.failSetValue',
     ],
   },
 ]

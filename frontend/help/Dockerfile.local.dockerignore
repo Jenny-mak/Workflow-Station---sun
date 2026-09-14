@@ -1,5 +1,7 @@
 # BuildKit per-Dockerfile ignore for Dockerfile.local: it only copies the
 # pre-built dist plus nginx config, so send nothing else.
+# Un-ignore the directory itself first; !dist/** alone leaves an empty COPY.
 *
+!dist/
 !dist/**
 !nginx.conf

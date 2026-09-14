@@ -1,4 +1,7 @@
 import formEventMessages from './formEvents.zh-CN'
+import formCtlMessages from './formCtl.zh-CN'
+import tableDesignMessages from './tableDesign.zh-CN'
+import viewDesignMessages from './viewDesign.zh-CN'
 
 export default {
   app: {
@@ -16,6 +19,14 @@ export default {
     howToDefault: '默认',
     howToResult: '运行后',
     howToNote: '注意',
+    copy: '复制',
+    copied: '已复制',
+    copyCodeAria: '复制代码',
+    langJs: 'JavaScript',
+    langFormula: '公式',
+    searchAria: '搜索指南',
+    searchPlaceholder: '搜索文章',
+    searchEmpty: '没有匹配的文章',
   },
   home: {
     title: '使用指南',
@@ -88,6 +99,7 @@ export default {
     formCtlTag: 'Tag',
     formCtlImage: 'Image',
     viewDesign: '视图设计',
+    noArticleYet: '尚无文章',
     actionDesign: '动作设计',
     fuAutomation: '自动化',
     connections: '连接配置',
@@ -140,6 +152,14 @@ export default {
       title: '计算字段公式',
       summary: '计算列如何自动填值、可用函数，以及公式失败时的处理方式。',
     },
+    tableDesign: {
+      title: '表、字段、主键和外键',
+      summary: '建表和列、选择主键策略、设置外键。',
+    },
+    viewDesign: {
+      title: '视图设计',
+      summary: '门户列表视图：先选列，再决定谁能看见（Business Units 和 Roles）。',
+    },
     emailSend: {
       title: '发送邮件',
       summary: '出站连接、邮件模板与发送任务：每个字段的含义，以及发送失败时怎么查。',
@@ -163,15 +183,15 @@ export default {
     },
     formEvents: {
       title: '表单事件',
-      summary: '怎么写控件脚本和 Form event：参数、读写值、必填、锁定、显示隐藏、选项、字段提示、表单横幅、Lookup 过滤、焦点、标签、hooks，以及当前用户。',
+      summary: '怎么写控件脚本和 Form event：每种 Create 事件何时触发、参数、读写值、必填、锁定、显示隐藏、选项、字段提示、表单横幅、Lookup 过滤、焦点、标签、hooks，以及当前用户。',
     },
     formEventsBasic: {
-      title: 'Basic 控件 — 事件',
-      summary: '每种 Basic 控件一个 change 样例；完整 api 方法见「怎么写事件」。',
+      title: 'Basic',
+      summary: '调色板分组 Basic。每种控件一篇：属性、一条事件样例、失败时怎么看。',
     },
     formEventsExtend: {
-      title: 'Extend 与 MI — 事件',
-      summary: '每种 Extend / MI 控件一个样例；Lookup 过滤链到事件总表。',
+      title: 'Extend 与 MI',
+      summary: '调色板分组 Extend 和 MI。Sub-Table 和 Lookup 各有专文；其余控件仍在本页各留一条事件样例。',
     },
     formEventsLayout: {
       title: 'Layout 与 Auxiliary — 事件',
@@ -616,7 +636,7 @@ export default {
     pageTitle: '表单设计 — 高级上传',
     crumb: '开发工作站 · 功能单元 · 表单设计 · Extend',
     intro:
-      '高级上传在 Extend 调色板。新建字段默认单文件：表单上只能传一个文件，保存值是 URL，方便 Activepieces 的 File / 发邮件步骤使用。打开「多文件」后才可设置数量（打开时默认 10）。默认单文件大小上限 10MB；平台硬上限 50MB。已保存 JSON 里若仍是「多选」关闭、「数量限制」为 1、且没有最多文件数，那是当年生成器写死的值——在你改开关之前，它们同样最多 10 个。属性面板显示「多文件」、「单文件大小上限」、禁止下载、Readonly，以及 Advance（FileNet）。Basic 里的 Upload 是 form-create 原生控件，属性保持原样。',
+      '高级上传在 Extend 调色板。新建字段默认单文件：表单上只能传一个文件，保存值是 URL，方便 Activepieces 的 File / 发邮件步骤使用。打开「多文件」后才可设置数量（打开时默认 10）。默认单文件大小上限 10MB；平台硬上限 50MB。已保存 JSON 里若仍是「多选」关闭、「数量限制」为 1、且没有最多文件数，那是当年生成器写死的值——在你改开关之前，它们同样最多 10 个。属性面板显示「多文件」、「单文件大小上限」、禁止下载、Readonly，以及 Advance（FileNet）。Basic 里的 [[/form-ctl-upload]] 是 form-create 原生控件，属性保持原样。',
     flowTitle: '操作顺序',
     flow1: '先在 Table Design 增加 FILE 列；再在表单设计用「导入表字段」，或把高级上传的 Field 改成该列名',
     flow2: '需要单文件就保持「多文件」关闭；需要多个文件时打开开关并设置「最多文件数」。再设置「单文件大小上限」（默认 10MB，最高 50MB）',
@@ -625,7 +645,7 @@ export default {
     flow5: '在该表单的预览或用户门户里核对',
     scenesTitle: '每个场景是各自的画布',
     scenesBody:
-      '发起、My Request、待办各有一份表单设计。门户只渲染该画布上放了的高级上传，且控件的 Field 必须是 Table Design 里的 FILE 列名（和普通上传一样，例如 fileupload）。先在 Table Design 建 FILE 列，再用导入表字段，或把控件 Field 改成该列名。从 Extend 拖入不会往表里加列。在 My Request 或 Assign Task 上点「从发起表单添加高级上传」，会复制这些 Field，发起时已上传的文件才能显示。保存该表单。',
+      '发起、My Request、待办各有一份表单设计。门户只渲染该画布上放了的高级上传，且控件的 Field 必须是 Table Design 里的 FILE 列名（和 [[/form-ctl-upload]] 一样，例如 fileupload）。先在 Table Design 建 FILE 列，再用导入表字段，或把控件 Field 改成该列名。从 Extend 拖入不会往表里加列。在 My Request 或 Assign Task 上点「从发起表单添加高级上传」，会复制这些 Field，发起时已上传的文件才能显示。保存该表单。',
     scenesSample: '高级上传 Field 属性里填写 Table Design 的 FILE 列名',
     maxTitle: '多文件',
     maxBody:
@@ -648,4 +668,7 @@ export default {
       '选的文件超过「最多文件数」会提示「最多允许 {limit} 个文件」。超过「单文件大小上限」的文件不会加入列表。提交（或子表对话框保存）时，若仍有文件在上传/排队，或有文件失败，都会被拦住——等上传完成，或删除/重试失败文件。会话过期时上传返回 401，表单会提示重新登录后再上传该文件。zip 不会进入表单内预览播放列表。每个文件仍是单独提交；失败的那个不会清掉已经成功的文件。',
   },
   ...formEventMessages,
+  ...formCtlMessages,
+  ...tableDesignMessages,
+  ...viewDesignMessages,
 }

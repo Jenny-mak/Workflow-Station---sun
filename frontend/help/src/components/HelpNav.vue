@@ -28,7 +28,14 @@
       >
         {{ t(node.titleKey) }}
       </router-link>
-      <span v-else class="help-tree-leaf is-empty">{{ t(node.titleKey) }}</span>
+      <span
+        v-else
+        class="help-tree-leaf is-empty"
+        :data-testid="`help-nav-${node.id}`"
+        :title="t('nav.noArticleYet')"
+        :aria-label="`${t(node.titleKey)}. ${t('nav.noArticleYet')}`"
+        aria-disabled="true"
+      >{{ t(node.titleKey) }}</span>
     </li>
   </ul>
 </template>

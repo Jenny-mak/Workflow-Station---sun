@@ -7,7 +7,7 @@
       <h2>{{ t('home.byNeedTitle') }}</h2>
       <p class="help-portal-hint">{{ t('home.byNeedIntro') }}</p>
       <ul class="help-cards">
-        <li v-for="guide in GUIDELINES" :key="guide.id">
+        <li v-for="guide in listedGuides" :key="guide.id">
           <router-link
             class="help-card"
             :to="guide.path"
@@ -45,6 +45,8 @@ import { useI18n } from 'vue-i18n'
 import { GUIDELINES, NAV_TREE, navLeavesWithArticles, type NavGroup } from '@/guidelines'
 
 const { t } = useI18n()
+
+const listedGuides = GUIDELINES.filter((guide) => !guide.omitFromHome)
 
 const portals = NAV_TREE.filter((n): n is NavGroup => n.kind === 'group').map((group) => ({
   id: group.id,

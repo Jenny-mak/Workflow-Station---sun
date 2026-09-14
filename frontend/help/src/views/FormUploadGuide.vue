@@ -23,6 +23,7 @@ const flowKeys = [
 ]
 
 const related: GuideRelated[] = [
+  { to: '/form-ctl-upload', titleKey: 'nav.formCtlUpload' },
   { to: '/email-send#send-task', titleKey: 'guides.emailSend.title' },
 ]
 

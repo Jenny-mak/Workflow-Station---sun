@@ -20,18 +20,21 @@
             <span class="crumb-current">{{ crumbTitle }}</span>
           </template>
         </nav>
-        <div class="help-langs">
-          <select
-            class="help-lang-select"
-            data-testid="help-locale-select"
-            :aria-label="t('app.langAria')"
-            :value="locale"
-            @change="onLocaleChange"
-          >
-            <option v-for="opt in locales" :key="opt.id" :value="opt.id">
-              {{ t(opt.labelKey) }}
-            </option>
-          </select>
+        <div class="help-header-tools">
+          <HelpSearch />
+          <div class="help-langs">
+            <select
+              class="help-lang-select"
+              data-testid="help-locale-select"
+              :aria-label="t('app.langAria')"
+              :value="locale"
+              @change="onLocaleChange"
+            >
+              <option v-for="opt in locales" :key="opt.id" :value="opt.id">
+                {{ t(opt.labelKey) }}
+              </option>
+            </select>
+          </div>
         </div>
       </header>
       <main class="help-main">
@@ -46,6 +49,7 @@ import { computed, reactive, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import HelpNav from '@/components/HelpNav.vue'
+import HelpSearch from '@/components/HelpSearch.vue'
 import { GUIDELINES, NAV_TREE, navGroupIdsForArticle } from '@/guidelines'
 import { isHelpLocale, persistLocale, type HelpLocale } from '@/i18n'
 

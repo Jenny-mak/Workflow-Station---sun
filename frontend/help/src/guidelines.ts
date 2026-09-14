@@ -1,4 +1,6 @@
 ﻿import type { Component } from 'vue'
+import { BASIC_FORM_CONTROLS } from '@/formCtlBasic'
+import { EXTEND_FORM_CONTROLS } from '@/formCtlExtend'
 
 export interface Guideline {
   id: string
@@ -6,6 +8,8 @@ export interface Guideline {
   titleKey: string
   summaryKey: string
   load: () => Promise<{ default: Component }>
+  /** Skip the home “by job” grid (per-control articles). */
+  omitFromHome?: boolean
 }
 
 export interface NavLeaf {
@@ -39,6 +43,20 @@ export const GUIDELINES: Guideline[] = [
     titleKey: 'guides.computedFields.title',
     summaryKey: 'guides.computedFields.summary',
     load: () => import('@/views/ComputedFieldGuide.vue'),
+  },
+  {
+    id: 'table-design',
+    path: '/table-design',
+    titleKey: 'guides.tableDesign.title',
+    summaryKey: 'guides.tableDesign.summary',
+    load: () => import('@/views/TableDesignGuide.vue'),
+  },
+  {
+    id: 'view-design',
+    path: '/view-design',
+    titleKey: 'guides.viewDesign.title',
+    summaryKey: 'guides.viewDesign.summary',
+    load: () => import('@/views/ViewDesignGuide.vue'),
   },
   {
     id: 'email-send',
@@ -87,6 +105,7 @@ export const GUIDELINES: Guideline[] = [
     path: '/form-events-basic',
     titleKey: 'guides.formEventsBasic.title',
     summaryKey: 'guides.formEventsBasic.summary',
+    omitFromHome: true,
     load: () => import('@/views/FormEventsBasicGuide.vue'),
   },
   {
@@ -94,6 +113,7 @@ export const GUIDELINES: Guideline[] = [
     path: '/form-events-extend',
     titleKey: 'guides.formEventsExtend.title',
     summaryKey: 'guides.formEventsExtend.summary',
+    omitFromHome: true,
     load: () => import('@/views/FormEventsExtendGuide.vue'),
   },
   {
@@ -101,8 +121,25 @@ export const GUIDELINES: Guideline[] = [
     path: '/form-events-layout',
     titleKey: 'guides.formEventsLayout.title',
     summaryKey: 'guides.formEventsLayout.summary',
+    omitFromHome: true,
     load: () => import('@/views/FormEventsLayoutGuide.vue'),
   },
+  ...BASIC_FORM_CONTROLS.map((ctl) => ({
+    id: ctl.path.slice(1),
+    path: ctl.path,
+    titleKey: ctl.navTitleKey,
+    summaryKey: `formCtl.${ctl.id}.summary`,
+    omitFromHome: true,
+    load: () => import('@/views/FormCtlGuide.vue'),
+  })),
+  ...EXTEND_FORM_CONTROLS.map((ctl) => ({
+    id: ctl.path.slice(1),
+    path: ctl.path,
+    titleKey: ctl.navTitleKey,
+    summaryKey: `formCtl.${ctl.id}.summary`,
+    omitFromHome: true,
+    load: () => import('@/views/FormCtlGuide.vue'),
+  })),
 ]
 
 function formControlLeaf(id: string, titleKey: string, to: string): NavLeaf {
@@ -126,27 +163,20 @@ const FORM_DESIGN_NAV: NavGroup = {
           id: 'dw-form-basic',
           titleKey: 'nav.formMenuBasic',
           children: [
-            formControlLeaf('dw-form-ctl-input', 'nav.formCtlInput', '/form-events-basic#input'),
-            formControlLeaf('dw-form-ctl-textarea', 'nav.formCtlTextarea', '/form-events-basic#textarea'),
-            formControlLeaf('dw-form-ctl-password', 'nav.formCtlPassword', '/form-events-basic#password'),
-            formControlLeaf('dw-form-ctl-inputNumber', 'nav.formCtlInputNumber', '/form-events-basic#inputNumber'),
-            formControlLeaf('dw-form-ctl-radio', 'nav.formCtlRadio', '/form-events-basic#radio'),
-            formControlLeaf('dw-form-ctl-checkbox', 'nav.formCtlCheckbox', '/form-events-basic#checkbox'),
-            formControlLeaf('dw-form-ctl-select', 'nav.formCtlSelect', '/form-events-basic#select'),
-            formControlLeaf('dw-form-ctl-switch', 'nav.formCtlSwitch', '/form-events-basic#switch'),
-            formControlLeaf('dw-form-ctl-slider', 'nav.formCtlSlider', '/form-events-basic#slider'),
-            formControlLeaf('dw-form-ctl-rate', 'nav.formCtlRate', '/form-events-basic#rate'),
-            formControlLeaf('dw-form-ctl-date', 'nav.formCtlDate', '/form-events-basic#datePicker'),
-            formControlLeaf('dw-form-ctl-dateRange', 'nav.formCtlDateRange', '/form-events-basic#dateRange'),
-            formControlLeaf('dw-form-ctl-time', 'nav.formCtlTime', '/form-events-basic#timePicker'),
-            formControlLeaf('dw-form-ctl-timeRange', 'nav.formCtlTimeRange', '/form-events-basic#timeRange'),
-            formControlLeaf('dw-form-ctl-cascader', 'nav.formCtlCascader', '/form-events-basic#cascader'),
-            formControlLeaf('dw-form-ctl-color', 'nav.formCtlColorPicker', '/form-events-basic#colorPicker'),
-            formControlLeaf('dw-form-ctl-upload', 'nav.formCtlUpload', '/form-events-basic#upload'),
-            formControlLeaf('dw-form-ctl-tree', 'nav.formCtlTree', '/form-events-basic#tree'),
-            formControlLeaf('dw-form-ctl-treeSelect', 'nav.formCtlTreeSelect', '/form-events-basic#elTreeSelect'),
-            formControlLeaf('dw-form-ctl-transfer', 'nav.formCtlTransfer', '/form-events-basic#transfer'),
-            formControlLeaf('dw-form-ctl-editor', 'nav.formCtlEditor', '/form-events-basic#editor'),
+            {
+              kind: 'leaf',
+              id: 'dw-form-basic-index',
+              titleKey: 'guides.formEventsBasic.title',
+              to: '/form-events-basic',
+              omitFromHome: true,
+            },
+            ...BASIC_FORM_CONTROLS.map((ctl) =>
+              formControlLeaf(
+                ctl.id === 'colorPicker' ? 'dw-form-ctl-color' : `dw-form-ctl-${ctl.id}`,
+                ctl.navTitleKey,
+                ctl.path,
+              ),
+            ),
           ],
         },
         {
@@ -154,10 +184,10 @@ const FORM_DESIGN_NAV: NavGroup = {
           id: 'dw-form-extend',
           titleKey: 'nav.formMenuExtend',
           children: [
-            formControlLeaf('dw-form-ctl-subTable', 'nav.formCtlSubTable', '/form-events-extend#subTable'),
+            formControlLeaf('dw-form-ctl-subTable', 'nav.formCtlSubTable', '/form-ctl-sub-table'),
             formControlLeaf('dw-form-ctl-inline', 'nav.formCtlInlineForm', '/form-events-extend#inlineSubForm'),
             formControlLeaf('dw-form-ctl-linkForm', 'nav.formCtlLinkForm', '/form-events-extend#linkForm'),
-            formControlLeaf('dw-form-ctl-lookup', 'nav.formCtlLookup', '/form-events-extend#lookup'),
+            formControlLeaf('dw-form-ctl-lookup', 'nav.formCtlLookup', '/form-ctl-lookup'),
             formControlLeaf('dw-form-ctl-owner', 'nav.formCtlOwner', '/form-events-extend#owner'),
             formControlLeaf('dw-form-ctl-recordNote', 'nav.formCtlRecordNote', '/form-events-extend#recordNote'),
           ],
@@ -222,13 +252,26 @@ export const NAV_TREE: NavNode[] = [
         children: [
           { kind: 'leaf', id: 'dw-process', titleKey: 'nav.processDesign' },
           {
-            kind: 'leaf',
-            id: 'dw-tables',
+            kind: 'group',
+            id: 'dw-tables-group',
             titleKey: 'nav.tableDesign',
-            to: '/computed-fields',
+            children: [
+              {
+                kind: 'leaf',
+                id: 'dw-tables',
+                titleKey: 'guides.tableDesign.title',
+                to: '/table-design',
+              },
+              {
+                kind: 'leaf',
+                id: 'dw-computed',
+                titleKey: 'guides.computedFields.title',
+                to: '/computed-fields',
+              },
+            ],
           },
           FORM_DESIGN_NAV,
-          { kind: 'leaf', id: 'dw-view', titleKey: 'nav.viewDesign' },
+          { kind: 'leaf', id: 'dw-view', titleKey: 'nav.viewDesign', to: '/view-design' },
           { kind: 'leaf', id: 'dw-action', titleKey: 'nav.actionDesign' },
           { kind: 'leaf', id: 'dw-fu-automation', titleKey: 'nav.fuAutomation' },
           {
@@ -413,6 +456,7 @@ export function navGroupIdsForArticle(
 /** Screenshot paths under /help/guides — keep in sync with public/llms.txt ## Figures */
 export const HELP_GUIDE_FIGURE_PATHS: readonly string[] = [
   '/help/guides/dw-table-design.png',
+  '/help/guides/dw-view-design.png',
   '/help/guides/dw-connections.png',
   '/help/guides/dw-connections-inbound.png',
   '/help/guides/dw-email-templates.png',
@@ -428,4 +472,7 @@ export const HELP_GUIDE_FIGURE_PATHS: readonly string[] = [
   '/help/guides/dw-form-events-preview-notify.png',
   '/help/guides/dw-form-events-preview-errors.png',
   '/help/guides/dw-form-events-preview-disabled.png',
+  '/help/guides/dw-form-ctl-basic-palette.png',
+  ...BASIC_FORM_CONTROLS.filter((ctl) => ctl.figure).map((ctl) => `/help/${ctl.figure}`),
+  ...EXTEND_FORM_CONTROLS.filter((ctl) => ctl.figure).map((ctl) => `/help/${ctl.figure}`),
 ] as const

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import MainTableViewFilterEditor from './MainTableViewFilterEditor.vue'
+import DesignerHelpLink from '@/components/designer/DesignerHelpLink.vue'
 import type { MainTableViewDefinition } from '@/api/mainTableView'
 import { useMainTableViewDesigner } from '@/composables/mainTableView/useMainTableViewDesigner'
 
@@ -641,7 +642,14 @@ const {
 
         <div class="properties-section access-control-section">
 
-          <label class="section-label">{{ t('mainTableView.accessControl') }}</label>
+          <div class="section-label-row">
+            <label class="section-label">{{ t('mainTableView.accessControl') }}</label>
+            <DesignerHelpLink
+              path="/view-design#access"
+              :aria-label="t('mainTableView.guideLinkAria')"
+              test-id="view-access-guide-link"
+            />
+          </div>
 
           <p class="access-hint">{{ t('mainTableView.accessControlHint') }}</p>
 

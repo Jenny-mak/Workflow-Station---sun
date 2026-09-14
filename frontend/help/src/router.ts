@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { BASIC_HASH_REDIRECTS } from './formCtlBasic'
+import { EXTEND_HASH_REDIRECTS } from './formCtlExtend'
 import { GUIDELINES } from './guidelines'
 import i18n from './i18n'
 
@@ -32,6 +34,18 @@ router.afterEach((to) => {
   const key = typeof to.meta.titleKey === 'string' ? to.meta.titleKey : 'app.name'
   const title = i18n.global.t(key)
   document.title = `${title} · ${i18n.global.t('app.name')}`
+})
+
+router.beforeEach((to) => {
+  const hash = to.hash.replace(/^#/, '')
+  if (to.path === '/form-events-basic') {
+    const dest = hash ? BASIC_HASH_REDIRECTS[hash] : undefined
+    if (dest) return dest
+  }
+  if (to.path === '/form-events-extend') {
+    const dest = hash ? EXTEND_HASH_REDIRECTS[hash] : undefined
+    if (dest) return dest
+  }
 })
 
 export default router

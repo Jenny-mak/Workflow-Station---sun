@@ -12,7 +12,7 @@ sync. Canonical human site remains `/help/`. Do not add a second docs tree.
 |------|------|
 | `frontend/help/src/guidelines.ts` | Catalog + `NAV_TREE` (mirrors DW / Admin / Portal menus) |
 | `frontend/help/src/views/*Guide.vue` | Article (use `GuideArticle.vue`) |
-| `frontend/help/src/components/GuideArticle.vue` | Layout: intro, flow, jump nav, how-to blocks (`intentKey`…), figures, block samples, fail list, related |
+| `frontend/help/src/components/GuideLinkedText.vue` | Inline `[[/path]]` wiki tokens in locale strings → `router-link` |
 | `frontend/help/public/guides/` | UI screenshots referenced by `figure.src` |
 | `frontend/help/public/llms.txt` | LLM index of this portal (keep in sync with `GUIDELINES`) |
 | `frontend/help/public/llms-full.txt` | Compact English bundle of help articles (not the whole repo) |
@@ -32,7 +32,8 @@ Redact in `redact-help-guide-pii.mjs`.
 
 Each article should let a reader answer without opening source:
 
-1. **Overview** — what this job is, what it is not
+1. **Overview** — what this job / control **is** (appearance, stored value,
+   nearest sibling). Palette `whatBody` must not open with drag-from-Basic.
 2. **Order of work** — `flow-keys` (visible steps)
 3. **How-to** — real screenshots from the demo Function Unit. Script **effect**
    methods use `intentKey` / `beforeKey` / `afterKey` / `noteKey` on
@@ -145,12 +146,16 @@ first-person feelings, no rhetorical questions, no padded word count.
 | Lecture wrap | 总的来说；值得注意的是；由此可见；不难看出；基于以上 | It’s worth noting; As we can see; Based on the above |
 | Fake Q&A | 你觉得呢？你有没有类似经历？你现在卡在哪一步？ | What do you think?; Have you ever…?; Sound familiar? |
 | Inflated open | 这次只看；这个问题很简单：；随着…的发展 | In today’s fast-paced…; Whether you’re a beginner or… |
+| Palette opener | 从 Basic 拖入 X。填 Options | Drag X from Basic. Fill Options |
 | Closing filler | 希望这能帮到你；如有疑问欢迎… | Hope this helps; Don’t hesitate to reach out |
 
 Designer **order of work** is allowed as `flow-keys` (Step 1 on the real screen).
 Do not repeat those steps again as 首先/其次 in the intro.
 
 ### Rewrite examples (help voice)
+
+Bad: 从 Basic 拖入 Radio。填 Options（label/value）。value 是选中项的值。
+Good: 选项全部摊在表单上，一次只能选一项。Field 存 Options 的 value 键。
 
 Bad: 真正重要的不是把公式写得很长，而是先勾选 Computed，再打开 Formula。
 Good: Tick **Computed**, open **Formula**, then save the table.

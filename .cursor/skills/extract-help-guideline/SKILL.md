@@ -58,8 +58,13 @@ User names a topic (View 访问、计算字段、邮件模板、某个 Basic 控
   gets its **own** `GUIDELINES` path. The page title matches the leaf. Hash is
   only a section inside that same job (see Subpages). Group dumps with
   `#checkbox` while the title stays “Basic 控件 — 事件” are a defect.
-- Cross-link related guidelines with `router-link` (Send email ↔ Email Monitor ↔
-  Computed fields). Do not duplicate the other article.
+- Cross-link related guidelines with `router-link` in the Related footer **and**
+  with inline wiki tokens `[[/path]]` or `[[/path#hash]]` whenever body copy
+  names another article (for example 「怎么写事件」, Input, Owner, Advanced
+  Upload). `GuideLinkedText` turns those into links. Do not leave a quoted
+  article title as plain text. Never put `[[…]]` in titles, crumbs, or home-card
+  summaries (`HelpHome` is not linked-text).
+- Do not duplicate the other article.
 - Use a **flow** (`GuideArticle` `flow-keys`) for multi-step designer jobs.
   Prefer that over a decorative paragraph. Mermaid in i18n is optional; the
   rendered flow list is the human diagram.
@@ -260,7 +265,15 @@ Old hashes (`/form-events-basic#checkbox`) must **redirect** to the new path whe
 
 One palette type = one designer job. Layers:
 
-1. **Overview** — what this control is; how it differs from the nearest sibling (Checkbox vs Radio / Select).
+1. **Overview** (`whatTitle` / `whatBody`) — the reader who has never used this
+   control must learn, in ≤ 4 sentences: what it **looks like** on the form and
+   how the person interacts; what the **Field stores** (string / number / one
+   key / array / `[start,end]` / HTML); the **nearest sibling** with
+   `[[/form-ctl-…]]`; the **demo field** once (Purchase Request / help_pr) when
+   the article uses one. **Forbidden in `whatBody`:** opening with
+   “Drag X from Basic/Extend” / “从 Basic 拖入” / “從 Extend 拖入” (that is
+   `flow-keys`); “Fill Options. value is the selected option.” with no
+   appearance; repeating `howBody`.
 2. **Order of work** — `flow-keys`: drag from that palette group → bind field → fill this type’s properties → save → Preview.
 3. **How-to** — ticks / types / saves on **this** control.
 4. **Field catalog** — every label on **this** control’s properties panel (read the panel; do not guess).
@@ -278,6 +291,7 @@ flatten Intent / Before / After into one `bodyKey` paragraph.
 | Gate | Rule |
 |---|---|
 | Intro | ≤ 3 sentences; no “how to read this page” tutorial |
+| Control overview | `whatBody` = appearance + stored value + nearest sibling. Never open with drag-from-palette. |
 | Script how-to | One compact card: `intentKey` lead sentence + `beforeKey` / `afterKey` / optional `noteKey`. Labels are **Purpose** (in lead), **Default**, **After you run the sample**, **Note** — never writer taxonomy (“If you want”, “Before the script”, “What does not change”) |
 | After | `afterKey` states the **visible** result once; sample `hintKey` must not repeat it |
 | Demo fields | In prose, name the **control type + label** (e.g. “Scenario dropdown”, not bare “Scenario is A”). Define demo fields once in `whatBody` (Purchase Request / help_pr). Code samples may keep field names (`scenario`) |

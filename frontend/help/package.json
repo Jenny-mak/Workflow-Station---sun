@@ -12,6 +12,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
+    "test": "node --experimental-strip-types --test src/utils/helpCodeSnippet.test.ts src/utils/helpInlineLink.test.ts src/formCtlShapeSample.test.ts src/formCtlWhatBody.test.ts src/utils/helpSearch.test.ts",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts",
     "lint:fix": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix"
   },

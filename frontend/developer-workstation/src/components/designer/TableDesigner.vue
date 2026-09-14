@@ -28,6 +28,11 @@
       >
         {{ t('table.importTemplate') }}
       </el-button>
+      <DesignerHelpLink
+        path="/table-design"
+        :aria-label="t('table.guideLinkAria')"
+        test-id="table-design-guide-link"
+      />
       <input
         ref="fileInputRef"
         type="file"
@@ -741,6 +746,7 @@ import { useTableTemplate } from '@/composables/tableDesigner/useTableTemplate'
 import { useTableTools } from '@/composables/tableDesigner/useTableTools'
 import { isTableAuditField } from '@/utils/tableAuditFields'
 import DesignerListTable from '@/components/designer-list/DesignerListTable.vue'
+import DesignerHelpLink from '@/components/designer/DesignerHelpLink.vue'
 import type { DesignerListTableColumn } from '@/composables/useDesignerListGrid'
 
 interface TableRelation {

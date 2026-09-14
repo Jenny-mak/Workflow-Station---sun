@@ -366,6 +366,7 @@ export default {
   },
   table: {
     title: '表設計器',
+    guideLinkAria: '開啟表設計指南',
     tableName: '表名',
     tableDisplayName: '表顯示名稱',
     tableType: '表類型',
@@ -559,6 +560,7 @@ export default {
     addSelectedColumns: '添加所選',
     fieldCatalog: '欄位目錄',
     tableColumns: '表欄',
+    selectAllColumns: '全選欄',
     lookupColumns: 'Lookup 欄',
     selectAllLookupColumns: '全選 Lookup 欄位',
     lookupDerivedField: 'Lookup',
@@ -607,6 +609,7 @@ export default {
     enableExport: '顯示匯出按鈕',
     enableImport: '顯示匯入按鈕',
     accessControl: '存取控制',
+    guideLinkAria: '開啟檢視存取指南',
     accessControlHint: 'BU 與 Role 均未配置時，僅 System Administrator 可見該 View；若配置存取控制，須同時選擇 BU 與 Role（成對必填），且使用者須同時符合已選 BU 與 Role。System Administrator 始終可見全部 View 與全部資料。',
     businessUnits: 'Business Units',
     businessUnitsPlaceholder: '選擇可見該 View 的 BU',
@@ -875,6 +878,7 @@ export default {
     uploadMaxFileSize: '單檔大小上限（MB）',
     uploadMaxFileSizeHint: '預設 10MB。可設 1–50。50MB 是平台硬上限。',
     uploadGuideLinkAria: '開啟上傳欄位說明',
+    controlGuideLinkAria: '開啟目前控制項的使用指南',
     fileNet: {
       panelTitle: 'FileNet',
       advance: 'Advance',

@@ -2,11 +2,11 @@
   <article class="help-guide" :class="{ 'help-guide--wide': wide }" :data-testid="testId">
     <p v-if="crumbKey" class="help-crumb">{{ t(crumbKey) }}</p>
     <h1>{{ t(pageTitleKey) }}</h1>
-    <p class="help-intro">{{ t(introKey) }}</p>
+    <p class="help-intro"><GuideLinkedText :text-key="introKey" /></p>
     <ol v-if="flowKeys?.length" class="help-flow" :aria-label="t(flowTitleKey)">
       <li v-for="(key, index) in flowKeys" :key="key">
         <span class="help-flow-n">{{ index + 1 }}</span>
-        <span>{{ t(key) }}</span>
+        <GuideLinkedText :text-key="key" />
       </li>
     </ol>
     <nav
@@ -26,37 +26,41 @@
         :class="{ 'help-section-body--split': section.figure && section.figureBeside }"
       >
         <div class="help-section-copy">
-          <p v-if="section.bodyKey">{{ t(section.bodyKey) }}</p>
-          <p v-for="key in section.bodyKeys" :key="key" class="help-body-more">{{ t(key) }}</p>
+          <p v-if="section.bodyKey"><GuideLinkedText :text-key="section.bodyKey" /></p>
+          <p v-for="key in section.bodyKeys" :key="key" class="help-body-more">
+            <GuideLinkedText :text-key="key" />
+          </p>
           <div v-if="section.intentKey" class="help-howto-card">
-            <p class="help-howto-purpose">{{ t(section.intentKey) }}</p>
+            <p class="help-howto-purpose"><GuideLinkedText :text-key="section.intentKey" /></p>
             <ul class="help-howto-facts">
               <li v-if="section.beforeKey">
                 <strong>{{ t('app.howToDefault') }}</strong>
-                {{ t(section.beforeKey) }}
+                <GuideLinkedText :text-key="section.beforeKey" />
               </li>
               <li v-if="section.afterKey">
                 <strong>{{ t('app.howToResult') }}</strong>
-                {{ t(section.afterKey) }}
+                <GuideLinkedText :text-key="section.afterKey" />
               </li>
               <li v-if="section.noteKey">
                 <strong>{{ t('app.howToNote') }}</strong>
-                {{ t(section.noteKey) }}
+                <GuideLinkedText :text-key="section.noteKey" />
               </li>
             </ul>
           </div>
           <ul v-if="section.failKeys?.length" class="help-fail">
-            <li v-for="key in section.failKeys" :key="key">{{ t(key) }}</li>
+            <li v-for="key in section.failKeys" :key="key">
+              <GuideLinkedText :text-key="key" />
+            </li>
           </ul>
           <ul
             v-if="section.samples?.length && samplesWithCopy(section)"
             :class="sampleListClass(section)"
           >
-            <li v-for="sample in section.samples" :key="sample.code">
-              <pre v-if="section.sampleLayout === 'block'"><code>{{ sample.code }}</code></pre>
-              <code v-else>{{ sample.code }}</code>
-              <span class="help-sample-hint">{{ t(sample.hintKey) }}</span>
-            </li>
+            <GuideSampleItem
+              v-for="sample in section.samples"
+              :key="`${sample.hintKey}:${sample.code}`"
+              :sample="sample"
+            />
           </ul>
         </div>
         <figure v-if="section.figure" class="help-figure">
@@ -70,11 +74,11 @@
           v-if="section.samples?.length && !samplesWithCopy(section)"
           :class="sampleListClass(section)"
         >
-          <li v-for="sample in section.samples" :key="sample.code">
-            <pre v-if="section.sampleLayout === 'block'"><code>{{ sample.code }}</code></pre>
-            <code v-else>{{ sample.code }}</code>
-            <span class="help-sample-hint">{{ t(sample.hintKey) }}</span>
-          </li>
+          <GuideSampleItem
+            v-for="sample in section.samples"
+            :key="`${sample.hintKey}:${sample.code}`"
+            :sample="sample"
+          />
         </ul>
       </div>
     </section>
@@ -92,10 +96,19 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
+import GuideSampleItem from '@/components/GuideSampleItem.vue'
+import GuideLinkedText from '@/components/GuideLinkedText.vue'
+import {
+  resolveHelpCodeKind,
+  type HelpCodeKind,
+  type HelpCodeLang,
+} from '@/utils/helpCodeSnippet'
 
 export interface GuideSample {
   code: string
   hintKey: string
+  kind?: HelpCodeKind
+  lang?: HelpCodeLang
 }
 
 export interface GuideFigure {
@@ -153,7 +166,7 @@ withDefaults(
 const { t } = useI18n()
 
 /** Bump when replacing `public/guides/*.png` so browsers do not keep the old file. */
-const GUIDE_FIGURE_REV = '20260908-1'
+const GUIDE_FIGURE_REV = '20260911-4'
 
 function assetUrl(src: string): string {
   const base = import.meta.env.BASE_URL
@@ -165,6 +178,12 @@ function samplesWithCopy(section: GuideSection): boolean {
 }
 
 function sampleListClass(section: GuideSection): string {
-  return section.sampleLayout === 'block' ? 'help-samples help-samples--block' : 'help-samples'
+  const hasSnippet = section.samples?.some(
+    (sample) => resolveHelpCodeKind(sample.code, sample.kind) === 'snippet',
+  )
+  if (section.sampleLayout === 'block' || hasSnippet) {
+    return 'help-samples help-samples--block'
+  }
+  return 'help-samples'
 }
 </script>

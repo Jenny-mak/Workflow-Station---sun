@@ -8,14 +8,39 @@ Do not invent UI labels. Ground answers in these articles and the screenshots un
 ## Index by job
 
 - /help/computed-fields — Computed field formulas (Table Design; Admin Relation Tables #relation)
+- /help/table-design — Tables, fields, PK and FK (Function Unit Table Design; formulas stay on /help/computed-fields)
+- /help/view-design — View Design lists and Access control (Business Units + Roles; empty = System Administrator only; #access)
 - /help/email-send — Send email (Connections #connection, Email Templates #template, Send Task #send-task; field catalog for every control)
 - /help/email-monitor — Email Monitor (inbound connection, monitor template, extraction wizard, attachments → FILE #extract-attachments, original email .eml → FILE #extract-raw-eml, Start Event #start-event; field catalog for every control)
 - /help/up-tasks-to-claim — To Do: claim pool on the same list; Claim all; selection-bar Claim/Unclaim; Unclaim all (own holds); auto-claim on open (default off); Leader / Approver / SYS_ADMIN force unclaim and reassign
 - /help/task-delegate — Delegate a task (User Portal To Do; specified user lookup or BU+Role; does not change Current Assignee)
-- /help/form-upload — Form Design Advanced Upload in Extend (Multi switch defaults to Single / one file URL; turn on Multi to set Max files, default 10; Max file size default 10MB, platform cap 50MB; Can not download hides Callback URL in the details drawer; Advance stores FileNet mapping; runtime cards inside the drop zone open a details drawer; list cells show firstName +N). Basic Upload stays stock. Bind the widget Field to a Table Design FILE column (Import Table Fields, or type the column name). Dragging from Extend does not add a table column. Each scene is its own canvas: on My Request / Assign Task use Add Advanced Upload from New Request so the same Field is reused, then Save.
-- /help/form-events — How to write events (control Edit + Form event: parameters, values, required, lock, show/hide, options, errors, banners, lookup filter, focus, labels, hooks, user)
-- /help/form-events-basic — Basic palette control events (Input, Select, Date, Upload, …)
-- /help/form-events-extend — Extend and MI control events (Sub-Table, Lookup, Assignment Mode, …)
+- /help/form-upload — Form Design Advanced Upload in Extend (Multi switch defaults to Single / one file URL; turn on Multi to set Max files, default 10; Max file size default 10MB, platform cap 50MB; Can not download hides Callback URL in the details drawer; Advance stores FileNet mapping; runtime cards inside the drop zone open a details drawer; list cells show firstName +N). Basic Upload stays stock (/help/form-ctl-upload). Bind the widget Field to a Table Design FILE column (Import Table Fields, or type the column name). Dragging from Extend does not add a table column. Each scene is its own canvas: on My Request / Assign Task use Add Advanced Upload from New Request so the same Field is reused, then Save.
+- /help/form-events — How to write events (when each Create event runs; control Edit + Form event: parameters, values, required, lock, show/hide, options, errors, banners, lookup filter, focus, labels, hooks, user). setValue argument shape is on each control’s Events; #set-shapes is an index.
+- /help/form-events-basic — Basic palette index (each control is its own article)
+- /help/form-ctl-input — Input (Field, Type, Sensitive Mask; Title on help_pr)
+- /help/form-ctl-textarea — Textarea (Rows, autosize, word count)
+- /help/form-ctl-password — Password (masked text; do not copy the value)
+- /help/form-ctl-input-number — InputNumber (min, max, precision, step; quantity)
+- /help/form-ctl-radio — Radio (all options visible; pick exactly one; stores value key)
+- /help/form-ctl-checkbox — Checkbox (zero or more; Options)
+- /help/form-ctl-select — Select (dropdown; Default Value; Scenario on help_pr)
+- /help/form-ctl-switch — Switch (active/inactive value)
+- /help/form-ctl-slider — Slider (Hermes Min, Max, Step)
+- /help/form-ctl-rate — Rate (stars)
+- /help/form-ctl-date — Date (Start date vs Need-by)
+- /help/form-ctl-date-range — DateRange
+- /help/form-ctl-time — Time
+- /help/form-ctl-time-range — TimeRange
+- /help/form-ctl-cascader — Cascader (Hermes Placeholder)
+- /help/form-ctl-color-picker — ColorPicker
+- /help/form-ctl-upload — Upload (stock Basic; Advanced Upload is /help/form-upload)
+- /help/form-ctl-tree — Tree
+- /help/form-ctl-tree-select — TreeSelect
+- /help/form-ctl-transfer — Transfer (Hermes Left Title / Right Title)
+- /help/form-ctl-editor — Editor (Hermes Rows, Placeholder, Max Length)
+- /help/form-ctl-sub-table — Sub-Table (bound SUB grid; help_pr_line; Allow Add/Edit/Delete; List View)
+- /help/form-ctl-lookup — Lookup (Relation Table, Search / Display fields, Fixed Filters, cascade, Backfill; setLookupFilter)
+- /help/form-events-extend — Extend and MI event index (Inline Form, Link Form, Owner, Record Note, Assignment Mode). Sub-Table and Lookup have their own articles.
 - /help/form-events-layout — Layout and Auxiliary control events (click, Tabs extras)
 
 ## Figures
@@ -25,6 +50,7 @@ Main table: help_pr. Sub-table: help_pr_line.
 Emails in figures are redacted to user@example.com.
 
 - /help/guides/dw-table-design.png
+- /help/guides/dw-view-design.png
 - /help/guides/dw-connections.png
 - /help/guides/dw-connections-inbound.png
 - /help/guides/dw-email-templates.png
@@ -40,6 +66,29 @@ Emails in figures are redacted to user@example.com.
 - /help/guides/dw-form-events-preview-notify.png
 - /help/guides/dw-form-events-preview-errors.png
 - /help/guides/dw-form-events-preview-disabled.png
+- /help/guides/dw-form-ctl-basic-palette.png
+- /help/guides/dw-form-ctl-input-props.png
+- /help/guides/dw-form-ctl-textarea-props.png
+- /help/guides/dw-form-ctl-password-props.png
+- /help/guides/dw-form-ctl-input-number-props.png
+- /help/guides/dw-form-ctl-radio-props.png
+- /help/guides/dw-form-ctl-checkbox-props.png
+- /help/guides/dw-form-ctl-select-props.png
+- /help/guides/dw-form-ctl-switch-props.png
+- /help/guides/dw-form-ctl-slider-props.png
+- /help/guides/dw-form-ctl-rate-props.png
+- /help/guides/dw-form-ctl-date-props.png
+- /help/guides/dw-form-ctl-date-range-props.png
+- /help/guides/dw-form-ctl-time-props.png
+- /help/guides/dw-form-ctl-time-range-props.png
+- /help/guides/dw-form-ctl-cascader-props.png
+- /help/guides/dw-form-ctl-color-picker-props.png
+- /help/guides/dw-form-ctl-upload-props.png
+- /help/guides/dw-form-ctl-tree-props.png
+- /help/guides/dw-form-ctl-tree-select-props.png
+- /help/guides/dw-form-ctl-transfer-props.png
+- /help/guides/dw-form-ctl-editor-props.png
+- /help/guides/dw-form-ctl-sub-table-props.png
 
 ## Full bundle
 

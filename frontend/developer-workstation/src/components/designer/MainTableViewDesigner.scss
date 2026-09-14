@@ -514,6 +514,17 @@
   color: #333;
 }
 
+.section-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.section-label-row .section-label {
+  margin-bottom: 0;
+}
+
 
 
 .tag-list {

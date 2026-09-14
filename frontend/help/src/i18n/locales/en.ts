@@ -1,4 +1,7 @@
 import formEventMessages from './formEvents.en'
+import formCtlMessages from './formCtl.en'
+import tableDesignMessages from './tableDesign.en'
+import viewDesignMessages from './viewDesign.en'
 
 export default {
   app: {
@@ -16,6 +19,14 @@ export default {
     howToDefault: 'Default',
     howToResult: 'After you run the sample',
     howToNote: 'Note',
+    copy: 'Copy',
+    copied: 'Copied',
+    copyCodeAria: 'Copy code',
+    langJs: 'JavaScript',
+    langFormula: 'Formula',
+    searchAria: 'Search guidelines',
+    searchPlaceholder: 'Search articles',
+    searchEmpty: 'No matching article',
   },
   home: {
     title: 'Guidelines',
@@ -88,6 +99,7 @@ export default {
     formCtlTag: 'Tag',
     formCtlImage: 'Image',
     viewDesign: 'View Design',
+    noArticleYet: 'No article yet',
     actionDesign: 'Action Design',
     fuAutomation: 'Automation',
     connections: 'Connections',
@@ -140,6 +152,14 @@ export default {
       title: 'Computed field formulas',
       summary: 'How computed columns fill themselves, which functions exist, and what happens when a formula fails.',
     },
+    tableDesign: {
+      title: 'Tables, fields, PK and FK',
+      summary: 'Create tables and columns, pick a primary-key strategy, and set foreign keys.',
+    },
+    viewDesign: {
+      title: 'View Design',
+      summary: 'Portal list views: columns, then who can see them (Business Units and Roles).',
+    },
     emailSend: {
       title: 'Send email',
       summary:
@@ -165,15 +185,15 @@ export default {
     },
     formEvents: {
       title: 'Form events',
-      summary: 'How to write control scripts and Form event: parameters, values, required, lock, show/hide, options, errors, banners, lookup filter, focus, labels, hooks, and user.',
+      summary: 'How to write control scripts and Form event: when each Create event runs, parameters, values, required, lock, show/hide, options, errors, banners, lookup filter, focus, labels, hooks, and user.',
     },
     formEventsBasic: {
-      title: 'Basic controls — events',
-      summary: 'One change sample per Basic control; full api methods on How to write events.',
+      title: 'Basic',
+      summary: 'Palette group Basic. Each control has its own article: properties, one event sample, and what fails.',
     },
     formEventsExtend: {
-      title: 'Extend and MI — events',
-      summary: 'One sample per Extend / MI control; Lookup filter links to the events hub.',
+      title: 'Extend and MI',
+      summary: 'Palette group Extend and MI. Sub-Table and Lookup have their own articles; other controls keep one event sample here.',
     },
     formEventsLayout: {
       title: 'Layout and Auxiliary — events',
@@ -666,7 +686,7 @@ export default {
     pageTitle: 'Form Design — Advanced Upload',
     crumb: 'Developer Workstation · Function Units · Form Design · Extend',
     intro:
-      'Advanced Upload lives in the Extend palette. New fields default to Single: the form can upload one file, and the saved value is a URL that Activepieces File / send-email steps can use. Turn on Multi to set a file count (default 10 when you turn it on). Default Max file size is 10MB; the platform hard cap is 50MB per file. Saved JSON that still has Multiple off and Limit 1, and no Max files, was a generator default — those fields still accept up to 10 until you change the switch. The properties panel shows Multi, Max file size, Can not download, Readonly, and Advance (FileNet). Basic palette Upload is the stock form-create control and keeps its native properties.',
+      'Advanced Upload lives in the Extend palette. New fields default to Single: the form can upload one file, and the saved value is a URL that Activepieces File / send-email steps can use. Turn on Multi to set a file count (default 10 when you turn it on). Default Max file size is 10MB; the platform hard cap is 50MB per file. Saved JSON that still has Multiple off and Limit 1, and no Max files, was a generator default — those fields still accept up to 10 until you change the switch. The properties panel shows Multi, Max file size, Can not download, Readonly, and Advance (FileNet). [[/form-ctl-upload]] is the stock form-create control and keeps its native properties.',
     flowTitle: 'Order of work',
     flow1: 'In Table Design, add a FILE column. In Form Design, Import Table Fields (or set the Advanced Upload Field property to that column name)',
     flow2: 'Leave Multi off for one file, or turn it on and set Max files; set Max file size (default 10MB, up to 50MB)',
@@ -675,7 +695,7 @@ export default {
     flow5: 'Check Preview or User Portal on that same form',
     scenesTitle: 'Each scene is its own canvas',
     scenesBody:
-      'New Request, My Request, and To Do each have a separate form design. Portal only shows Advanced Upload where you placed it, and only if that widget’s Field is a Table Design FILE column (the same name as Basic Upload uses, e.g. fileupload). Create the FILE column in Table Design, then Import Table Fields or type that column name into the widget Field. Dragging from Extend does not add a table column. On My Request or Assign Task, Add Advanced Upload from New Request copies those Field names so files already uploaded on New Request appear. Save that form.',
+      'New Request, My Request, and To Do each have a separate form design. Portal only shows Advanced Upload where you placed it, and only if that widget’s Field is a Table Design FILE column (the same name as [[/form-ctl-upload]] uses, e.g. fileupload). Create the FILE column in Table Design, then Import Table Fields or type that column name into the widget Field. Dragging from Extend does not add a table column. On My Request or Assign Task, Add Advanced Upload from New Request copies those Field names so files already uploaded on New Request appear. Save that form.',
     scenesSample: 'Table Design FILE column name in the Advanced Upload Field property',
     maxTitle: 'Multi',
     maxBody:
@@ -698,4 +718,7 @@ export default {
       'Choosing more files than Max files shows Maximum {limit} files allowed. A file over Max file size is not added. Submit (or Save in a sub-table dialog) is blocked while any file is still uploading or queued, and while any file failed — wait until uploads finish, or remove/retry the failed file. If the session expired, the upload returns 401 and the form asks you to sign in again, then upload that file again. Zip files are not added to the in-form preview playlist. Each file still posts one at a time; a failed file does not remove the ones that already succeeded.',
   },
   ...formEventMessages,
+  ...formCtlMessages,
+  ...tableDesignMessages,
+  ...viewDesignMessages,
 }

@@ -49,6 +49,11 @@
           :title="t('form.clickToRename')"
           @click="startInlineRename(selectedForm)"
         >{{ selectedForm.formName }}</span>
+        <DesignerHelpLink
+          :path="selectedControlHelpPath"
+          :aria-label="t('form.controlGuideLinkAria')"
+          test-id="form-control-guide-link"
+        />
         <el-tag
           type="info"
           size="small"
@@ -915,6 +920,7 @@ import {
 } from '@/utils/formDesignerPreviewValidation'
 import { lookupStore } from './lookupStore'
 import { formControlTypeStore } from './formControlTypeStore'
+import { formCtlHelpPath } from '@/utils/formCtlHelpPath'
 import {
   PREVIEW_MY_REQUESTS_ACTIVE_KEY,
   PREVIEW_SUBTABLE_DIALOG_KEY,
@@ -967,6 +973,8 @@ import {
 } from '@/utils/miAssignmentConfig'
 
 const { t } = useI18n()
+
+const selectedControlHelpPath = computed(() => formCtlHelpPath(formControlTypeStore.activeRule))
 const props = defineProps<{ functionUnitId: number }>()
 const store = useFunctionUnitStore()
 

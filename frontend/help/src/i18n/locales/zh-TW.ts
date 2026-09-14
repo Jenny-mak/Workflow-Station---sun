@@ -1,4 +1,7 @@
 import formEventMessages from './formEvents.zh-TW'
+import formCtlMessages from './formCtl.zh-TW'
+import tableDesignMessages from './tableDesign.zh-TW'
+import viewDesignMessages from './viewDesign.zh-TW'
 
 export default {
   app: {
@@ -16,6 +19,14 @@ export default {
     howToDefault: '預設',
     howToResult: '執行後',
     howToNote: '注意',
+    copy: '複製',
+    copied: '已複製',
+    copyCodeAria: '複製程式碼',
+    langJs: 'JavaScript',
+    langFormula: '公式',
+    searchAria: '搜尋指南',
+    searchPlaceholder: '搜尋文章',
+    searchEmpty: '沒有符合的文章',
   },
   home: {
     title: '使用指南',
@@ -88,6 +99,7 @@ export default {
     formCtlTag: 'Tag',
     formCtlImage: 'Image',
     viewDesign: '視圖設計',
+    noArticleYet: '尚無文章',
     actionDesign: '動作設計',
     fuAutomation: '自動化',
     connections: '連線設定',
@@ -140,6 +152,14 @@ export default {
       title: '計算欄位公式',
       summary: '計算欄如何自動填值、可用函數，以及公式失敗時的處理方式。',
     },
+    tableDesign: {
+      title: '表、欄位、主鍵和外鍵',
+      summary: '建表和欄、選擇主鍵策略、設定外鍵。',
+    },
+    viewDesign: {
+      title: '檢視設計',
+      summary: '入口清單檢視：先選欄，再決定誰能看見（Business Units 和 Roles）。',
+    },
     emailSend: {
       title: '傳送郵件',
       summary: '出站連線、郵件範本與傳送任務：每個欄位的含義，以及傳送失敗時怎麼查。',
@@ -163,15 +183,15 @@ export default {
     },
     formEvents: {
       title: '表單事件',
-      summary: '怎麼寫控制項指令碼和 Form event：參數、讀寫值、必填、鎖定、顯示隱藏、選項、欄位提示、表單橫幅、Lookup 過濾、焦點、標籤、hooks，以及目前使用者。',
+      summary: '怎麼寫控制項指令碼和 Form event：每種 Create 事件何時觸發、參數、讀寫值、必填、鎖定、顯示隱藏、選項、欄位提示、表單橫幅、Lookup 過濾、焦點、標籤、hooks，以及目前使用者。',
     },
     formEventsBasic: {
-      title: 'Basic 控制項 — 事件',
-      summary: '每種 Basic 控制項一個 change 樣例；完整 api 方法見「怎麼寫事件」。',
+      title: 'Basic',
+      summary: '調色盤分組 Basic。每種控制項一篇：屬性、一條事件樣例、失敗時怎麼看。',
     },
     formEventsExtend: {
-      title: 'Extend 與 MI — 事件',
-      summary: '每種 Extend / MI 控制項一個樣例；Lookup 過濾鏈到事件總表。',
+      title: 'Extend 與 MI',
+      summary: '調色盤分組 Extend 和 MI。Sub-Table 和 Lookup 各有專文；其餘控制項仍在本頁各留一條事件樣例。',
     },
     formEventsLayout: {
       title: 'Layout 與 Auxiliary — 事件',
@@ -616,7 +636,7 @@ export default {
     pageTitle: '表單設計 — 進階上傳',
     crumb: '開發工作站 · 功能單元 · 表單設計 · Extend',
     intro:
-      '進階上傳在 Extend 調色盤。新建欄位預設單檔：表單上只能傳一個檔案，儲存值是 URL，方便 Activepieces 的 File / 發郵件步驟使用。打開「多檔」後才可設定數量（打開時預設 10）。預設單檔大小上限 10MB；平台硬上限 50MB。已儲存 JSON 裡若仍是「多選」關閉、「數量限制」為 1、且沒有最多檔案數，那是當年產生器寫死的值——在你改開關之前，它們同樣最多 10 個。屬性面板顯示「多檔」、「單檔大小上限」、禁止下載、Readonly，以及 Advance（FileNet）。Basic 裡的 Upload 是 form-create 原生控制項，屬性保持原樣。',
+      '進階上傳在 Extend 調色盤。新建欄位預設單檔：表單上只能傳一個檔案，儲存值是 URL，方便 Activepieces 的 File / 發郵件步驟使用。打開「多檔」後才可設定數量（打開時預設 10）。預設單檔大小上限 10MB；平台硬上限 50MB。已儲存 JSON 裡若仍是「多選」關閉、「數量限制」為 1、且沒有最多檔案數，那是當年產生器寫死的值——在你改開關之前，它們同樣最多 10 個。屬性面板顯示「多檔」、「單檔大小上限」、禁止下載、Readonly，以及 Advance（FileNet）。Basic 裡的 [[/form-ctl-upload]] 是 form-create 原生控制項，屬性保持原樣。',
     flowTitle: '操作順序',
     flow1: '先在 Table Design 新增 FILE 欄；再在表單設計用「匯入表欄位」，或把進階上傳的 Field 改成該欄名',
     flow2: '需要單檔就保持「多檔」關閉；需要多個檔案時打開開關並設定「最多檔案數」。再設定「單檔大小上限」（預設 10MB，最高 50MB）',
@@ -625,7 +645,7 @@ export default {
     flow5: '在該表單的預覽或使用者入口核對',
     scenesTitle: '每個場景是各自的畫布',
     scenesBody:
-      '發起、My Request、待辦各有一份表單設計。入口只渲染該畫布上放了的進階上傳，且元件的 Field 必須是 Table Design 裡的 FILE 欄名（和一般上傳一樣，例如 fileupload）。先在 Table Design 建 FILE 欄，再用匯入表欄位，或把元件 Field 改成該欄名。從 Extend 拖入不會往表裡加欄。在 My Request 或 Assign Task 上點「從發起表單新增進階上傳」，會複製這些 Field，發起時已上傳的檔案才能顯示。儲存該表單。',
+      '發起、My Request、待辦各有一份表單設計。入口只渲染該畫布上放了的進階上傳，且元件的 Field 必須是 Table Design 裡的 FILE 欄名（和 [[/form-ctl-upload]] 一樣，例如 fileupload）。先在 Table Design 建 FILE 欄，再用匯入表欄位，或把元件 Field 改成該欄名。從 Extend 拖入不會往表裡加欄。在 My Request 或 Assign Task 上點「從發起表單新增進階上傳」，會複製這些 Field，發起時已上傳的檔案才能顯示。儲存該表單。',
     scenesSample: '進階上傳 Field 屬性裡填寫 Table Design 的 FILE 欄名',
     maxTitle: '多檔',
     maxBody:
@@ -648,4 +668,7 @@ export default {
       '選的檔案超過「最多檔案數」會提示「最多允許 {limit} 個檔案」。超過「單檔大小上限」的檔案不會加入清單。提交（或子表對話框儲存）時，若仍有檔案在上傳/排隊，或有檔案失敗，都會被攔住——等上傳完成，或刪除/重試失敗檔案。工作階段過期時上傳返回 401，表單會提示重新登入後再上傳該檔案。zip 不會進入表單內預覽播放清單。每個檔案仍是單獨提交；失敗的那個不會清掉已經成功的檔案。',
   },
   ...formEventMessages,
+  ...formCtlMessages,
+  ...tableDesignMessages,
+  ...viewDesignMessages,
 }

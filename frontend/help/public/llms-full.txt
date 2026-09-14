@@ -21,6 +21,26 @@ Result type must match Data Type. Fail: block save shows #ERR; leave blank saves
 
 Admin Relation Tables are standalone: no MAIN/SUB lookup, no SUM related-row functions. See /help/computed-fields#relation.
 
+## Tables, fields, PK and FK (/help/table-design)
+
+Function Unit tab Table Design. Create MAIN / SUB / ACTION / RELATION tables. Field Name must start with a letter. Import Table Fields on Form Design reads these columns. Views need a Main Table first.
+
+Order: open Table Design → create or open a table → add fields → tick Primary Key and pick a strategy → tick Foreign Key and set Ref Table → save. On a MAIN table configure Request ID first.
+
+PK strategies: UUID, Manual, Auto increment, Prefixed sequence, Date + daily sequence, Date + monthly sequence, Custom format. Primary Key cannot stay nullable.
+
+Related: /help/computed-fields , /help/view-design
+
+## View Design (/help/view-design)
+
+Published list of one table. Access control decides who sees it in User Portal.
+
+Order: Main Table exists → open View Design → select or Create view / Generate default views → add columns → Name, Export, Detail form, Access control, Sort / Filter → save.
+
+Access (#access): empty Business Units and Roles → only System Administrator sees the view. If you configure access, pick at least one Business Unit and at least one Role. A user must match both. System Administrator always sees every view and every row. Only involved users see data (optional) still lets System Administrator see all rows.
+
+Related: /help/table-design , /help/form-ctl-lookup
+
 ## Send email (/help/email-send)
 
 Three pieces: Outbound connection, Email Template, Send Task. Subject and body live on the template, not the node.
@@ -107,7 +127,22 @@ Sidebar: Form Design → Controls → How to write events. Click a control name 
 
 Order: open Form Design → select a control (or open Form tab → Form event) → Edit → Create / pick a name → Save → Ok → save the form.
 
-The Edit dialog has Create on the left and the script editor on the right. Save writes the function you are editing. Ok keeps the list. Footer Cancel discards dialog edits.
+The Edit dialog has Create on the left and the script editor on the right. Grey text next to each function is when it runs. Save writes the function you are editing. Ok keeps the list. Footer Cancel discards dialog edits.
+
+When each Create event runs (/help/form-events#when):
+- change: Input/Textarea after blur or Enter if the text changed; Select/Radio/Checkbox/Date/Switch as soon as the chosen value changes
+- blur / focus: this control loses or gains focus
+- click: listed on layout, Auxiliary, and shells (Inline Form, Record Note, Assignment Mode)
+- hook_load: after this control’s rules are loaded (form first appears)
+- hook_mounted: after this control is on the page (later than hook_load)
+- hook_deleted: after this control’s rules are removed
+- hook_watch: after this control’s rules change (not the field value)
+- hook_value: after this control’s stored value changes (Input change still waits for blur/Enter)
+- hook_hidden: after show/hide (hidden / display)
+- hook_titleClick: field label click, not the control body
+- Custom: only a name this control actually emits
+
+Extra names (removeTag, calendarChange, …) are on that control’s page.
 
 Shared names in every control event: $inject, api (same as options), value, field, formData (same snapshot as data), user, option (often empty), rule/self (rarely needed), args (original payload). Always write user && before a property.
 
@@ -115,6 +150,7 @@ Each method on the human page is written as: if you want X, use this; before (de
 
 api (same methods on Form event via api / options):
 - getValue(field) / setValue(field, value) / setValue({ field: value, … }) / api.form (read snapshot; do not assign)
+- setValue second-argument shape lives on each control’s Events section (/help/form-ctl-input#events …). Hub index: /help/form-events#set-shapes. Sub-Table: /help/form-ctl-sub-table. Lookup: /help/form-ctl-lookup. Owner / Link Form: /help/form-events-extend. Advanced Upload: /help/form-upload. Clear text with ''; clear a list with [].
 - required(true|false, field) / requiredStatus(field)
 - disabled(true|false, field) / disabledStatus(field) — whole-form readonly and audit fields stay locked
 - hidden(true) removes from page (not submitted); hidden(false) puts back; hiddenStatus — also Card/Tabs/Collapse/Row
@@ -134,17 +170,17 @@ Form event names: onSubmit, onReset, onCreated, onMounted, onReload, onChange, b
 
 Form Preview has no Portal workspace: activeBusinessUnitName and activeRoleName stay empty until User Portal.
 
-Per-control events: /help/form-events-basic (Basic), /help/form-events-extend (Extend + MI), /help/form-events-layout (Layout + Auxiliary).
+Per-control events: /help/form-events-basic (Basic index), then /help/form-ctl-input and each Basic control; /help/form-ctl-sub-table and /help/form-ctl-lookup; /help/form-events-extend (remaining Extend + MI), /help/form-events-layout (Layout + Auxiliary).
 
 Related: /help/computed-fields
 
-## Basic control events (/help/form-events-basic)
+## Basic (/help/form-events-basic)
 
-Palette Basic. Field controls list their Create events plus blur and focus. Example: Select scenario change → api.required(value === 'A', ['start_date', 'end_date']) on help_pr / help_pr_line. Upload lists remove, preview, error, progress, exceed (not change). Hooks stay on /help/form-events#hooks.
+Palette group Basic. Each control is /help/form-ctl-<type> (Input, Textarea, Password, InputNumber, Radio, Checkbox, Select, Switch, Slider, Rate, Date, DateRange, Time, TimeRange, Cascader, ColorPicker, Upload, Tree, TreeSelect, Transfer, Editor). Old hashes /help/form-events-basic#input redirect to the control article. Field catalog is on that control’s page. One event sample per control; full api methods on /help/form-events. Control pages must say what the control looks like and what the Field stores — Radio shows every option and stores one value key; Checkbox stores a key array; Select hides options until opened.
 
 ## Extend and MI events (/help/form-events-extend)
 
-Extend: Sub-Table and Link Form keep change/blur/focus. Inline Form, Record Note have click only (no Field). Lookup and Owner have change/blur/focus. MI Assignment Mode: click on the container; put value scripts on child fields.
+Index for remaining Extend and MI shells. Sub-Table is /help/form-ctl-sub-table (bound SUB grid, help_pr_line, Allow Add/Edit/Delete). Lookup is /help/form-ctl-lookup (Relation Table, filters, cascade, Backfill; setLookupFilter then refresh). This page keeps one event sample for Inline Form, Link Form, Owner, Record Note, and Assignment Mode. Old hashes /help/form-events-extend#subTable and #lookup redirect to those articles.
 
 ## Layout and Auxiliary events (/help/form-events-layout)
 
