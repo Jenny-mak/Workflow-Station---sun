@@ -109,31 +109,41 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
     @Override
     public StudioChatResult chat(AiStudioChatRequest request, String amToken) {
         if (request.isPropose()) {
-            return propose(request, amToken);
+            // 同步形态只留给单测与直接调用；HTTP 入口走 prepare + 后台 run（见 AiStudioProposalJobService）
+            return runProposal(prepareProposal(request), amToken);
         }
         return new StudioChatResult(advisoryChat(request, amToken), null, null);
     }
 
     /**
-     * 改动提案：复用 AI Generate 的 GENERATION 管线（{@code callAiModel} 自带上下文序列化时的
-     * 提示词模板、schema 元数据、校验失败自动修复重试）。sessionId 用随机 UUID——
-     * Copilot 无会话持久化，管线只拿它查历史（查不到即空），对话上下文折进 message 文本。
+     * 提案第一步：校验阶段、序列化上下文（JPA 懒加载，必须在请求线程）、拼 scoped 消息。
      */
-    private StudioChatResult propose(AiStudioChatRequest request, String amToken) {
+    @Override
+    public ProposalDraft prepareProposal(AiStudioChatRequest request) {
         String scope = PROPOSAL_SCOPE_BY_PHASE.get(request.getPhase());
         if (scope == null) {
             throw new AiGenerationException("AI_STUDIO_PROPOSAL_UNSUPPORTED_PHASE",
                     "Phase " + request.getPhase() + " has no structured proposal scope; "
                             + "proposals are supported for: " + PROPOSAL_SCOPE_BY_PHASE.keySet());
         }
-
         FunctionUnitContextDTO context =
                 aiGenerationService.serializeFunctionUnitContext(request.getFunctionUnitId());
         AiMode mode = aiGenerationService.determineMode(request.getFunctionUnitId());
+        return new ProposalDraft(request.getFunctionUnitId(), request.getPhase(), scope,
+                buildProposalMessage(request, scope), context, mode);
+    }
 
+    /**
+     * 提案第二步：复用 AI Generate 的 GENERATION 管线（{@code callAiModel} 自带上下文序列化时的
+     * 提示词模板、schema 元数据、校验失败自动修复重试）。sessionId 用随机 UUID——
+     * Copilot 无会话持久化，管线只拿它查历史（查不到即空），对话上下文已折进 draft.message。
+     */
+    @Override
+    public StudioChatResult runProposal(ProposalDraft draft, String amToken) {
+        String scope = draft.scope();
         Map<String, Object> parsed = aiGenerationService.callAiModel(
-                UUID.randomUUID(), buildProposalMessage(request, scope), AiPhase.GENERATION, mode,
-                context, request.getFunctionUnitId(), null, scope, amToken);
+                UUID.randomUUID(), draft.message(), AiPhase.GENERATION, draft.mode(),
+                draft.context(), draft.functionUnitId(), null, scope, amToken);
 
         Object reply = parsed.get("reply");
         Object generatedData = parsed.get("generatedData");
@@ -151,7 +161,7 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
                     "The model returned neither a proposal data block nor an explanation");
         }
         log.info("AI Studio proposal round: functionUnitId={}, phase={}, scope={}, hasProposal={}, replyChars={}",
-                request.getFunctionUnitId(), request.getPhase(), scope, proposal != null,
+                draft.functionUnitId(), draft.phase(), scope, proposal != null,
                 reply instanceof String r ? r.length() : 0);
         return new StudioChatResult(
                 reply instanceof String r && !r.isBlank() ? r.trim() : null,

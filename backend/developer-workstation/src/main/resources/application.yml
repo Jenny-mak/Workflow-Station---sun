@@ -229,6 +229,14 @@ ai-generation:
     timeout-seconds: ${AI_GATEWAY_TIMEOUT_SECONDS:300}
     # AMToken 在 Cookie 中的名字,与 admin-center 的 sso.dsp.am-token-name 对齐。
     am-token-name: ${DSP_AM_TOKEN_NAME:AMToken}
+  # AI Studio Copilot 改动提案的后台作业(见 AiStudioProposalJobServiceImpl):一轮 GENERATION 实测 7 分钟上下,
+  # 同步 HTTP 会被 Kong 300s 读超时掐断,所以提交即返回 jobId、前端轮询。进程内注册表,重启即丢。
+  studio:
+    proposal-workers: ${AI_STUDIO_PROPOSAL_WORKERS:2}
+    proposal-queue-size: ${AI_STUDIO_PROPOSAL_QUEUE_SIZE:8}
+    proposal-retention-minutes: ${AI_STUDIO_PROPOSAL_RETENTION_MINUTES:30}
+    proposal-max-runtime-minutes: ${AI_STUDIO_PROPOSAL_MAX_RUNTIME_MINUTES:30}
+    proposal-max-jobs: ${AI_STUDIO_PROPOSAL_MAX_JOBS:200}
   lock:
     ttl-seconds: ${AI_GENERATION_LOCK_TTL:1800}
     force-unlock-timeout-seconds: ${AI_GENERATION_FORCE_UNLOCK_TIMEOUT:60}

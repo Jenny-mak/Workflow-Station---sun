@@ -4,6 +4,7 @@ import com.developer.component.AiStudioChatComponent;
 import com.developer.dto.AiStudioApplyRequest;
 import com.developer.dto.AiStudioChatRequest;
 import com.developer.dto.AiStudioChatResponse;
+import com.developer.dto.AiStudioProposalJobResponse;
 import com.developer.security.RequireDeveloperPermission;
 import com.platform.common.dto.ApiResponse;
 import com.platform.common.i18n.I18nService;
@@ -17,6 +18,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -54,7 +57,7 @@ public class AiStudioChatController extends BaseController {
     }
 
     @PostMapping
-    @Operation(summary = "AI Studio copilot chat (single turn; propose=true returns a structured proposal)")
+    @Operation(summary = "AI Studio copilot chat (single advisory turn; propose=true is rejected, use /proposals)")
     @RequireDeveloperPermission("FUNCTION_UNIT_VIEW")
     public ResponseEntity<ApiResponse<AiStudioChatResponse>> chat(
             @Valid @RequestBody AiStudioChatRequest request, HttpServletRequest httpRequest) {
@@ -62,6 +65,27 @@ public class AiStudioChatController extends BaseController {
                 .orElseThrow(() -> new RuntimeException(i18nService.getMessage("auth.unauthenticated_user")));
         String amToken = resolveAmToken(httpRequest);
         return handleRequest(() -> aiStudioChatComponent.chat(request, userId, amToken));
+    }
+
+    @PostMapping("/proposals")
+    @Operation(summary = "Start a change-proposal job (async; poll GET /proposals/{jobId})")
+    @RequireDeveloperPermission("FUNCTION_UNIT_VIEW")
+    public ResponseEntity<ApiResponse<AiStudioProposalJobResponse>> startProposal(
+            @Valid @RequestBody AiStudioChatRequest request, HttpServletRequest httpRequest) {
+        String userId = SecurityContextUtils.getCurrentUserId()
+                .orElseThrow(() -> new RuntimeException(i18nService.getMessage("auth.unauthenticated_user")));
+        String amToken = resolveAmToken(httpRequest);
+        request.setPropose(true);
+        return handleRequest(() -> aiStudioChatComponent.startProposal(request, userId, amToken));
+    }
+
+    @GetMapping("/proposals/{jobId}")
+    @Operation(summary = "Poll a change-proposal job")
+    @RequireDeveloperPermission("FUNCTION_UNIT_VIEW")
+    public ResponseEntity<ApiResponse<AiStudioProposalJobResponse>> getProposal(@PathVariable String jobId) {
+        String userId = SecurityContextUtils.getCurrentUserId()
+                .orElseThrow(() -> new RuntimeException(i18nService.getMessage("auth.unauthenticated_user")));
+        return handleRequest(() -> aiStudioChatComponent.getProposal(jobId, userId));
     }
 
     @PostMapping("/apply")

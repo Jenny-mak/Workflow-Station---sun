@@ -71,6 +71,29 @@ export const aiGenerationApi = {
     )
   },
 
+  /**
+   * 发起 Copilot 改动提案作业（异步）。一轮 GENERATION 实测 7 分钟上下，同步等会被 Kong 300s 读超时掐断，
+   * 所以后端立即返回 jobId，前端用 studioGetProposal 轮询到终态。
+   */
+  studioStartProposal: (data: Omit<AiStudioChatPayload, 'propose'>) => {
+    const amToken = readAmToken()
+    return api.post<any, { data: AiStudioProposalJob }>(
+      '/ai-generation/studio-chat/proposals',
+      data,
+      {
+        timeout: 120000,
+        ...(amToken ? { headers: { 'X-AM-Token': amToken } } : {})
+      }
+    )
+  },
+
+  /** 轮询提案作业；作业不存在/已过期/不属于当前用户时后端返回 404。 */
+  studioGetProposal: (jobId: string) =>
+    api.get<any, { data: AiStudioProposalJob }>(
+      `/ai-generation/studio-chat/proposals/${encodeURIComponent(jobId)}`,
+      { timeout: 30000 }
+    ),
+
   /** 应用 Copilot 改动提案（后端：抢 AI 锁 → 校验 → 按 scope 写入）。 */
   studioApplyProposal: (data: AiStudioApplyPayload) =>
     api.post('/ai-generation/studio-chat/apply', data, { timeout: 120000 }),
@@ -88,6 +111,19 @@ export interface AiStudioChatResult {
   reply: string | null
   proposal: Record<string, unknown> | null
   proposalScope: string | null
+}
+
+export type AiStudioProposalJobStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+
+export interface AiStudioProposalJob extends AiStudioChatResult {
+  jobId: string
+  functionUnitId: number
+  phase: string
+  status: AiStudioProposalJobStatus
+  submittedAt: string
+  finishedAt: string | null
+  errorCode: string | null
+  errorMessage: string | null
 }
 
 export interface AiStudioApplyPayload {

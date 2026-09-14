@@ -89,7 +89,10 @@ public class AiExceptionHandler {
     private HttpStatus determineHttpStatus(String errorCode) {
         if (errorCode == null) return HttpStatus.INTERNAL_SERVER_ERROR;
         return switch (errorCode) {
-            case "AI_SESSION_NOT_FOUND", "AI_FUNCTION_UNIT_NOT_FOUND", "AI_DOCUMENT_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+            case "AI_SESSION_NOT_FOUND", "AI_FUNCTION_UNIT_NOT_FOUND", "AI_DOCUMENT_NOT_FOUND",
+                 "AI_STUDIO_PROPOSAL_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+            case "AI_STUDIO_PROPOSAL_UNSUPPORTED_PHASE", "AI_STUDIO_PROPOSAL_USE_JOB" -> HttpStatus.BAD_REQUEST;
+            case "AI_STUDIO_PROPOSAL_QUEUE_FULL" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "AI_CONTEXT_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
             case "AI_WEBHOOK_TIMEOUT" -> HttpStatus.GATEWAY_TIMEOUT;
             case "AI_WEBHOOK_CALL_FAILED", "AI_WEBHOOK_EMPTY_RESPONSE" -> HttpStatus.BAD_GATEWAY;

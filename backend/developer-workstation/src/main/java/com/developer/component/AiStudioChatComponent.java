@@ -3,6 +3,7 @@ package com.developer.component;
 import com.developer.dto.AiStudioApplyRequest;
 import com.developer.dto.AiStudioChatRequest;
 import com.developer.dto.AiStudioChatResponse;
+import com.developer.dto.AiStudioProposalJobResponse;
 
 /**
  * AI Studio Copilot 组件接口。
@@ -13,8 +14,20 @@ import com.developer.dto.AiStudioChatResponse;
  */
 public interface AiStudioChatComponent {
 
-    /** 单轮 Copilot 对话（propose=true 时产出可 Apply 的结构化提案）；amToken 透传给 AI gateway。 */
+    /**
+     * 单轮顾问式 Copilot 对话；amToken 透传给 AI gateway。
+     * {@code propose=true} 在此入口以 {@code AI_STUDIO_PROPOSAL_USE_JOB} 拒绝——提案必须走 {@link #startProposal}。
+     */
     AiStudioChatResponse chat(AiStudioChatRequest request, String userId, String amToken);
+
+    /**
+     * 发起改动提案作业：请求线程上准备上下文（阶段校验 + JPA 序列化），模型调用交后台线程。
+     * 立即返回作业快照，前端按 jobId 轮询 {@link #getProposal}。amToken 只在作业存续期内驻留内存。
+     */
+    AiStudioProposalJobResponse startProposal(AiStudioChatRequest request, String userId, String amToken);
+
+    /** 查询提案作业；仅作业发起者可见，其他情况一律 {@code AI_STUDIO_PROPOSAL_NOT_FOUND}。 */
+    AiStudioProposalJobResponse getProposal(String jobId, String userId);
 
     /**
      * 应用改动提案：工作区访问校验 → 抢 AI 锁（与 AI Generate 同一把，冲突 409）→

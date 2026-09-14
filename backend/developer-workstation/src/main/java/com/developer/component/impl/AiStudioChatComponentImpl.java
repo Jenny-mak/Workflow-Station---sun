@@ -5,6 +5,7 @@ import com.developer.dto.AiGeneratedData;
 import com.developer.dto.AiStudioApplyRequest;
 import com.developer.dto.AiStudioChatRequest;
 import com.developer.dto.AiStudioChatResponse;
+import com.developer.dto.AiStudioProposalJobResponse;
 import com.developer.dto.AiValidationResult;
 import com.developer.exception.AiGenerationException;
 import com.developer.exception.AiValidationFailedException;
@@ -16,6 +17,7 @@ import com.developer.security.FunctionUnitWorkspaceAccessService;
 import com.developer.security.WorkspaceAccessAction;
 import com.developer.service.AiLockService;
 import com.developer.service.AiStudioChatService;
+import com.developer.service.AiStudioProposalJobService;
 import com.developer.service.AiValidationService;
 import com.developer.service.AiWriteService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,6 +36,7 @@ import org.springframework.stereotype.Component;
 public class AiStudioChatComponentImpl implements AiStudioChatComponent {
 
     private final AiStudioChatService aiStudioChatService;
+    private final AiStudioProposalJobService aiStudioProposalJobService;
     private final AiLockService aiLockService;
     private final AiValidationService aiValidationService;
     private final AiWriteService aiWriteService;
@@ -41,12 +44,14 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
     private final ObjectMapper objectMapper;
 
     public AiStudioChatComponentImpl(AiStudioChatService aiStudioChatService,
+                                     AiStudioProposalJobService aiStudioProposalJobService,
                                      AiLockService aiLockService,
                                      AiValidationService aiValidationService,
                                      AiWriteService aiWriteService,
                                      FunctionUnitWorkspaceAccessService functionUnitWorkspaceAccessService,
                                      ObjectMapper objectMapper) {
         this.aiStudioChatService = aiStudioChatService;
+        this.aiStudioProposalJobService = aiStudioProposalJobService;
         this.aiLockService = aiLockService;
         this.aiValidationService = aiValidationService;
         this.aiWriteService = aiWriteService;
@@ -56,14 +61,34 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
 
     @Override
     public AiStudioChatResponse chat(AiStudioChatRequest request, String userId, String amToken) {
-        log.info("AI Studio copilot chat: functionUnitId={}, phase={}, propose={}, userId={}",
-                request.getFunctionUnitId(), request.getPhase(), request.isPropose(), userId);
+        if (request.isPropose()) {
+            // 同步提案会在网关 300s 读超时上被掐断而后端仍在烧模型：从入口拒绝，别留一条必然超时的路
+            throw new AiGenerationException("AI_STUDIO_PROPOSAL_USE_JOB",
+                    "Change proposals run asynchronously; POST /ai-generation/studio-chat/proposals instead");
+        }
+        log.info("AI Studio copilot chat: functionUnitId={}, phase={}, userId={}",
+                request.getFunctionUnitId(), request.getPhase(), userId);
         AiStudioChatService.StudioChatResult result = aiStudioChatService.chat(request, amToken);
         return AiStudioChatResponse.builder()
                 .reply(result.reply())
                 .proposal(result.proposal())
                 .proposalScope(result.proposalScope())
                 .build();
+    }
+
+    @Override
+    public AiStudioProposalJobResponse startProposal(AiStudioChatRequest request, String userId, String amToken) {
+        log.info("AI Studio proposal requested: functionUnitId={}, phase={}, userId={}",
+                request.getFunctionUnitId(), request.getPhase(), userId);
+        // 第一步必须留在请求线程：阶段不支持要立刻 4xx，且上下文序列化依赖请求事务里的 JPA 懒加载
+        AiStudioChatService.ProposalDraft draft = aiStudioChatService.prepareProposal(request);
+        return aiStudioProposalJobService.submit(request.getFunctionUnitId(), request.getPhase(), userId,
+                () -> aiStudioChatService.runProposal(draft, amToken));
+    }
+
+    @Override
+    public AiStudioProposalJobResponse getProposal(String jobId, String userId) {
+        return aiStudioProposalJobService.get(jobId, userId);
     }
 
     @Override

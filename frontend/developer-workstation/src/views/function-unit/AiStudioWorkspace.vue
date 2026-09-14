@@ -351,6 +351,12 @@
           <div class="copilot-msg__bubble copilot-msg__bubble--typing">
             <span /><span /><span />
           </div>
+          <div
+            v-if="copilotProposalJobId"
+            class="copilot-msg__working"
+          >
+            {{ t('ai.studio.workspace.proposalWorking') }}
+          </div>
         </div>
       </div>
       <div
@@ -414,14 +420,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick, markRaw, type Component } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, markRaw, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, MagicStick, Check, Close, Promotion, UploadFilled, Loading } from '@element-plus/icons-vue'
 import { useFunctionUnitStore } from '@/stores/functionUnit'
 import { functionUnitApi, type ValidationResult } from '@/api/functionUnit'
-import { aiGenerationApi } from '@/api/aiGeneration'
+import { aiGenerationApi, type AiStudioProposalJob } from '@/api/aiGeneration'
 import ProcessDesigner from '@/components/designer/ProcessDesigner.vue'
 import TableDesigner from '@/components/designer/TableDesigner.vue'
 import FormDesigner from '@/components/designer/FormDesigner.vue'
@@ -442,7 +448,11 @@ import {
   clearAiStudioChatThreads,
   type AiStudioPhase,
   type AiStudioChatMessage,
-  type AiStudioChatThreads
+  type AiStudioChatThreads,
+  loadAiStudioPendingProposal,
+  saveAiStudioPendingProposal,
+  clearAiStudioPendingProposal,
+  type AiStudioPendingProposal
 } from '@/utils/aiStudioDraft'
 
 const { t } = useI18n()
@@ -599,6 +609,8 @@ const copilotInput = ref('')
 const copilotReplying = ref(false)
 /** 正在等回复的线程；打字指示只出现在这个阶段的线程里 */
 const copilotReplyingPhase = ref<AiStudioPhase | null>(null)
+/** 正在轮询的提案作业 id；非空时打字指示下方补一行"要等几分钟"的说明 */
+const copilotProposalJobId = ref<string | null>(null)
 const copilotBodyRef = ref<HTMLElement>()
 const copilotThreads = ref<AiStudioChatThreads>({})
 
@@ -661,43 +673,152 @@ async function sendCopilotMessage(propose = false) {
   const history = copilotHistory(phase)
   thread.push({ role: 'user', text })
   copilotInput.value = ''
+  beginCopilotWait(phase)
+  try {
+    if (propose) {
+      const { data: job } = await aiGenerationApi.studioStartProposal({
+        functionUnitId: fuId.value,
+        phase,
+        message: text,
+        history
+      })
+      // 先落盘再轮询：刷新/离开页面后 onMounted 能凭这条记录接着等同一个作业
+      saveAiStudioPendingProposal(fuId.value, { jobId: job.jobId, phase, submittedAt: Date.now() })
+      copilotProposalJobId.value = job.jobId
+      const done = await pollProposal(job.jobId)
+      if (done) pushProposalResult(thread, done)
+    } else {
+      const res = await aiGenerationApi.studioChat({
+        functionUnitId: fuId.value,
+        phase,
+        message: text,
+        history
+      })
+      thread.push({ role: 'assistant', text: res.data.reply ?? '' })
+    }
+  } catch (e: unknown) {
+    pushCopilotError(thread, e)
+  } finally {
+    endCopilotWait(phase)
+  }
+}
+
+function beginCopilotWait(phase: AiStudioPhase) {
   copilotReplying.value = true
   copilotReplyingPhase.value = phase
   scrollCopilotToBottom()
-  try {
-    const res = await aiGenerationApi.studioChat({
-      functionUnitId: fuId.value,
-      phase,
-      message: text,
-      history,
-      propose
-    })
-    const { reply, proposal, proposalScope } = res.data
-    const message: CopilotMessage = {
-      role: 'assistant',
-      text: reply ?? (proposal ? t('ai.studio.workspace.proposalReady') : '')
+}
+
+function endCopilotWait(phase: AiStudioPhase) {
+  copilotReplying.value = false
+  copilotReplyingPhase.value = null
+  copilotProposalJobId.value = null
+  if (currentPhase.value === phase) scrollCopilotToBottom()
+}
+
+/** axios 错误的可读原因：后端 ApiResponse.error.message → 顶层 message → Error.message → 原样字符串 */
+function errorReason(e: unknown): string {
+  const err = e as {
+    response?: { data?: { error?: { message?: string }; message?: string } }
+    message?: string
+  } | null
+  return err?.response?.data?.error?.message
+    ?? err?.response?.data?.message
+    ?? err?.message
+    ?? String(e)
+}
+
+function pushCopilotError(thread: CopilotMessage[], e: unknown) {
+  const reason = errorReason(e)
+  thread.push({
+    role: 'assistant',
+    text: t('ai.studio.workspace.copilotError', { reason }),
+    isError: true
+  })
+}
+
+// ---- 提案作业轮询 ----
+
+const PROPOSAL_POLL_INTERVAL_MS = 4000
+/** 连续这么多次轮询失败（网络/5xx）才放弃；单次抖动不该让用户丢掉一轮 7 分钟的生成 */
+const PROPOSAL_POLL_MAX_CONSECUTIVE_FAILURES = 8
+
+/** 组件卸载后置 true：轮询循环看到就退出，不再往已销毁的线程里推消息 */
+let proposalPollingCancelled = false
+onBeforeUnmount(() => {
+  proposalPollingCancelled = true
+})
+
+function sleep(ms: number) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * 轮询到终态返回作业；组件卸载中途退出返回 null（待办记录保留给下次进入接着等）。
+ * 作业不存在（404）或连续失败超限时抛错，并清掉待办记录——再等也不会有结果。
+ */
+async function pollProposal(jobId: string): Promise<AiStudioProposalJob | null> {
+  let failures = 0
+  for (;;) {
+    await sleep(PROPOSAL_POLL_INTERVAL_MS)
+    if (proposalPollingCancelled) return null
+    try {
+      const { data: job } = await aiGenerationApi.studioGetProposal(jobId)
+      failures = 0
+      if (job.status === 'SUCCEEDED' || job.status === 'FAILED') {
+        clearAiStudioPendingProposal(fuId.value)
+        return job
+      }
+    } catch (e: unknown) {
+      if (proposalPollingCancelled) return null
+      if ((e as { response?: { status?: number } } | null)?.response?.status === 404) {
+        clearAiStudioPendingProposal(fuId.value)
+        throw new Error(t('ai.studio.workspace.proposalLost'))
+      }
+      failures++
+      if (failures >= PROPOSAL_POLL_MAX_CONSECUTIVE_FAILURES) {
+        clearAiStudioPendingProposal(fuId.value)
+        throw new Error(t('ai.studio.workspace.proposalPollFailed', { reason: errorReason(e) }))
+      }
     }
-    if (proposal && proposalScope) {
-      message.proposal = { scope: proposalScope, data: proposal }
-    } else if (propose) {
-      // 要求了提案但模型没产出数据块：显式说明，别让用户以为按钮坏了
-      message.text = `${message.text}\n\n${t('ai.studio.workspace.proposalNone')}`.trim()
-    }
-    thread.push(message)
-  } catch (e: any) {
-    const reason = e?.response?.data?.error?.message
-      ?? e?.response?.data?.message
-      ?? e?.message
-      ?? String(e)
+  }
+}
+
+function pushProposalResult(thread: CopilotMessage[], job: AiStudioProposalJob) {
+  if (job.status === 'FAILED') {
     thread.push({
       role: 'assistant',
-      text: t('ai.studio.workspace.copilotError', { reason }),
+      text: t('ai.studio.workspace.copilotError', { reason: job.errorMessage ?? job.errorCode ?? 'FAILED' }),
       isError: true
     })
+    return
+  }
+  const { reply, proposal, proposalScope } = job
+  const message: CopilotMessage = {
+    role: 'assistant',
+    text: reply ?? (proposal ? t('ai.studio.workspace.proposalReady') : '')
+  }
+  if (proposal && proposalScope) {
+    message.proposal = { scope: proposalScope, data: proposal }
+  } else {
+    // 要求了提案但模型没产出数据块：显式说明，别让用户以为按钮坏了
+    message.text = `${message.text}\n\n${t('ai.studio.workspace.proposalNone')}`.trim()
+  }
+  thread.push(message)
+}
+
+/** 进入页面时发现上次的提案作业还没等完：接着轮询同一个 jobId，结果落回发起时的阶段线程。 */
+async function resumePendingProposal(pending: AiStudioPendingProposal) {
+  const thread = copilotThread(pending.phase)
+  copilotProposalJobId.value = pending.jobId
+  beginCopilotWait(pending.phase)
+  try {
+    const done = await pollProposal(pending.jobId)
+    if (done) pushProposalResult(thread, done)
+  } catch (e: unknown) {
+    pushCopilotError(thread, e)
   } finally {
-    copilotReplying.value = false
-    copilotReplyingPhase.value = null
-    if (currentPhase.value === phase) scrollCopilotToBottom()
+    endCopilotWait(pending.phase)
   }
 }
 
@@ -782,6 +903,7 @@ onMounted(async () => {
       completedPhases.value = []
       currentPhase.value = AI_STUDIO_PHASES[0]
       clearAiStudioChatThreads(fuId.value)
+      clearAiStudioPendingProposal(fuId.value)
       copilotThreads.value = {}
     } catch {
       currentPhase.value = draft.phase
@@ -797,6 +919,10 @@ onMounted(async () => {
   copilotThread(currentPhase.value)
   if (currentPhase.value === 'FORM_DESIGN') void store.fetchTables(fuId.value)
   if (currentPhase.value === 'VALIDATION') void runValidation()
+
+  // 上次离开时还有提案作业在跑（异步、服务端继续算）：接着等，不重新发起
+  const pending = loadAiStudioPendingProposal(fuId.value)
+  if (pending) void resumePendingProposal(pending)
 })
 </script>
 
@@ -1352,6 +1478,13 @@ onMounted(async () => {
     .copilot-msg__bubble {
       background-color: var(--el-color-primary-light-9);
     }
+  }
+
+  &__working {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--el-text-color-secondary);
   }
 
   &__bubble--typing {

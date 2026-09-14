@@ -171,6 +171,54 @@ export function clearAiStudioChatThreads(functionUnitId: number): void {
   localStorage.removeItem(aiStudioChatStorageKey(functionUnitId))
 }
 
+// ---- 进行中的改动提案作业（异步）：刷新/离开再回来能接着轮询，不用重新烧一轮模型 ----
+
+export interface AiStudioPendingProposal {
+  jobId: string
+  phase: AiStudioPhase
+  submittedAt: number
+}
+
+const PENDING_PROPOSAL_PREFIX = 'dw-ai-studio-proposal:'
+
+export function aiStudioPendingProposalStorageKey(functionUnitId: number): string {
+  return `${PENDING_PROPOSAL_PREFIX}${functionUnitId}`
+}
+
+/** 读取进行中的提案作业；没有或已损坏返回 null（损坏会 warn 并清除）。 */
+export function loadAiStudioPendingProposal(functionUnitId: number): AiStudioPendingProposal | null {
+  const key = aiStudioPendingProposalStorageKey(functionUnitId)
+  const raw = localStorage.getItem(key)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as Partial<AiStudioPendingProposal>
+    if (
+      typeof parsed?.jobId === 'string' && parsed.jobId &&
+      typeof parsed.phase === 'string' && (AI_STUDIO_PHASES as readonly string[]).includes(parsed.phase) &&
+      typeof parsed.submittedAt === 'number'
+    ) {
+      return { jobId: parsed.jobId, phase: parsed.phase as AiStudioPhase, submittedAt: parsed.submittedAt }
+    }
+    throw new Error('invalid shape')
+  } catch (e) {
+    console.warn(`[ai-studio] discarding corrupt pending proposal at ${key}`, e)
+    localStorage.removeItem(key)
+    return null
+  }
+}
+
+export function saveAiStudioPendingProposal(functionUnitId: number, pending: AiStudioPendingProposal): void {
+  try {
+    localStorage.setItem(aiStudioPendingProposalStorageKey(functionUnitId), JSON.stringify(pending))
+  } catch (e) {
+    console.warn('[ai-studio] failed to persist pending proposal (quota?)', e)
+  }
+}
+
+export function clearAiStudioPendingProposal(functionUnitId: number): void {
+  localStorage.removeItem(aiStudioPendingProposalStorageKey(functionUnitId))
+}
+
 /**
  * 阶段 key → 当前语言下的阶段名。除 Review 外全部复用设计器 Tab 的既有 i18n key，
  * 保证引导条文案与 Tab 文案永远一致，不再维护一套平行翻译。
