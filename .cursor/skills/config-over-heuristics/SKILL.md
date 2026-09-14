@@ -1,11 +1,16 @@
 ---
 name: config-over-heuristics
 description: >-
-  把「靠列名/表名/字段名猜」的运行时判据换成「读设计器配置」，并安全地删掉猜测兜底。
+  把「靠列名/表名/字段名猜」的运行时判据换成「读设计器配置」，并安全地删掉猜测兜底；
+  §10 另记录本仓库子表「身份 / 外键 / MI 判定」三条契约的正确答案与历史写错点清单。
   适用于症状"只在某些 Function Unit 复现""改个字段名就坏""同一个 bug 反复回来"，
-  以及任何 `xxx === 'some_column'` / 名字白名单 / 正则匹配字段名决定业务语义的代码。
+  任何 `xxx === 'some_column'` / 名字白名单 / 正则匹配字段名决定业务语义的代码，
+  以及改 row identity / primaryKeyFields / foreignKeyField / bindingLinkMode /
+  Clone / Copy Form / Import / Rollback 等任何"重建 binding"的路径。
   触发词：启发式、猜列名、硬编码列名、改名就失效、只在某个 FU 复现、读配置不要写死、
-  heuristic、guess column name、config-driven。
+  子表主键、行身份、platformRowUuid、外键没标记、Structural FK Fields、bindingLinkMode、
+  miParticipantRow、克隆丢配置、复制表单丢配置、
+  heuristic、guess column name、config-driven、sub-table identity、foreign key not declared。
 ---
 
 # 用配置取代猜测（Config over Heuristics）
@@ -13,10 +18,11 @@ description: >-
 本 skill 记录一次真实重构的**方法与踩坑**：把 MI 子表 binding 分类从「猜列名/表名/FK 名」
 改为「读设计器配置」，并物理删除全部兜底。方法本身与 MI 无关，适用于任何"靠名字猜语义"的代码。
 
-具体到 MI 的判据表见规则 `portal-mi-subtable-my-request.mdc`；本文只讲**怎么做这类改造**。
+- **§0–§9 讲怎么做**这类改造（找配置、验判据、删兜底、验证顺序）。
+- **§10 讲本仓库的正确答案**：子表身份 / 外键 / MI 判定三条契约 + 历史写错点清单。
+  动子表相关代码前直接跳 §10，省得从症状重新推导一遍。
 
-> 子表的**身份 / 外键 / MI 判定**这三条契约的正确答案，以及 15 处历史写错点的清单，
-> 见 skill `subtable-identity-and-binding-contract` —— 动这些代码前先读那篇，省得重新推导。
+具体到 MI 的判据表见规则 `portal-mi-subtable-my-request.mdc`。
 
 ## 0. 先判断是不是这类问题
 
@@ -303,3 +309,134 @@ export function probe(where, items, ctx) {
 | 只验一类入口就收工 | 同一函数被多类页面调用，走的分支不同 | grep 出所有入口类型，每类各验一次（§6.1） |
 | `if (结果为空) 兜底` | "没配置"和"配置说答案就是空"被混为一谈 | 先判有没有配置，再决定要不要兜底（§2） |
 | 补的回归测试从没红过 | 大概率写成了恒真断言，是摆设 | 临时关掉修复确认它会失败（§6.2） |
+| 用**值的形状**判语义（UUID 正则） | 同一语义有多种生成策略，恒假于其中几种 | 读配置说这一列是不是主键（§10.1） |
+| 逐字段拷贝实体时漏一个 | `@Builder.Default` 把"漏写"变成"替换成默认值" | 对着实体字段清单核 builder（§10.3） |
+| 修完第一处就收工 | 同一错法通常散布多个调用点 | grep 同一调用形态的全部位置（§10.3） |
+
+---
+
+## 10. 已固化的领域契约：子表身份与绑定
+
+上面讲方法。这一节讲**这个仓库里的正确答案**，避免下次从症状重新推导。
+2026-09 一轮排查修掉 15 处同类错误，全部来自下面三个问题被"猜"而不是"读"。
+
+### 10.1 三条契约
+
+**A. 一行的身份** = 配置主键 → 平台 UUID → `null`
+
+- 平台键常量：后端 `SubTableRowIdentity.CANONICAL_FIELD`、前端 `PLATFORM_ROW_UUID_FIELD`，
+  值都是 `platformRowUuid`。**两端必须同名**，改一边就是静默分叉。
+- 主键列名可以是任何东西：实测有 `correspondence_id`、`case_number`、`id_idwxwcxmw`、
+  `idqcxma`、`row_id`。任何「像主键的名字」白名单都是错的。
+- **主键值也可以是任何形状**：`pk_generation_json.strategy` 有 `uuid` 和 `prefixedSequence`
+  （`Corr-000004`、`Test-000017`）。用 UUID 正则判「有没有分配主键」，
+  在 prefixedSequence 的表上**恒假**——MI 参与者表 `subtable` 正是这一类，
+  所以判据恰好在最关键的表上失效。
+
+**B. 子表必须有外键，可以没有主键**
+
+设计器已在强制（`useTableBindingForm.ts` 的 `structuralFkRequired`，
+提示语 "Sub-table binding requires a foreign key field"）；后端补了
+`SUB_FK_NOT_DECLARED`，判据是**「这次请求是否改变 FK 值」**而不是「create 还是 update」——
+因为 `updateBinding` 也能改 `foreignKeyField`，按 create/update 区分会留下一个洞：
+干净 binding 被重指到未声明的列仍然放行（实测验证过）。
+
+推论：**没有 FK 标记的子表 = 违反契约的脏数据**，不是"另一种合法配置"。
+
+**C. 没有 FK 标记 ⇒ 一定不是子任务表**
+
+```
+有 FK 标记  →  可能是 MI 参与者表，需要判定
+无 FK 标记  →  structuralFk（挂主表），确定
+```
+
+2026-09 实测双向成立。**注意这不是 §2 禁止的 else 兜底**：
+「配置的缺失本身就是答案」，与"判不出随便给一个"性质不同。
+
+**D. 设计器的 `Structural FK Fields` 是派生显示**
+
+```ts
+const structuralFkFieldNames = computed(() =>
+  selectedTableFields.value.filter(f => f.isForeignKey).map(f => f.fieldName)
+)
+```
+
+所以 `binding.foreign_key_field` 只是它的缓存。标记没打过，存的值就成了孤儿
+（实测 33 个 SUB binding 存着一个未被标记为 FK 的列名，弹窗里那栏是空的）。
+→ 真源永远是 Table Design 的 `isForeignKey`。
+
+### 10.2 判不出来时怎么办 —— 按"错了会怎样"分别处理
+
+| 场景 | 做法 | 理由 |
+|---|---|---|
+| 行身份判不出 | 返回 `null` / 空集 | 下游按位置配对，最差配错一行；猜列名会把两行**不同的行合并** |
+| 子表没有 FK 标记 | **跳过重建** + 可操作日志 | 建出来的本来就是坏 binding；stale 占位符看得见，用户能修 |
+| link mode 判不出 | 读同表其它 binding；再不行 `structuralFk` | 契约 C：能推导 |
+| 授予访问权的判据 | 保持 fail-closed | 看不见自己的数据 ≪ 别人看见你的数据 |
+
+日志要写**用户能执行的下一步**，不是 "resolve failed"：
+
+> `sub-table 'X' (id N) has no field marked as a foreign key; mark the parent-referencing column in Table Design`
+
+### 10.3 `@Builder.Default` 陷阱
+
+```java
+@Builder.Default
+private BindingLinkMode bindingLinkMode = BindingLinkMode.structuralFk;
+```
+
+**从 source 逐字段拷贝时漏写一个字段 ≠ 留空，而是静默替换成默认值。**
+实测后果：克隆一个有 6 个 MI binding 的 FU → 产出 0 个 MI，参与者隔离全失效。
+
+核对方法：列出实体全部 `private` 字段，逐个在 builder 里 grep。
+全仓有 **10 个** `FormTableBinding.builder()` 调用点，第一轮只审了 3 个就以为修完了，
+`copyTaskForm` / `copyProcessToTaskForm` 两处同样的漏拷是被追问后才发现的。
+
+合法的例外要写注释说明（如 `subListViewId` 故意不拷，要重新指向克隆出的 config）。
+
+### 10.4 仍然合法的「像硬编码」的东西
+
+别把这些也删了：
+
+- **平台枚举**：`PRIMARY`/`SUB`/`RELATED`、`structuralFk`/`miParticipantRow`、`EDITABLE`
+- **平台写入的值**：`IN_PROGRESS`/`COMPLETED` —— 列**名**是配置（已治理），列**值**是契约
+- **平台 envelope 结构**：lookup 值对象的 `{id, …}`、`rowKey`、`rowId`
+- **`sys_users`** / `-1000000001`：平台虚拟表常量
+- **"这列算不算业务数据"类名单**（`SUB_TABLE_ROW_META_KEYS` 等）：无单一配置源，
+  判宽判窄只影响"算不算空行"
+
+判据：**猜错会不会让两行不同的数据被当成同一行 / 走错业务分支？**
+会 → 必须读配置；不会（只影响显隐、排序、算不算空）→ 可以留名单。
+
+### 10.5 历史写错点速查
+
+新增同类代码前扫一遍。每条都是真实修过的 bug。
+
+| 位置 | 错法 | 实测后果 |
+|---|---|---|
+| `miLinkChildRows` / `miLinkChildIdentity`(×13) / `miLinkChildScrub` | UUID 正则判「有没有分配主键」 | prefixedSequence 主键的表恒假 → 同一参与者多行被合并 |
+| `miLinkChildIdentity.scoreMiLinkChildRowQuality` | **内联**一份同样的正则 | grep 函数名漏掉；真主键行只得 40 分 |
+| `SubTableRowIdentity.IDENTITY_FIELDS` | `['row_id','rowId','id_idw','id',…]` | `id` 在 13 张表是业务列且无一是主键 |
+| 前端 `subTableRowIdentity.ts` | 同名单 + 写 `row_id` | 后端改名后两端静默分叉，编辑被读成删+增 |
+| `FormTableBindingRestorer.inferForeignKeyField` | 猜 `row_id`→`case_id`→兜底 | 15 张子表猜对 2 张，其余 FK 指向不存在的列 |
+| `FormTableBindingRestorer` link mode | `"row_id".equals(fk) ? MI : structuralFk` | 14 个 MI binding 里 7 个被还原成 structuralFk |
+| `FunctionUnitCloner` / `copyTaskForm` / `copyProcessToTaskForm` | 漏写 `.bindingLinkMode(...)` | 见 §10.3 |
+| `FormConfigJsonTableProvisioner` 自动建表 | 建了 FK 列但不打 `isForeignKey` | **8 张无标记表的出生方式**（曾在持续生产） |
+| 同上，匹配到无 FK 的已有表 | 落进 createSubTable | 静默新建一张近似重复的表 |
+| `SubTableRowKeySupport`(×4) | `id` ⇄ `id_idw` 互顶 | 只对主键正好叫这两个名字的表有效 |
+| `SUB_TABLE_STRUCTURAL_FK_KEYS` | 两份手抄副本**已漂移** | 同一行在 To Do 与 My Request 对「算不算空行」答案相反 |
+
+### 10.6 子表专用自检
+
+除 §8 外，改子表身份/绑定时再过一遍：
+
+- [ ] 判断"这一行是谁"用的是配置主键，不是列名白名单、**不是值的形状**
+- [ ] 判断"哪列指向父表"读 `isForeignKey`，不是 `row_id`/`main_id`/`case_id`
+- [ ] 判断"是不是 MI"读 `bindingLinkMode` 或契约 C，不是 FK 叫什么名字
+- [ ] 从实体拷贝时**逐字段**核对过 builder（§10.3）
+- [ ] grep 过同一调用形态的**全部**位置，不是只改先看到的那个
+- [ ] 判不出时返回 null / 跳过，并给了可执行的日志——没有发明默认值
+- [ ] 前后端各有一份的常量（如 `platformRowUuid`）两边都改了
+- [ ] 日志只打 id/name **不打实体**（`@Data` 双向引用 `toString` 会无限递归）
+- [ ] FU 生命周期改动覆盖 **Clone · Export · Import · Rollback · Copy Form**
+      （见 `function-unit-portability`），且做过「修复前复现 + 修复后保真」两次真机
