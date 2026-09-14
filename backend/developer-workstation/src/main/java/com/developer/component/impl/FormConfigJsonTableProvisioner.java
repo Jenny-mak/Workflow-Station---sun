@@ -3,6 +3,7 @@ package com.developer.component.impl;
 import com.developer.component.TableDesignComponent;
 import com.developer.dto.FieldDefinitionRequest;
 import com.developer.dto.TableDefinitionRequest;
+import com.developer.entity.FieldDefinition;
 import com.developer.entity.FormDefinition;
 import com.developer.entity.FormTableBinding;
 import com.developer.entity.TableDefinition;
