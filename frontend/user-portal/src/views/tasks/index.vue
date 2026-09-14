@@ -107,14 +107,19 @@
                 </el-tag>
                 <template v-else-if="col.field === 'assigneeName'">
                   <el-tag
-                    v-if="row.claimPoolTask && row.assignee"
+                    v-if="isTodoClaimHold(row)"
                     :type="row.claimedByCurrentUser ? 'success' : 'info'"
                     size="small"
-                    data-test="todo-claimed-by"
+                    data-test="todo-current-assignee"
                   >
-                    {{ row.claimedByCurrentUser ? t('task.claimedByMe') : (row.assigneeName || row.assignee) }}
+                    {{ formatTodoCurrentAssignee(row, t('task.claimedByMe')) }}
                   </el-tag>
-                  <span v-else>-</span>
+                  <span
+                    v-else
+                    data-test="todo-current-assignee"
+                  >
+                    {{ formatTodoCurrentAssignee(row, t('task.claimedByMe')) }}
+                  </span>
                 </template>
                 <span
                   v-else-if="col.field === 'priority'"
@@ -281,6 +286,7 @@ import type { TaskInfo } from '@/api/task'
 import { CLAIM_ACTION_WIDTH, useTodoTasksPage } from '@/composables/tasks/useTodoTasksPage'
 import { formatDate } from '@/utils/dateFormat'
 import { assignmentDisplayKey, assignmentTagClass } from '@/utils/taskAssignmentDisplay'
+import { formatTodoCurrentAssignee, isTodoClaimHold } from '@/utils/todoCurrentAssignee'
 
 defineOptions({ name: 'Tasks' })
 

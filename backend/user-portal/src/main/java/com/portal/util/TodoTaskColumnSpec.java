@@ -45,7 +45,7 @@ public final class TodoTaskColumnSpec {
                 ListColumnMeta.of("createTime", "task.createTime", Kind.DATETIME),
                 ListColumnMeta.of("processDefinitionName", "task.processName", Kind.TEXT),
                 ListColumnMeta.of("initiatorName", "task.initiator", Kind.TEXT),
-                ListColumnMeta.of("assigneeName", "task.claimedBy", Kind.TEXT),
+                ListColumnMeta.of("assigneeName", "task.currentAssignee", Kind.TEXT),
                 ListColumnMeta.withOptions("priority", "task.priority", Kind.ENUM, priorityOptions()),
                 ListColumnMeta.of("dueDate", "task.dueDate", Kind.DATETIME)
         );

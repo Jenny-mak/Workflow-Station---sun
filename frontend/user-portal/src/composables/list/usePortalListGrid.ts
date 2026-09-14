@@ -19,6 +19,8 @@ export function usePortalListGrid<T extends object>(opts: {
   fillViewport?: MaybeRefOrGetter<boolean>
   /** When set, only these fields render / persist order. Other declared columns stay on the payload. */
   visibleFields?: MaybeRefOrGetter<readonly string[] | undefined>
+  /** Return a pixel width to override header-fit for that field; omit / undefined keeps the default. */
+  defaultWidthOf?: (field: string) => number | undefined
 }) {
   const { t } = useI18n()
   const columns = ref<ListColumnMeta[]>([])
@@ -57,6 +59,7 @@ export function usePortalListGrid<T extends object>(opts: {
       fields: layoutFields,
       extraWidth: opts.extraWidth,
       fillViewport: opts.fillViewport,
+      defaultWidthOf: opts.defaultWidthOf,
       labelOf: (field) => displayColumns.value.find((col) => col.field === field)?.label ?? field,
       kindOf: (field) => displayColumns.value.find((col) => col.field === field)?.kind,
     })

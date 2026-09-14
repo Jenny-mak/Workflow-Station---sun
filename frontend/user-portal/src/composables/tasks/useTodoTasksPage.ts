@@ -15,6 +15,8 @@ import { taskPriorityBand, taskPriorityCssClass } from '@/utils/taskPriority'
 import { usePendingTaskStore } from '@/stores/pendingTask'
 
 export const CLAIM_ACTION_WIDTH = 280
+/** Uppercase "Current Assignee" is wider than the TEXT header-fit floor (168). */
+const CURRENT_ASSIGNEE_COL_WIDTH = 220
 
 const TODO_VISIBLE_FIELDS = [
   'requestId',
@@ -40,9 +42,10 @@ export function useTodoTasksPage() {
   })
 
   const grid = usePortalListGrid<TaskInfo>({
-    storageKey: 'portal-list-layout:todo-tasks-v3',
+    storageKey: 'portal-list-layout:todo-tasks-v4',
     extraWidth: 50 + CLAIM_ACTION_WIDTH,
     visibleFields: TODO_VISIBLE_FIELDS,
+    defaultWidthOf: (field) => (field === 'assigneeName' ? CURRENT_ASSIGNEE_COL_WIDTH : undefined),
   })
 
   const actionDialogVisible = ref(false)

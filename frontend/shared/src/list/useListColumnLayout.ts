@@ -88,7 +88,7 @@ export function useListColumnLayout(opts: {
   storageKey: MaybeRefOrGetter<string>
   fields: MaybeRefOrGetter<string[]>
   extraWidth?: MaybeRefOrGetter<number>
-  defaultWidthOf?: (field: string) => number
+  defaultWidthOf?: (field: string) => number | undefined
   labelOf?: (field: string) => string
   kindOf?: (field: string) => ListColumnKind | undefined
   /**
@@ -125,7 +125,8 @@ export function useListColumnLayout(opts: {
 
   function defaultBaseOf(field: string): number {
     void measureEpoch.value
-    if (opts.defaultWidthOf) return opts.defaultWidthOf(field)
+    const override = opts.defaultWidthOf?.(field)
+    if (override != null) return override
     return headerFitColumnWidth(opts.labelOf?.(field) ?? field, opts.kindOf?.(field))
   }
 

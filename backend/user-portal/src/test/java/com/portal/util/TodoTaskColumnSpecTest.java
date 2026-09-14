@@ -36,8 +36,8 @@ class TodoTaskColumnSpecTest {
     }
 
     @Test
-    void claimedByColumnIsPresent() {
-        assertThat(column("assigneeName").label()).isEqualTo("task.claimedBy");
+    void currentAssigneeColumnIsPresent() {
+        assertThat(column("assigneeName").label()).isEqualTo("task.currentAssignee");
     }
 
     @Test
