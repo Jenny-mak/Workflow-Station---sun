@@ -128,6 +128,7 @@
         :label="currentAction === 'urge' ? $t('task.urgeMessage') : $t('task.reasonDescription')"
         class="task-action-reason-item"
         :required="reasonRequired && currentAction !== 'urge'"
+        data-testid="action-reason-field"
       >
         <el-input
           v-model="formData.reason"

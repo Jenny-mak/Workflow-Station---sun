@@ -162,4 +162,31 @@ describe('useCustomActions task-operation dispatch', () => {
     handleCustomAction(action as never)
     expect(spy).toHaveBeenCalledWith(action)
   })
+
+  it('toasts and does not open the approve dialog when configJson is invalid', async () => {
+    const approveDialogVisible = ref(false)
+    const { handleCustomAction } = useCustomActions({
+      taskInfo: ref({}),
+      subTableBindings: ref([]),
+      formData: ref({}),
+      submitting: ref(false),
+      saveCurrentTaskForm: vi.fn(async () => {}),
+      validateSubTableAssigneesForComplete: () => true,
+      approveDialogVisible,
+      approveDialogTitle: ref(''),
+      currentApproveAction: ref(''),
+      approveForm: { comment: '' },
+      loadTaskDetail: vi.fn(async () => {}),
+    })
+    handleCustomAction({
+      actionId: '1',
+      actionName: 'Approve',
+      actionType: 'APPROVE',
+      configJson: 'not-json',
+    } as never)
+    await Promise.resolve()
+    expect(ElMessage.error).toHaveBeenCalledWith('task.configParseFailed')
+    expect(approveDialogVisible.value).toBe(false)
+    expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+  })
 })

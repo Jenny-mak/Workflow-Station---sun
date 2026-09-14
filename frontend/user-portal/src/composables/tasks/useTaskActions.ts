@@ -6,7 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { completeTask, delegateTask, transferTask, urgeTask, type TaskActionInfo } from '@/api/task'
 import {
   actionRequiresComment,
-  parseActionConfigJson,
+  tryParseActionConfigJson,
 } from '@/utils/actionButtonConfig'
 import { userApi, type UserOption } from '@/api/user'
 import {
@@ -108,8 +108,14 @@ export function useTaskActions(options: {
   const approveCommentRequired = ref(false)
   const actionReasonRequired = ref(false)
 
-  function applyActionReasonRequired(action?: TaskActionInfo) {
-    actionReasonRequired.value = actionRequiresComment(parseActionConfigJson(action?.configJson))
+  function applyActionReasonRequired(action?: TaskActionInfo): boolean {
+    const config = tryParseActionConfigJson(action?.configJson)
+    if (config == null) {
+      ElMessage.error(t('task.configParseFailed'))
+      return false
+    }
+    actionReasonRequired.value = actionRequiresComment(config)
+    return true
   }
   function validateSubTableAssigneesForComplete(): boolean {
     for (const b of options.subTableBindings.value) {
@@ -161,7 +167,7 @@ export function useTaskActions(options: {
     options.approveDialogVisible.value = true
   }
   function handleDelegate(action?: TaskActionInfo) {
-    applyActionReasonRequired(action)
+    if (!applyActionReasonRequired(action)) return
     options.currentAction.value = 'delegate'
     options.actionDialogTitle.value = t('task.delegate')
     options.actionForm.targetUserId = ''
@@ -174,7 +180,7 @@ export function useTaskActions(options: {
     options.actionDialogVisible.value = true
   }
   function handleTransfer(action?: TaskActionInfo) {
-    applyActionReasonRequired(action)
+    if (!applyActionReasonRequired(action)) return
     options.currentAction.value = 'transfer'
     options.actionDialogTitle.value = t('task.transfer')
     options.actionForm.targetUserId = ''

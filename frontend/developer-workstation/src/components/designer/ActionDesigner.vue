@@ -298,10 +298,16 @@
               :placeholder="t('action.targetStatusPlaceholder')"
             />
           </el-form-item>
-          <el-form-item :label="t('action.requireComment')">
+          <el-form-item
+            :label="t('action.requireComment')"
+            data-testid="action-require-comment"
+          >
             <el-switch v-model="actionConfig.requireComment" />
           </el-form-item>
-          <el-form-item :label="t('action.confirmMessage')">
+          <el-form-item
+            :label="t('action.confirmMessage')"
+            data-testid="action-confirm-message"
+          >
             <el-input
               v-model="actionConfig.confirmMessage"
               :placeholder="t('action.confirmMessageApprovalPlaceholder')"

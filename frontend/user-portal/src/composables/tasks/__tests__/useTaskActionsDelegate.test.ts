@@ -172,3 +172,39 @@ describe('useTaskActions submitApprove Require Comment', () => {
     expect(ElMessage.warning).toHaveBeenCalled()
   })
 })
+
+describe('useTaskActions invalid Action configJson', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('does not open the delegate dialog when configJson is invalid', () => {
+    const actionDialogVisible = ref(false)
+    const actions = useTaskActions({
+      taskId: 'task-1',
+      taskInfo: ref({}),
+      subTableBindings: ref([]),
+      formData: ref({}),
+      submitting: ref(false),
+      approveDialogVisible: ref(false),
+      approveDialogTitle: ref(''),
+      currentApproveAction: ref(''),
+      approveForm: { comment: '' },
+      actionDialogVisible,
+      actionDialogTitle: ref(''),
+      currentAction: ref(''),
+      actionForm: { targetUserId: '', reason: '' } as never,
+      userOptions: ref([]),
+      userSearchLoading: ref(false),
+      loadTaskDetail: vi.fn(async () => {}),
+    })
+    actions.handleDelegate({
+      actionId: '1',
+      actionName: 'Delegate',
+      actionType: 'DELEGATE',
+      configJson: '{',
+    })
+    expect(actionDialogVisible.value).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalled()
+  })
+})

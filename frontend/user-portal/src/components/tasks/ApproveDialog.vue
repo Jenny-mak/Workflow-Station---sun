@@ -12,6 +12,7 @@
       <el-form-item
         :label="$t('task.comment')"
         :required="commentRequired"
+        data-testid="approve-comment-field"
       >
         <el-input
           v-model="formData.comment"

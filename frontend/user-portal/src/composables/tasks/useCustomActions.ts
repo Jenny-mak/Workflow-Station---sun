@@ -10,7 +10,7 @@ import type { PreparedFormPopupContext } from './customActionTypes'
 import {
   actionConfirmMessage,
   actionRequiresComment,
-  parseActionConfigJson,
+  tryParseActionConfigJson,
 } from '@/utils/actionButtonConfig'
 
 export type { PreparedFormPopupContext } from './customActionTypes'
@@ -121,7 +121,11 @@ export function useCustomActions(options: {
   }
 
   async function openApproveDialog(action: TaskActionInfo, completeAction: 'APPROVE' | 'REJECT') {
-    const config = parseActionConfigJson(action.configJson)
+    const config = tryParseActionConfigJson(action.configJson)
+    if (config == null) {
+      ElMessage.error(t('task.configParseFailed'))
+      return
+    }
     if (!(await confirmIfNeeded(config))) return
     if (completeAction === 'APPROVE' && !options.validateSubTableAssigneesForComplete()) return
     approveCommentRequired.value = actionRequiresComment(config)
