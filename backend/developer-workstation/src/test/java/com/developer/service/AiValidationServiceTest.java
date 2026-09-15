@@ -161,4 +161,188 @@ class AiValidationServiceTest {
 
         assertTrue(result.isValid(), "Clean SVG should pass validation");
     }
+
+    // ==================== Email slices (AI Studio EMAIL_TEMPLATES / CONNECTIONS / EMAIL_MONITORS) ====================
+
+    @Test
+    void validate_emailSlices_wellFormed_shouldPass() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .emailTemplates(List.of(Map.of("name", "Approved", "subject", "Order ${order_no}",
+                        "bodyHtml", "<p>Your order <b>${order_no}</b> is approved.</p>", "enabled", true)))
+                .emailConnections(List.of(Map.of("name", "notify@example.com", "connectionType", "GMAIL",
+                        "direction", "OUTBOUND", "fromName", "Workflow", "enabled", true)))
+                .emailMonitorRules(List.of(Map.of("name", "Invoice inbox", "connectionName", "inbox@example.com",
+                        "actionType", "START_PROCESS", "pollIntervalSeconds", 60,
+                        "extractionRules", Map.of("fields", List.of(
+                                Map.of("target", "order_no", "source", "SUBJECT", "type", "REGEX", "pattern", "#(\\d+)"))))))
+                .build();
+
+        AiValidationResult result = validationService.validate(data);
+
+        assertTrue(result.isValid(), () -> result.getErrors().toString());
+    }
+
+    @Test
+    void validate_emailTemplateWithScript_shouldFail() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .emailTemplates(List.of(Map.of("name", "Bad", "bodyHtml", "<p>hi</p><script>alert(1)</script>")))
+                .build();
+
+        AiValidationResult result = validationService.validate(data);
+
+        assertFalse(result.isValid());
+        assertEquals("emailTemplates[0].bodyHtml", result.getErrors().get(0).getFieldPath());
+    }
+
+    @Test
+    void validate_emailTemplateWithEventAttribute_shouldFail() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .emailTemplates(List.of(Map.of("name", "Bad", "bodyHtml", "<a href=\"#\" onclick=\"x()\">go</a>")))
+                .build();
+
+        assertFalse(validationService.validate(data).isValid());
+    }
+
+    @Test
+    void validate_emailConnectionWithCredentialOrEndpointKeys_shouldFail() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .emailConnections(List.of(Map.of("name", "notify@example.com", "password", "x",
+                        "host", "smtp.example.com")))
+                .build();
+
+        AiValidationResult result = validationService.validate(data);
+
+        assertFalse(result.isValid());
+        assertEquals(2, result.getErrors().stream().filter(e -> "FORBIDDEN_FIELD".equals(e.getErrorType())).count());
+    }
+
+    @Test
+    void validate_emailConnectionNameMustBeEmailAndDirectionNotBoth_shouldFail() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .emailConnections(List.of(Map.of("name", "Notification Sender", "direction", "BOTH")))
+                .build();
+
+        AiValidationResult result = validationService.validate(data);
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.getFieldPath().endsWith(".name")));
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.getFieldPath().endsWith(".direction")));
+    }
+
+    @Test
+    void validate_viewWithOnlyBusinessUnitAccessRule_shouldFail() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .mainTableViews(List.of(Map.of("mainTableName", "orders", "viewName", "Pending",
+                        "accessRules", List.of(Map.of("targetType", "BUSINESS_UNIT", "targetId", "bu-1")))))
+                .build();
+
+        AiValidationResult result = validationService.validate(data);
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> "BIZ_VIEW_ACCESS_BU_ROLE_PAIR".equals(e.getErrorType())));
+    }
+
+    @Test
+    void validate_viewWithPlatformKeysBadOperatorAndLookupColumn_shouldFail() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .mainTableViews(List.of(Map.of("mainTableName", "orders", "viewName", "Pending",
+                        "mainTableId", 5, "isDefault", true,
+                        "fields", List.of(Map.of("fieldName", "customer", "columnType", "lookup_display")),
+                        "sortConfig", List.of(Map.of("fieldName", "amount", "direction", "DOWN")),
+                        "filterConfig", Map.of("logic", "xor", "conditions", List.of(
+                                Map.of("fieldName", "amount", "operator", "between"))))))
+                .build();
+
+        AiValidationResult result = validationService.validate(data);
+
+        assertFalse(result.isValid());
+        List<String> paths = result.getErrors().stream().map(e -> e.getFieldPath()).toList();
+        assertTrue(paths.contains("mainTableViews[0].mainTableId"));
+        assertTrue(paths.contains("mainTableViews[0].isDefault"));
+        assertTrue(paths.contains("mainTableViews[0].fields[0].columnType"));
+        assertTrue(paths.contains("mainTableViews[0].sortConfig[0].direction"));
+        assertTrue(paths.contains("mainTableViews[0].filterConfig.logic"));
+        assertTrue(paths.contains("mainTableViews[0].filterConfig.conditions[0].operator"));
+        assertEquals(6, result.getErrors().size());
+    }
+
+    @Test
+    void validate_wellFormedViewProposal_shouldPass() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .mainTableViews(List.of(Map.of("mainTableName", "orders", "viewName", "Pending",
+                        "restrictToInvolvedUsers", false,
+                        "fields", List.of(Map.of("fieldName", "order_no", "displayLabel", "Order", "columnWidth", 120,
+                                "visible", true, "systemField", false, "columnType", "field")),
+                        "sortConfig", List.of(Map.of("fieldName", "start_time", "direction", "DESC", "systemField", true)),
+                        "filterConfig", Map.of("logic", "and", "conditions", List.of(
+                                Map.of("fieldName", "process_status", "operator", "eq", "value", "RUNNING", "systemField", true))),
+                        "accessRules", List.of(
+                                Map.of("targetType", "BUSINESS_UNIT", "targetId", "bu-1"),
+                                Map.of("targetType", "ROLE", "targetId", "role-1")))))
+                .build();
+
+        AiValidationResult result = validationService.validate(data);
+
+        assertTrue(result.isValid(), () -> String.valueOf(result.getErrors()));
+    }
+
+    @Test
+    void validate_serviceTaskBindingWithLegacyKeysOrDuplicates_shouldFail() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .serviceTaskBindings(List.of(
+                        Map.of("serviceTaskId", "svc_1", "flowKey", "k1", "ap:inputMapping", "{}", "serviceType", "ap"),
+                        Map.of("serviceTaskId", "svc_1", "flowKey", "k2"),
+                        Map.of("serviceTaskId", "", "flowKey", "")))
+                .build();
+
+        AiValidationResult result = validationService.validate(data);
+
+        assertFalse(result.isValid());
+        List<String> paths = result.getErrors().stream().map(e -> e.getFieldPath()).toList();
+        assertTrue(paths.contains("serviceTaskBindings[0].ap:inputMapping"));
+        assertTrue(paths.contains("serviceTaskBindings[0].serviceType"));
+        assertTrue(paths.contains("serviceTaskBindings[1].serviceTaskId"));
+        assertTrue(paths.contains("serviceTaskBindings[2].serviceTaskId"));
+        assertTrue(paths.contains("serviceTaskBindings[2].flowKey"));
+        assertEquals(5, result.getErrors().size());
+    }
+
+    @Test
+    void validate_wellFormedServiceTaskBinding_shouldPass() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .serviceTaskBindings(List.of(Map.of("serviceTaskId", "svc_1", "flowKey", "invoice-sync")))
+                .build();
+
+        assertTrue(validationService.validate(data).isValid());
+    }
+
+    @Test
+    void validate_emailMonitorWithBindingFields_shouldFail() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .emailMonitorRules(List.of(Map.of("name", "Inbox", "connectionName", "inbox@example.com",
+                        "startEventId", "start_1", "filterSubject", "invoice")))
+                .build();
+
+        AiValidationResult result = validationService.validate(data);
+
+        assertFalse(result.isValid());
+        assertEquals(2, result.getErrors().stream().filter(e -> "FORBIDDEN_FIELD".equals(e.getErrorType())).count());
+    }
+
+    @Test
+    void validate_emailMonitorExtractionEnums_shouldFail() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .emailMonitorRules(List.of(Map.of("name", "Inbox", "connectionName", "inbox@example.com",
+                        "actionType", "SEND_MAIL",
+                        "extractionRules", Map.of("fields", List.of(Map.of("target", "", "source", "BODY", "type", "GUESS"))))))
+                .build();
+
+        AiValidationResult result = validationService.validate(data);
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.getFieldPath().endsWith(".actionType")));
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.getFieldPath().endsWith(".target")));
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.getFieldPath().endsWith(".source")));
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.getFieldPath().endsWith(".type")));
+    }
 }

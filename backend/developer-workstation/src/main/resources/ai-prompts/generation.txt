@@ -118,6 +118,53 @@ Generate data with the following JSON structure, wrapped in the markers:
     }
   ],
   "processDefinition": { "bpmnXml": "complete BPMN 2.0 XML string" },
+  "emailTemplates": [
+    {
+      "name": "unique template name (max 100 chars)",
+      "subject": "subject line; reference MAIN table fields as ${fieldName}",
+      "bodyHtml": "HTML body; reference MAIN table fields as ${fieldName}; no <script>, no on* attributes, no javascript:",
+      "enabled": true
+    }
+  ],
+  "emailConnections": [
+    {
+      "name": "sender email address (this IS the connection name, e.g. notify@example.com)",
+      "connectionType": "GMAIL|OUTLOOK|YAHOO|QQ|NETEASE_163|SMTP",
+      "direction": "OUTBOUND|INBOUND",
+      "fromName": "display name shown to recipients (max 100 chars)",
+      "mailboxAddress": "INBOUND only: mailbox to poll, otherwise null",
+      "enabled": true
+    }
+  ],
+  "emailMonitorRules": [
+    {
+      "name": "unique monitor template name (max 100 chars)",
+      "enabled": true,
+      "connectionName": "name of an EXISTING enabled INBOUND connection with hasCredentials=true (from current data)",
+      "folderLabel": "INBOX",
+      "actionType": "START_PROCESS|APPEND_SUB_TABLE",
+      "targetFormName": "formName of an existing form, or null",
+      "extractionRules": { "fields": [ { "target": "MAIN table fieldName", "source": "SUBJECT|FROM|TO|CC|REPLY_TO|DATE|MESSAGE_ID|TEXT|HTML|TEXT_AND_HTML|ATTACHMENTS|RAW_EML|HEADER|CONST", "type": "DIRECT|CONST|LABEL|BETWEEN|REGEX|HEADER", "label": "label text for LABEL", "before": "for BETWEEN", "after": "for BETWEEN", "pattern": "for REGEX", "group": 1, "header": "for HEADER", "value": "for CONST", "required": false } ] },
+      "correlation": null,
+      "pollIntervalSeconds": 60,
+      "reviewOnMissing": true
+    }
+  ],
+  "mainTableViews": [
+    {
+      "mainTableName": "tableName of an existing MAIN or SUB table",
+      "viewName": "unique view name within that table (max 200 chars)",
+      "restrictToInvolvedUsers": false,
+      "detailFormName": "SUB-table views only: formName of an existing form, otherwise null",
+      "accessRules": [ { "targetType": "BUSINESS_UNIT|ROLE", "targetId": "id taken verbatim from orgCatalog" } ],
+      "sortConfig": [ { "fieldName": "field of the view table or a system field", "direction": "ASC|DESC", "systemField": false } ],
+      "filterConfig": { "logic": "and|or", "conditions": [ { "fieldName": "field", "operator": "eq|ne|contains|notContains|notStartsWith|endsWith|notEndsWith|gt|lt|isNull|isNotNull", "value": "literal or null", "systemField": false } ] },
+      "fields": [ { "fieldName": "field of the view table or a system field", "displayLabel": "column header", "columnWidth": 150, "sortOrder": 0, "visible": true, "systemField": false, "columnType": "field" } ]
+    }
+  ],
+  "serviceTaskBindings": [
+    { "serviceTaskId": "exact id of a bpmn:serviceTask listed in serviceTasks of the current data", "flowKey": "flowKey of an entry in automationFlows of the current data" }
+  ],
   "icon": {
     "name": "icon name (English snake_case, max 100 chars)",
     "category": "APPROVAL|CREDIT|ACCOUNT|PAYMENT|CUSTOMER|COMPLIANCE|OPERATION|GENERAL",
@@ -167,6 +214,14 @@ Generate data with the following JSON structure, wrapped in the markers:
 - For approval branches, the condition on a gateway outgoing flow must be exactly ${decision == 'yes'} or ${decision == 'no'}. Those are the only values the platform ever writes: APPROVE/PROCESS_SUBMIT sets decision to "yes" and REJECT/PROCESS_REJECT sets decision to "no". Writing "approved", "rejected", "APPROVE", "REJECT", true or false makes the branch unreachable. Never invent outcome variables unless the generated solution explicitly writes them before evaluation
 - Every function unit whose process contains a bpmn:userTask must generate exactly one PROCESS_SUBMIT action bound to the first user task, otherwise the initiator has no submit button
 - decisionDefinitions and tableRelations must be arrays; use [] when the function unit does not require them
+- emailTemplates, emailConnections and emailMonitorRules are OPTIONAL and normally only produced in a scoped change request for EMAIL_TEMPLATES / CONNECTIONS / EMAIL_MONITORS. They are applied as an upsert keyed by name: list only the items you add or change; omitted existing items are kept, nothing is deleted
+- Email templates may only reference MAIN table fields with the ${fieldName} syntax. Never invent ${subTableField:...}, ${subTableHtml:...} or ${lookupField:...} tokens (their ids are assigned by the database)
+- Email connections NEVER carry username, password, credentials, OAuth tokens, host, port, TLS or IMAP settings: mail endpoints come from the platform's system configuration and credentials are entered by the user in the Connection designer. The connection name is the sender email address and must be a valid address. direction BOTH is invalid
+- mainTableViews is OPTIONAL and normally only produced in a scoped change request for VIEW_DESIGN. It is applied as an upsert keyed by mainTableName + viewName: list only the views you add or change; omitted existing views are kept, nothing is deleted, and isDefault/status are never part of a proposal. Never emit id, mainTableId, detailFormId, isDefault or status
+- serviceTaskBindings is OPTIONAL and normally only produced in a scoped change request for AUTOMATION. It is applied as an in-place patch of the EXISTING BPMN (never regenerate processDefinition for it): each entry binds one existing bpmn:serviceTask to one automation flow by business key. serviceTaskId must be copied verbatim from serviceTasks in the current data; flowKey must be copied verbatim from automationFlows in the current data (prefer published flows). Never emit flowId, webhookUrl, inputMapping, outputMapping, timeoutSeconds, retryCount or serviceType. If the process has no service task or no suitable flow exists, explain that in the reply instead of emitting serviceTaskBindings
+- View access rules must be EITHER empty (only System Administrator can see the view) OR contain at least one BUSINESS_UNIT and at least one ROLE. Every targetId must be copied verbatim from orgCatalog in the current data; every ROLE must appear under the roles of one of the chosen business units. If orgCatalog is absent or has no matching entries, leave accessRules empty and say so in the reply
+- View fields, sortConfig and filterConfig may only reference fieldNames of the view's own table; the system fields process_status, start_time, initiator and current_step exist on MAIN-table views only and must carry systemField: true. columnType must be "field". MAIN-table views never bind detailFormName (rows open the request detail page)
+- Email monitor rules describe monitor TEMPLATES only: never emit startEventId, filterFrom, filterSubject or processDefinitionKey (start-event binding is configured in Process Design). connectionName must be an EXISTING connection from the current data with direction INBOUND, enabled=true and hasCredentials=true; if no such connection exists, explain that in the reply instead of emitting emailMonitorRules. Every extractionRules.fields[].target must be an existing MAIN table fieldName
 - DMN XML must be complete raw XML with unique ids and a decision key matching decisionKey; never use Base64 or abbreviated XML
 - SVG must be self-contained, under 10KB, and must not contain script, event-handler attributes, external URLs or javascript: content
 

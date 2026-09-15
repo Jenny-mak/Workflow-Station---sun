@@ -10,6 +10,7 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * AI 生成数据的安全校验协作类
@@ -91,6 +92,28 @@ public class AiSecurityValidator {
 
         } catch (Exception e) {
             result.addError("SVG_VALIDATION", "icon.svgContent", "SVG is not valid XML: " + e.getMessage());
+        }
+    }
+
+    /** 邮件模板正文里禁止出现的模式（与 SVG 校验同一口径：脚本、框架、事件属性、javascript: 协议）。 */
+    private static final Pattern[] HTML_BODY_DANGEROUS = {
+            Pattern.compile("<\\s*(script|iframe|object|embed)\\b", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("\\son[a-z]+\\s*=", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("javascript\\s*:", Pattern.CASE_INSENSITIVE)
+    };
+
+    /**
+     * 校验邮件模板正文 HTML：不引入 HTML 消毒库，只做与 SVG 同口径的禁用模式检查——
+     * 正文由 Portal 渲染给收件人，脚本与事件属性一律不允许进入设计。
+     */
+    void validateHtmlBody(String bodyHtml, String path, AiValidationResult result) {
+        if (bodyHtml == null || bodyHtml.isBlank()) return;
+        for (Pattern pattern : HTML_BODY_DANGEROUS) {
+            if (pattern.matcher(bodyHtml).find()) {
+                result.addError("HTML_VALIDATION", path,
+                        "Email body contains disallowed content matching: " + pattern.pattern());
+                return;
+            }
         }
     }
 

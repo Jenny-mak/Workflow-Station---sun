@@ -10,6 +10,7 @@ import com.developer.dto.AiValidationResult;
 import com.developer.exception.AiGenerationException;
 import com.developer.exception.AiValidationFailedException;
 import com.developer.service.impl.AiStudioChatServiceImpl;
+import com.developer.service.impl.AiStudioProposalReferenceValidator;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -41,6 +42,7 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
     private final AiValidationService aiValidationService;
     private final AiWriteService aiWriteService;
     private final FunctionUnitWorkspaceAccessService functionUnitWorkspaceAccessService;
+    private final AiStudioProposalReferenceValidator referenceValidator;
     private final ObjectMapper objectMapper;
 
     public AiStudioChatComponentImpl(AiStudioChatService aiStudioChatService,
@@ -49,6 +51,7 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
                                      AiValidationService aiValidationService,
                                      AiWriteService aiWriteService,
                                      FunctionUnitWorkspaceAccessService functionUnitWorkspaceAccessService,
+                                     AiStudioProposalReferenceValidator referenceValidator,
                                      ObjectMapper objectMapper) {
         this.aiStudioChatService = aiStudioChatService;
         this.aiStudioProposalJobService = aiStudioProposalJobService;
@@ -56,6 +59,7 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
         this.aiValidationService = aiValidationService;
         this.aiWriteService = aiWriteService;
         this.functionUnitWorkspaceAccessService = functionUnitWorkspaceAccessService;
+        this.referenceValidator = referenceValidator;
         this.objectMapper = objectMapper;
     }
 
@@ -114,6 +118,15 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
             AiValidationResult validationResult = aiValidationService.validate(data);
             if (!validationResult.isValid()) {
                 throw new AiValidationFailedException(validationResult.getErrors());
+            }
+            // 邮件三阶段的引用（连接、表单、主表字段）都在库里而不在提案里，按 FU 再校一遍
+            AiValidationResult referenceResult = referenceValidator.validate(functionUnitId, data);
+            if (!referenceResult.isValid()) {
+                throw new AiValidationFailedException(referenceResult.getErrors());
+            }
+            if (!referenceResult.getWarnings().isEmpty()) {
+                log.info("AI Studio proposal reference warnings: functionUnitId={}, warnings={}",
+                        functionUnitId, referenceResult.getWarnings());
             }
 
             aiWriteService.applyGeneratedData(functionUnitId, data, request.getScope());

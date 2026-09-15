@@ -17,6 +17,8 @@ import com.developer.exception.AiGenerationException;
 import com.developer.repository.AiDocumentRepository;
 import com.developer.repository.AiMessageRepository;
 import com.developer.repository.AiSessionRepository;
+import com.developer.repository.EmailMonitorRuleRepository;
+import com.developer.repository.EmailTemplateRepository;
 import com.developer.repository.FunctionUnitRepository;
 import com.developer.service.AiGenerationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -72,6 +74,25 @@ public class AiGenerationServiceImpl implements AiGenerationService {
     /** SSE emitter 管理协作类 */
     @Autowired
     private AiSseEmitterManager sseEmitterManager = new AiSseEmitterManager();
+
+    // 邮件模板 / 监控模板不挂在 FunctionUnit 实体上，上下文序列化按 FU 单独查。
+    // 字段注入且可空：脱离 Spring 直接 new 本类的单测拿不到仓库，此时上下文里这两个切片为空列表。
+    @Autowired(required = false)
+    private EmailTemplateRepository emailTemplateRepository;
+
+    @Autowired(required = false)
+    private EmailMonitorRuleRepository emailMonitorRuleRepository;
+
+    /** 主表视图快照与组织目录（VIEW_DESIGN 提案用），同样可空。 */
+    @Autowired(required = false)
+    private com.developer.service.MainTableViewService mainTableViewService;
+
+    @Autowired(required = false)
+    private AiOrgCatalogReader orgCatalogReader;
+
+    /** Automation flow 目录（AUTOMATION 提案用），同样可空。 */
+    @Autowired(required = false)
+    private AiAutomationFlowCatalogReader automationFlowCatalogReader;
 
     // AI gateway 三件套(原 Activepieces flow 的 Build Prompt / Send Http request / Parse Response
     // 三个步骤的 Java 移植)。构造器注入,缺一个就启动失败——不做可空判空。
@@ -270,7 +291,17 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         FunctionUnit fu = functionUnitRepository.findById(functionUnitId)
                 .orElseThrow(() -> new AiGenerationException("AI_FUNCTION_UNIT_NOT_FOUND", "Function unit not found"));
 
-        FunctionUnitContextDTO dto = contextSerializer.buildContextDTO(fu);
+        FunctionUnitContextDTO dto = contextSerializer.buildContextDTO(fu,
+                emailTemplateRepository != null
+                        ? emailTemplateRepository.findByFunctionUnitIdOrderByNameAsc(functionUnitId) : List.of(),
+                emailMonitorRuleRepository != null
+                        ? emailMonitorRuleRepository.findByFunctionUnitIdOrderByNameAsc(functionUnitId) : List.of(),
+                mainTableViewService != null
+                        ? mainTableViewService.snapshotViewsForFunctionUnit(functionUnitId) : List.of(),
+                orgCatalogReader != null ? orgCatalogReader.readContext() : null,
+                automationFlowCatalogReader != null
+                        ? automationFlowCatalogReader.toContext(automationFlowCatalogReader.readForFunctionUnit(functionUnitId))
+                        : List.of());
 
         // Check size and truncate if needed
         byte[] jsonBytes = toJsonBytes(dto);
@@ -531,6 +562,27 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         newEntities.put("formStageBindings", "Array of { stageId, stageName, readOnly: boolean } within formDefinitions[].stageBindings");
         newEntities.put("actionStageBindings", "Non-empty stageIds[] within each actionDefinitions entry; every value is an exact bpmn:userTask id. Numeric actionIds are injected after persistence");
         newEntities.put("userTaskAssignment", "Every bpmn:userTask has custom assigneeType: PROCESS_INITIATOR|ENTITY_MANAGER|FUNCTIONAL_MANAGER|HIERARCHY_ROLE|BU_ROLE|MANUAL_ASSIGN|ASSIGNEE_FROM_VARIABLE|ELEMENT_VARIABLE, plus required role/BU/variable properties");
+        newEntities.put("emailTemplates", "Array of { name, subject, bodyHtml, enabled }. Upsert by name. Variables: ${fieldName} of a MAIN table field only");
+        newEntities.put("emailConnections", "Array of { name (sender email address), connectionType: "
+                + java.util.Arrays.stream(com.developer.enums.ConnectionType.values()).map(Enum::name).collect(Collectors.joining("|"))
+                + ", direction: OUTBOUND|INBOUND, fromName, mailboxAddress, enabled }. Upsert by name+direction. "
+                + "NEVER includes username/password/credentials/host/port/imap settings");
+        newEntities.put("emailMonitorRules", "Array of monitor TEMPLATES { name, enabled, connectionName (existing INBOUND connection with hasCredentials=true), folderLabel, actionType: "
+                + java.util.Arrays.stream(com.developer.enums.EmailMonitorActionType.values()).map(Enum::name).collect(Collectors.joining("|"))
+                + ", targetFormName, extractionRules: { fields: [{ target: MAIN table fieldName, source, type, ... }] }, correlation, pollIntervalSeconds, reviewOnMissing }. "
+                + "Upsert by name. Never includes startEventId/filterFrom/filterSubject/processDefinitionKey");
+        newEntities.put("mainTableViews", "Array of { mainTableName, viewName, restrictToInvolvedUsers, detailFormName (SUB-table views only), "
+                + "accessRules: [{ targetType: ROLE|BUSINESS_UNIT, targetId (id from orgCatalog) }], "
+                + "sortConfig: [{ fieldName, direction: ASC|DESC, systemField }], "
+                + "filterConfig: { logic: and|or, conditions: [{ fieldName, operator: eq|ne|contains|notContains|notStartsWith|endsWith|notEndsWith|gt|lt|isNull|isNotNull, value, systemField }] }, "
+                + "fields: [{ fieldName, displayLabel, columnWidth, sortOrder, visible, systemField, columnType: field }] }. "
+                + "Upsert by mainTableName+viewName; never includes id/mainTableId/detailFormId/isDefault/status. "
+                + "accessRules must be empty (admin-only) or contain BOTH business units AND roles; every role must be listed under one of the chosen business units in orgCatalog. "
+                + "System fields (process_status, start_time, initiator, current_step) exist on MAIN-table views only");
+        newEntities.put("serviceTaskBindings", "Array of { serviceTaskId (exact id of a bpmn:serviceTask listed in serviceTasks), "
+                + "flowKey (flowKey of an entry in automationFlows) }. Applied as an in-place patch of the existing BPMN: "
+                + "writes the ap:flowKey extension property and serviceType=ap, clears legacy ap:* keys. "
+                + "Never includes flowId, webhookUrl, inputMapping, outputMapping, timeoutSeconds, retryCount or serviceType");
         metadata.put("newEntities", newEntities);
 
         return metadata;

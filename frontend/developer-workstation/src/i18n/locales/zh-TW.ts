@@ -2564,6 +2564,19 @@ export default {
         proposalApplyFailed: '應用失敗：{reason}',
         automationMoved: '自動化流程已改為在獨立的「自動化」頁設計；流程設計中的服務任務按業務鍵引用流程。',
         openAutomation: '開啟自動化頁',
+        bindings: {
+          title: '服務任務綁定',
+          hint: '每個服務任務按業務鍵引用一條自動化流程，引擎在部署時把鍵解析為本環境的流程。',
+          task: '服務任務',
+          name: '名稱',
+          type: '類型',
+          flowKey: '流程鍵',
+          unbound: '未綁定',
+          legacy: '舊 id',
+          empty: '流程裡還沒有服務任務，請先在流程設計中新增。',
+          noProcess: '還沒有流程定義，請先設計流程。',
+          loadFailed: '載入流程定義失敗。'
+        },
         phaseDesc: {
           processDesign: '審閱 BPMN 流程、角色與條件。',
           tableDesign: '定義主表、子表、欄位與主外鍵。',

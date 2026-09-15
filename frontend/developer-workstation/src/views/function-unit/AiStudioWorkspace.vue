@@ -207,20 +207,14 @@
             </section>
           </div>
         </div>
-        <!-- Automation 阶段不再内嵌流程编排器（FR-B01/B2）：流程在独立的
-             Automation 页设计，Service Task 面板只填业务键 -->
-        <el-empty
+        <!-- Automation 阶段不内嵌流程编排器（FR-B01/B2）：流程在独立的 Automation 页设计；
+             这里只读展示 BPMN 里各 service task 的 flow 绑定，Apply 提案后随 stageReloadKey 重载 -->
+        <ServiceTaskBindingsPanel
           v-else-if="currentPhase === 'AUTOMATION'"
-          class="automation-moved"
-          :description="t('ai.studio.workspace.automationMoved')"
-        >
-          <el-button
-            type="primary"
-            @click="openAutomationPage"
-          >
-            {{ t('ai.studio.workspace.openAutomation') }}
-          </el-button>
-        </el-empty>
+          :key="`automation-${stageReloadKey}`"
+          :function-unit-id="fuId"
+          @open-automation="openAutomationPage"
+        />
         <component
           :is="PHASE_COMPONENT[currentPhase]"
           v-else
@@ -438,6 +432,7 @@ import EmailTemplateDesigner from '@/components/designer/EmailTemplateDesigner.v
 import EmailMonitorDesigner from '@/components/designer/EmailMonitorDesigner.vue'
 import DecisionList from '@/components/designer/DecisionList.vue'
 import MarkdownRenderer from '@/components/ai/MarkdownRenderer.vue'
+import ServiceTaskBindingsPanel from '@/components/ai/ServiceTaskBindingsPanel.vue'
 import {
   AI_STUDIO_PHASES,
   aiStudioPhaseLabel,
@@ -660,8 +655,10 @@ function copilotHistory(phase: AiStudioPhase) {
 }
 
 /** 结构化提案仅在有 generatedData 切片的阶段可用（与后端 PROPOSAL_SCOPE_BY_PHASE 一致）。 */
-const PROPOSAL_PHASES: readonly AiStudioPhase[] =
-  ['PROCESS_DESIGN', 'TABLE_DESIGN', 'FORM_DESIGN', 'ACTION_DESIGN', 'DECISION_DESIGN']
+const PROPOSAL_PHASES: readonly AiStudioPhase[] = [
+  'PROCESS_DESIGN', 'TABLE_DESIGN', 'FORM_DESIGN', 'VIEW_DESIGN', 'ACTION_DESIGN', 'AUTOMATION',
+  'DECISION_DESIGN', 'EMAIL_TEMPLATES', 'CONNECTIONS', 'EMAIL_MONITORS'
+]
 const proposalSupported = computed(() => PROPOSAL_PHASES.includes(currentPhase.value))
 
 async function sendCopilotMessage(propose = false) {
@@ -836,6 +833,12 @@ function proposalItems(data: Record<string, unknown>): { label: string; count: n
   push('formDefinitions', t('functionUnit.forms'))
   push('actionDefinitions', t('functionUnit.actionDesign'))
   push('decisionDefinitions', t('functionUnit.decisions'))
+  // 邮件三阶段：与设计器 Tab 同名，upsert 语义（数量 = 提案里点名的新增/修改项）
+  push('emailTemplates', t('emailTemplate.title'))
+  push('emailConnections', t('connection.title'))
+  push('emailMonitorRules', t('emailMonitor.title'))
+  push('mainTableViews', t('functionUnit.viewDesign'))
+  push('serviceTaskBindings', t('functionUnit.automation'))
   if (data.processDefinition) items.push({ label: t('functionUnit.process'), count: null })
   return items
 }

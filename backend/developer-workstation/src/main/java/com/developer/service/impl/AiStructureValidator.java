@@ -368,9 +368,344 @@ public class AiStructureValidator {
         }
     }
 
+    /** 连接切片里不由提案决定的键：凭证类是安全红线，主机/端口由 Admin Center 系统配置解析。 */
+    private static final Set<String> CONNECTION_FORBIDDEN_KEYS = Set.of(
+            "username", "password", "credential", "credentialencrypted", "oauthprovider",
+            "oauthrefreshtokenencrypted", "oauthaccesstokenencrypted", "oauthscopes", "tokenexpiresat",
+            "host", "port", "usetls", "imaphost", "imapport", "imapusessl", "connectionuid");
+
+    /** 监控模板不允许携带的键（起始事件绑定与过滤条件在 Process Design 里另建副本）。 */
+    private static final Set<String> MONITOR_TEMPLATE_FORBIDDEN_KEYS = Set.of(
+            "starteventid", "filterfrom", "filtersubject", "processdefinitionkey", "sourceruleid", "ruleuid");
+
+    private static final Set<String> EXTRACTION_SOURCES = Set.of(
+            "SUBJECT", "FROM", "TO", "CC", "REPLY_TO", "DATE", "MESSAGE_ID", "TEXT", "HTML",
+            "TEXT_AND_HTML", "ATTACHMENTS", "RAW_EML", "HEADER", "CONST");
+
+    private static final Set<String> EXTRACTION_TYPES = Set.of(
+            "DIRECT", "CONST", "LABEL", "BETWEEN", "REGEX", "HEADER");
+
+    private static final java.util.regex.Pattern EMAIL_ADDRESS = java.util.regex.Pattern.compile(
+            "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+
+    void validateEmailTemplates(List<Map<String, Object>> templates, AiValidationResult result) {
+        if (templates == null) return;
+        for (int i = 0; i < templates.size(); i++) {
+            Map<String, Object> t = templates.get(i);
+            String path = "emailTemplates[" + i + "]";
+            String name = t.get("name") instanceof String s ? s.trim() : null;
+            if (name == null || name.isEmpty()) {
+                result.addError("FIELD_CONSTRAINT", path + ".name", "name must not be empty");
+            } else if (name.length() > 100) {
+                result.addError("FIELD_CONSTRAINT", path + ".name", "name must not exceed 100 characters");
+            }
+            if (t.get("subject") instanceof String subject && subject.length() > 500) {
+                result.addError("FIELD_CONSTRAINT", path + ".subject", "subject must not exceed 500 characters");
+            }
+            if (t.get("bodyHtml") != null && !(t.get("bodyHtml") instanceof String)) {
+                result.addError("FIELD_CONSTRAINT", path + ".bodyHtml", "bodyHtml must be a string");
+            } else {
+                securityValidator.validateHtmlBody((String) t.get("bodyHtml"), path + ".bodyHtml", result);
+            }
+        }
+    }
+
+    void validateEmailConnections(List<Map<String, Object>> connections, AiValidationResult result) {
+        if (connections == null) return;
+        for (int i = 0; i < connections.size(); i++) {
+            Map<String, Object> c = connections.get(i);
+            String path = "emailConnections[" + i + "]";
+            for (String key : c.keySet()) {
+                if (CONNECTION_FORBIDDEN_KEYS.contains(key.toLowerCase())) {
+                    // fail-closed：凭证与主机从不经由 AI 提案进入系统
+                    result.addError("FORBIDDEN_FIELD", path + "." + key,
+                            "Connection proposals must not carry credential or endpoint fields: " + key);
+                }
+            }
+            String name = c.get("name") instanceof String s ? s.trim() : null;
+            if (name == null || name.isEmpty()) {
+                result.addError("FIELD_CONSTRAINT", path + ".name", "name (sender email address) must not be empty");
+            } else if (!EMAIL_ADDRESS.matcher(name).matches()) {
+                result.addError("FIELD_CONSTRAINT", path + ".name", "name must be a valid email address: " + name);
+            }
+            validateEnumValue(c.get("connectionType"), ConnectionType.class, path + ".connectionType", result);
+            validateEnumValue(c.get("direction"), EmailConnectionDirection.class, path + ".direction", result);
+            if ("BOTH".equals(c.get("direction"))) {
+                result.addError("INVALID_ENUM", path + ".direction", "direction BOTH is no longer supported; use OUTBOUND or INBOUND");
+            }
+            if (c.get("fromName") instanceof String fromName && fromName.length() > 100) {
+                result.addError("FIELD_CONSTRAINT", path + ".fromName", "fromName must not exceed 100 characters");
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    void validateEmailMonitorRules(List<Map<String, Object>> rules, AiValidationResult result) {
+        if (rules == null) return;
+        for (int i = 0; i < rules.size(); i++) {
+            Map<String, Object> r = rules.get(i);
+            String path = "emailMonitorRules[" + i + "]";
+            for (String key : r.keySet()) {
+                if (MONITOR_TEMPLATE_FORBIDDEN_KEYS.contains(key.toLowerCase())) {
+                    result.addError("FORBIDDEN_FIELD", path + "." + key,
+                            "Monitor proposals describe templates only; start-event binding and filters are not allowed: " + key);
+                }
+            }
+            String name = r.get("name") instanceof String s ? s.trim() : null;
+            if (name == null || name.isEmpty()) {
+                result.addError("FIELD_CONSTRAINT", path + ".name", "name must not be empty");
+            } else if (name.length() > 100) {
+                result.addError("FIELD_CONSTRAINT", path + ".name", "name must not exceed 100 characters");
+            }
+            if (!(r.get("connectionName") instanceof String cn) || cn.isBlank()) {
+                result.addError("FIELD_CONSTRAINT", path + ".connectionName", "connectionName must not be empty");
+            }
+            validateEnumValue(r.get("actionType"), EmailMonitorActionType.class, path + ".actionType", result);
+            Object rulesObj = r.get("extractionRules");
+            if (rulesObj != null && !(rulesObj instanceof Map)) {
+                result.addError("FIELD_CONSTRAINT", path + ".extractionRules", "extractionRules must be an object");
+            } else if (rulesObj instanceof Map<?, ?> er && er.get("fields") != null) {
+                if (!(er.get("fields") instanceof List<?> fields)) {
+                    result.addError("FIELD_CONSTRAINT", path + ".extractionRules.fields", "fields must be an array");
+                } else {
+                    for (int j = 0; j < fields.size(); j++) {
+                        String fp = path + ".extractionRules.fields[" + j + "]";
+                        if (!(fields.get(j) instanceof Map<?, ?> f)) {
+                            result.addError("FIELD_CONSTRAINT", fp, "field rule must be an object");
+                            continue;
+                        }
+                        if (!(f.get("target") instanceof String target) || target.isBlank()) {
+                            result.addError("FIELD_CONSTRAINT", fp + ".target", "target must not be empty");
+                        }
+                        if (f.get("source") != null && !EXTRACTION_SOURCES.contains(String.valueOf(f.get("source")))) {
+                            result.addError("INVALID_ENUM", fp + ".source", "Invalid extraction source: " + f.get("source"));
+                        }
+                        if (f.get("type") != null && !EXTRACTION_TYPES.contains(String.valueOf(f.get("type")))) {
+                            result.addError("INVALID_ENUM", fp + ".type", "Invalid extraction type: " + f.get("type"));
+                        }
+                    }
+                }
+            }
+            if (r.get("pollIntervalSeconds") != null && toInt(r.get("pollIntervalSeconds")) <= 0) {
+                result.addError("FIELD_CONSTRAINT", path + ".pollIntervalSeconds", "pollIntervalSeconds must be > 0");
+            }
+        }
+    }
+
     void validateIcon(Map<String, Object> icon, AiValidationResult result) {
         if (icon == null) return;
         validateEnumValue(icon.get("category"), IconCategory.class, "icon.category", result);
+    }
+
+    /** 视图切片里由平台决定、提案不得携带的键。 */
+    private static final Set<String> VIEW_FORBIDDEN_KEYS = Set.of(
+            "id", "maintableid", "detailformid", "isdefault", "status", "functionunitid");
+
+    /** 与设计器 useMainTableViewDesigner 的 opMap 一致。 */
+    private static final Set<String> VIEW_FILTER_OPERATORS = Set.of(
+            "eq", "ne", "contains", "notContains", "notStartsWith", "endsWith", "notEndsWith",
+            "gt", "lt", "isNull", "isNotNull");
+
+    @SuppressWarnings("unchecked")
+    void validateMainTableViews(List<Map<String, Object>> views, AiValidationResult result) {
+        if (views == null) return;
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < views.size(); i++) {
+            Map<String, Object> v = views.get(i);
+            String path = "mainTableViews[" + i + "]";
+            for (String key : v.keySet()) {
+                if (VIEW_FORBIDDEN_KEYS.contains(key.toLowerCase())) {
+                    result.addError("FORBIDDEN_FIELD", path + "." + key,
+                            "View proposals must not carry platform-assigned fields: " + key);
+                }
+            }
+            String mainTableName = v.get("mainTableName") instanceof String s ? s.trim() : "";
+            String viewName = v.get("viewName") instanceof String s ? s.trim() : "";
+            if (mainTableName.isEmpty()) {
+                result.addError("FIELD_CONSTRAINT", path + ".mainTableName", "mainTableName must not be empty");
+            }
+            if (viewName.isEmpty()) {
+                result.addError("FIELD_CONSTRAINT", path + ".viewName", "viewName must not be empty");
+            } else if (viewName.length() > 200) {
+                result.addError("FIELD_CONSTRAINT", path + ".viewName", "viewName must not exceed 200 characters");
+            }
+            if (!mainTableName.isEmpty() && !viewName.isEmpty() && !seen.add(mainTableName + "\u0000" + viewName)) {
+                result.addError("DUPLICATE", path + ".viewName",
+                        "Duplicate view '" + viewName + "' on table '" + mainTableName + "' within the proposal");
+            }
+            if (v.get("restrictToInvolvedUsers") != null && !(v.get("restrictToInvolvedUsers") instanceof Boolean)) {
+                result.addError("FIELD_CONSTRAINT", path + ".restrictToInvolvedUsers", "restrictToInvolvedUsers must be a boolean");
+            }
+            validateViewFields(v.get("fields"), path + ".fields", result);
+            validateViewSort(v.get("sortConfig"), path + ".sortConfig", result);
+            validateViewFilter(v.get("filterConfig"), path + ".filterConfig", result, 0);
+            validateViewAccessRules(v.get("accessRules"), path + ".accessRules", result);
+        }
+    }
+
+    private void validateViewFields(Object fieldsObj, String path, AiValidationResult result) {
+        if (fieldsObj == null) return;
+        if (!(fieldsObj instanceof List<?> fields)) {
+            result.addError("FIELD_CONSTRAINT", path, "fields must be an array");
+            return;
+        }
+        for (int j = 0; j < fields.size(); j++) {
+            String fp = path + "[" + j + "]";
+            if (!(fields.get(j) instanceof Map<?, ?> f)) {
+                result.addError("FIELD_CONSTRAINT", fp, "field must be an object");
+                continue;
+            }
+            if (!(f.get("fieldName") instanceof String fn) || fn.isBlank()) {
+                result.addError("FIELD_CONSTRAINT", fp + ".fieldName", "fieldName must not be empty");
+            }
+            if (f.get("displayLabel") instanceof String label && label.length() > 200) {
+                result.addError("FIELD_CONSTRAINT", fp + ".displayLabel", "displayLabel must not exceed 200 characters");
+            }
+            if (f.get("columnType") instanceof String ct && !ct.isBlank() && !"field".equalsIgnoreCase(ct.trim())) {
+                result.addError("INVALID_ENUM", fp + ".columnType",
+                        "columnType '" + ct + "' is not supported in proposals; only 'field' columns can be proposed");
+            }
+            if (f.get("columnWidth") != null && !(f.get("columnWidth") instanceof Number)) {
+                result.addError("FIELD_CONSTRAINT", fp + ".columnWidth", "columnWidth must be a number");
+            }
+            if (f.get("visible") != null && !(f.get("visible") instanceof Boolean)) {
+                result.addError("FIELD_CONSTRAINT", fp + ".visible", "visible must be a boolean");
+            }
+            if (f.get("systemField") != null && !(f.get("systemField") instanceof Boolean)) {
+                result.addError("FIELD_CONSTRAINT", fp + ".systemField", "systemField must be a boolean");
+            }
+        }
+    }
+
+    private void validateViewSort(Object sortObj, String path, AiValidationResult result) {
+        if (sortObj == null) return;
+        if (!(sortObj instanceof List<?> sorts)) {
+            result.addError("FIELD_CONSTRAINT", path, "sortConfig must be an array");
+            return;
+        }
+        for (int j = 0; j < sorts.size(); j++) {
+            String sp = path + "[" + j + "]";
+            if (!(sorts.get(j) instanceof Map<?, ?> s)) {
+                result.addError("FIELD_CONSTRAINT", sp, "sort entry must be an object");
+                continue;
+            }
+            if (!(s.get("fieldName") instanceof String fn) || fn.isBlank()) {
+                result.addError("FIELD_CONSTRAINT", sp + ".fieldName", "fieldName must not be empty");
+            }
+            Object dir = s.get("direction");
+            if (!(dir instanceof String d) || !("ASC".equalsIgnoreCase(d) || "DESC".equalsIgnoreCase(d))) {
+                result.addError("INVALID_ENUM", sp + ".direction", "direction must be ASC or DESC");
+            }
+        }
+    }
+
+    private void validateViewFilter(Object filterObj, String path, AiValidationResult result, int depth) {
+        if (filterObj == null) return;
+        if (!(filterObj instanceof Map<?, ?> filter)) {
+            result.addError("FIELD_CONSTRAINT", path, "filterConfig must be an object");
+            return;
+        }
+        if (filter.get("logic") instanceof String logic
+                && !("and".equalsIgnoreCase(logic) || "or".equalsIgnoreCase(logic))) {
+            result.addError("INVALID_ENUM", path + ".logic", "logic must be 'and' or 'or'");
+        }
+        Object conds = filter.get("conditions");
+        if (conds != null) {
+            if (!(conds instanceof List<?> list)) {
+                result.addError("FIELD_CONSTRAINT", path + ".conditions", "conditions must be an array");
+            } else {
+                for (int j = 0; j < list.size(); j++) {
+                    String cp = path + ".conditions[" + j + "]";
+                    if (!(list.get(j) instanceof Map<?, ?> c)) {
+                        result.addError("FIELD_CONSTRAINT", cp, "condition must be an object");
+                        continue;
+                    }
+                    if (!(c.get("fieldName") instanceof String fn) || fn.isBlank()) {
+                        result.addError("FIELD_CONSTRAINT", cp + ".fieldName", "fieldName must not be empty");
+                    }
+                    if (!(c.get("operator") instanceof String op) || !VIEW_FILTER_OPERATORS.contains(op)) {
+                        result.addError("INVALID_ENUM", cp + ".operator",
+                                "operator must be one of " + VIEW_FILTER_OPERATORS + ": " + c.get("operator"));
+                    }
+                }
+            }
+        }
+        Object groups = filter.get("groups");
+        if (groups != null) {
+            if (!(groups instanceof List<?> list)) {
+                result.addError("FIELD_CONSTRAINT", path + ".groups", "groups must be an array");
+            } else if (depth >= 3) {
+                result.addError("FIELD_CONSTRAINT", path + ".groups", "filter groups nest too deeply (max 3)");
+            } else {
+                for (int j = 0; j < list.size(); j++) {
+                    validateViewFilter(list.get(j), path + ".groups[" + j + "]", result, depth + 1);
+                }
+            }
+        }
+    }
+
+    private void validateViewAccessRules(Object rulesObj, String path, AiValidationResult result) {
+        if (rulesObj == null) return;
+        if (!(rulesObj instanceof List<?> rules)) {
+            result.addError("FIELD_CONSTRAINT", path, "accessRules must be an array");
+            return;
+        }
+        List<com.developer.dto.MainTableViewDtos.MainTableViewAccessRuleDTO> dtos = new java.util.ArrayList<>();
+        for (int j = 0; j < rules.size(); j++) {
+            String rp = path + "[" + j + "]";
+            if (!(rules.get(j) instanceof Map<?, ?> r)) {
+                result.addError("FIELD_CONSTRAINT", rp, "access rule must be an object");
+                continue;
+            }
+            validateEnumValue(r.get("targetType"), MainTableViewAccessTargetType.class, rp + ".targetType", result);
+            if (!(r.get("targetId") instanceof String id) || id.isBlank()) {
+                result.addError("FIELD_CONSTRAINT", rp + ".targetId", "targetId must not be empty");
+            }
+            dtos.add(com.developer.dto.MainTableViewDtos.MainTableViewAccessRuleDTO.builder()
+                    .targetType(r.get("targetType") instanceof String t ? t : null)
+                    .targetId(r.get("targetId") instanceof String id ? id : null)
+                    .build());
+        }
+        try {
+            // 与设计器 Save / 导入同一条成对规则
+            com.developer.util.MainTableViewAccessRulesValidator.validatePairedOrEmpty(dtos);
+        } catch (com.developer.exception.DeveloperBusinessException ex) {
+            result.addError(com.developer.util.MainTableViewAccessRulesValidator.PAIR_ERROR_CODE, path,
+                    com.developer.util.MainTableViewAccessRulesValidator.PAIR_ERROR_MESSAGE);
+        }
+    }
+
+    /** 绑定切片里不由提案决定的键（去掉 ap: 前缀、小写后比对）：legacy 配置与类型标记都由补丁器负责。 */
+    private static final Set<String> BINDING_FORBIDDEN_KEYS = Set.of(
+            "flowid", "webhookurl", "inputmapping", "outputmapping", "timeoutseconds", "retrycount", "servicetype");
+
+    void validateServiceTaskBindings(List<Map<String, Object>> bindings, AiValidationResult result) {
+        if (bindings == null) return;
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < bindings.size(); i++) {
+            Map<String, Object> b = bindings.get(i);
+            String path = "serviceTaskBindings[" + i + "]";
+            for (String key : b.keySet()) {
+                String normalized = key.toLowerCase().startsWith("ap:") ? key.substring(3).toLowerCase() : key.toLowerCase();
+                if (BINDING_FORBIDDEN_KEYS.contains(normalized)) {
+                    result.addError("FORBIDDEN_FIELD", path + "." + key,
+                            "Service task binding proposals carry only serviceTaskId and flowKey: " + key);
+                }
+            }
+            String taskId = b.get("serviceTaskId") instanceof String s ? s.trim() : "";
+            String flowKey = b.get("flowKey") instanceof String s ? s.trim() : "";
+            if (taskId.isEmpty()) {
+                result.addError("FIELD_CONSTRAINT", path + ".serviceTaskId", "serviceTaskId must not be empty");
+            } else if (!seen.add(taskId)) {
+                result.addError("DUPLICATE", path + ".serviceTaskId",
+                        "Service task '" + taskId + "' is bound more than once in the proposal");
+            }
+            if (flowKey.isEmpty()) {
+                result.addError("FIELD_CONSTRAINT", path + ".flowKey", "flowKey must not be empty");
+            } else if (flowKey.length() > 255) {
+                result.addError("FIELD_CONSTRAINT", path + ".flowKey", "flowKey must not exceed 255 characters");
+            }
+        }
     }
 
     private <E extends Enum<E>> void validateEnumValue(Object value, Class<E> enumClass,

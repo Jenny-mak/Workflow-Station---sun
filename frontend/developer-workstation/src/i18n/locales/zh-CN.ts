@@ -2563,6 +2563,19 @@ export default {
         proposalApplyFailed: '应用失败：{reason}',
         automationMoved: '自动化流程已改为在独立的「自动化」页设计；流程设计中的服务任务按业务键引用流程。',
         openAutomation: '打开自动化页',
+        bindings: {
+          title: '服务任务绑定',
+          hint: '每个服务任务按业务键引用一条自动化流程，引擎在部署时把键解析为本环境的流程。',
+          task: '服务任务',
+          name: '名称',
+          type: '类型',
+          flowKey: '流程键',
+          unbound: '未绑定',
+          legacy: '旧 id',
+          empty: '流程里还没有服务任务，请先在流程设计中添加。',
+          noProcess: '还没有流程定义，请先设计流程。',
+          loadFailed: '加载流程定义失败。'
+        },
         phaseDesc: {
           processDesign: '审阅 BPMN 流程、角色与条件。',
           tableDesign: '定义主表、子表、字段与主外键。',

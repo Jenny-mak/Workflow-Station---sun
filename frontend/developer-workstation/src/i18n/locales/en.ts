@@ -2570,6 +2570,19 @@ export default {
         proposalApplyFailed: 'Apply failed: {reason}',
         automationMoved: 'Automation flows are now designed on the standalone Automation page; the service task in Process Design references a flow by its business key.',
         openAutomation: 'Open Automation page',
+        bindings: {
+          title: 'Service task bindings',
+          hint: 'Each service task references an automation flow by its business key; the engine resolves the key at deploy time.',
+          task: 'Service task',
+          name: 'Name',
+          type: 'Type',
+          flowKey: 'Flow key',
+          unbound: 'Not bound',
+          legacy: 'legacy id',
+          empty: 'The process has no service task yet — add one in Process Design first.',
+          noProcess: 'No process definition yet — design the process first.',
+          loadFailed: 'Could not load the process definition.'
+        },
         phaseDesc: {
           processDesign: 'Review the BPMN flow, roles and conditions.',
           tableDesign: 'Define main and sub tables, fields and keys.',

@@ -16,6 +16,7 @@ import com.developer.util.XmlEncodingUtil;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +44,21 @@ public class AiWriteServiceImpl implements AiWriteService {
     private final FunctionUnitRepository functionUnitRepository;
     private final IconRepository iconRepository;
     private final EntityManager entityManager;
+
+    /**
+     * 邮件三阶段（模板/连接/监控模板）的 upsert 写入协作类。字段注入且可空：
+     * 脱离 Spring 直接 new 本类的单测拿不到它，此时带邮件切片的写入会显式失败而不是静默跳过。
+     */
+    @Autowired(required = false)
+    private AiEmailProposalWriter emailProposalWriter;
+
+    /** 主表视图的 upsert 写入协作类（VIEW_DESIGN 提案），同样字段注入且可空。 */
+    @Autowired(required = false)
+    private AiViewProposalWriter viewProposalWriter;
+
+    /** service task → Automation flow 绑定的 BPMN 定点补丁（AUTOMATION 提案），同样可空。 */
+    @Autowired(required = false)
+    private AiServiceTaskBindingWriter serviceTaskBindingWriter;
 
     @Override
     public void applyGeneratedData(Long functionUnitId, AiGeneratedData generatedData, String regenerateScope) {
@@ -86,6 +102,33 @@ public class AiWriteServiceImpl implements AiWriteService {
         // the sub table's id in BPMN, and the sub-table binding's id that keys the sub-form
         // carrying the assignment component. Both are resolvable only after the flush above.
         writeMultiInstanceAssignment(functionUnit, processReplaced);
+
+        // 邮件模板 / 连接 / 监控模板：按业务名 upsert，经设计器 Component 落库（见 AiEmailProposalWriter）
+        if (AiEmailProposalWriter.hasEmailSlices(generatedData)) {
+            if (emailProposalWriter == null) {
+                throw new AiGenerationException("AI_WRITE_EMAIL_WRITER_UNAVAILABLE",
+                        "Email proposal writer is not wired; cannot apply email slices");
+            }
+            emailProposalWriter.write(functionUnit, generatedData);
+        }
+
+        // 主表视图：按 (mainTableName, viewName) upsert，经 MainTableViewService 落库（见 AiViewProposalWriter）
+        if (AiViewProposalWriter.hasViewSlice(generatedData)) {
+            if (viewProposalWriter == null) {
+                throw new AiGenerationException("AI_WRITE_VIEW_WRITER_UNAVAILABLE",
+                        "View proposal writer is not wired; cannot apply mainTableViews");
+            }
+            viewProposalWriter.write(functionUnit, generatedData);
+        }
+
+        // service task 绑定：对（本轮或存量）流程定义做定点补丁，必须在 process 切片落地之后
+        if (AiServiceTaskBindingWriter.hasBindingSlice(generatedData)) {
+            if (serviceTaskBindingWriter == null) {
+                throw new AiGenerationException("AI_WRITE_BINDING_WRITER_UNAVAILABLE",
+                        "Service task binding writer is not wired; cannot apply serviceTaskBindings");
+            }
+            serviceTaskBindingWriter.write(functionUnit, generatedData);
+        }
 
         // Handle icon matching/creation before saving
         handleIcon(functionUnit, generatedData);
@@ -146,6 +189,9 @@ public class AiWriteServiceImpl implements AiWriteService {
                 functionUnit.getTableRelations().clear();
                 entityManager.flush();
             }
+            // 邮件三阶段与视图是按名 upsert、从不删除：这里必须显式 no-op，否则落到 default 会把整个设计清空
+            case "EMAIL_TEMPLATES", "CONNECTIONS", "EMAIL_MONITORS", "VIEWS", "SERVICE_TASK_BINDINGS" ->
+                    log.info("Scope '{}' is upsert-only; nothing to clear", scope);
             default -> {
                 log.warn("Unknown regenerate scope '{}', falling back to full clear", scope);
                 clearExistingData(functionUnit);

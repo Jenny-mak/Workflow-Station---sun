@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -146,8 +147,47 @@ class AiStudioChatServiceImplTest {
     }
 
     @Test
+    void proposeOnEmailPhaseUsesUpsertScopeAndKeepsOnlyItsSlice() {
+        AiStudioChatRequest req = request("EMAIL_TEMPLATES", "add an approval notification", null);
+        req.setPropose(true);
+
+        FunctionUnitContextDTO context = new FunctionUnitContextDTO();
+        List<Map<String, Object>> templates = List.of(Map.of("name", "Approved", "subject", "s", "bodyHtml", "<p/>"));
+        Map<String, Object> generated = Map.of(
+                "emailTemplates", templates,
+                "emailConnections", List.of(Map.of("name", "should-be-stripped@x.com")));
+        when(aiGenerationService.serializeFunctionUnitContext(1L)).thenReturn(context);
+        when(aiGenerationService.determineMode(1L)).thenReturn(AiMode.MODIFY);
+        when(aiGenerationService.callAiModel(any(),
+                org.mockito.ArgumentMatchers.argThat((String msg) -> msg != null
+                        && msg.contains("Regenerate ONLY the 'EMAIL_TEMPLATES' slice")
+                        && msg.contains("applied as an upsert keyed by name")),
+                eq(AiPhase.GENERATION), eq(AiMode.MODIFY), eq(context), eq(1L), eq(null),
+                eq("EMAIL_TEMPLATES"), eq("tok")))
+                .thenReturn(Map.of("reply", "Added a template.", "generatedData", generated));
+
+        StudioChatResult result = service.chat(req, "tok");
+
+        assertEquals(Map.of("emailTemplates", templates), result.proposal());
+        assertEquals("EMAIL_TEMPLATES", result.proposalScope());
+    }
+
+    @Test
+    void connectionsAndMonitorsPhasesMapToTheirOwnScopes() {
+        assertEquals(java.util.Set.of("emailConnections"), AiStudioChatServiceImpl.allowedSlices("CONNECTIONS"));
+        assertEquals(java.util.Set.of("emailMonitorRules"), AiStudioChatServiceImpl.allowedSlices("EMAIL_MONITORS"));
+        assertTrue(AiStudioChatServiceImpl.allowedSlices("ALL").contains("emailTemplates"));
+        assertEquals(java.util.Set.of("mainTableViews"), AiStudioChatServiceImpl.allowedSlices("VIEWS"));
+        assertTrue(AiStudioChatServiceImpl.UPSERT_SCOPES.contains("VIEWS"));
+        assertEquals(java.util.Set.of("serviceTaskBindings"), AiStudioChatServiceImpl.allowedSlices("SERVICE_TASK_BINDINGS"));
+        assertTrue(AiStudioChatServiceImpl.UPSERT_SCOPES.contains("SERVICE_TASK_BINDINGS"));
+        // 非 upsert scope 的提案消息不带 upsert 提示
+        assertFalse(AiStudioChatServiceImpl.UPSERT_SCOPES.contains("TABLES"));
+    }
+
+    @Test
     void proposeOnUnsupportedPhaseFailsExplicitly() {
-        AiStudioChatRequest req = request("CONNECTIONS", "change something", null);
+        AiStudioChatRequest req = request("VALIDATION", "change something", null);
         req.setPropose(true);
 
         AiGenerationException ex = assertThrows(AiGenerationException.class, () -> service.chat(req, "t"));

@@ -57,15 +57,24 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
 
     /**
      * propose 轮次的写入范围：AI Studio 阶段 → AiWriteService 的 regenerateScope。
-     * 不在表里的阶段（View/Automation/Connections/Email/Validation）没有对应的
-     * generatedData 切片，不支持结构化提案。
+     * 只有 Validation 阶段没有对应的 generatedData 切片（它是校验门禁，无设计产物）。
+     * 邮件三阶段、视图与 service task 绑定的切片是 upsert 语义（见 {@code AiWriteServiceImpl}）。
      */
-    private static final Map<String, String> PROPOSAL_SCOPE_BY_PHASE = Map.of(
-            "PROCESS_DESIGN", "PROCESS",
-            "TABLE_DESIGN", "TABLES",
-            "FORM_DESIGN", "FORMS",
-            "ACTION_DESIGN", "ACTIONS",
-            "DECISION_DESIGN", "DECISIONS");
+    private static final Map<String, String> PROPOSAL_SCOPE_BY_PHASE = Map.ofEntries(
+            Map.entry("PROCESS_DESIGN", "PROCESS"),
+            Map.entry("TABLE_DESIGN", "TABLES"),
+            Map.entry("FORM_DESIGN", "FORMS"),
+            Map.entry("ACTION_DESIGN", "ACTIONS"),
+            Map.entry("DECISION_DESIGN", "DECISIONS"),
+            Map.entry("EMAIL_TEMPLATES", "EMAIL_TEMPLATES"),
+            Map.entry("CONNECTIONS", "CONNECTIONS"),
+            Map.entry("EMAIL_MONITORS", "EMAIL_MONITORS"),
+            Map.entry("VIEW_DESIGN", "VIEWS"),
+            Map.entry("AUTOMATION", "SERVICE_TASK_BINDINGS"));
+
+    /** 按业务键 upsert 的 scope：提案只列新增/修改项，未提及的对象保持不变。 */
+    static final Set<String> UPSERT_SCOPES = Set.of(
+            "EMAIL_TEMPLATES", "CONNECTIONS", "EMAIL_MONITORS", "VIEWS", "SERVICE_TASK_BINDINGS");
 
     /**
      * scope → 允许写入的 generatedData 切片，与 {@code AiWriteServiceImpl#clearScopedData}
@@ -73,13 +82,18 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
      * 顺手带上范围外的切片（如 processDefinition）——写入层会照单全写，撞上"每 FU 一份流程
      * 定义"这类唯一约束，所以提案返回前与 Apply 落库前都必须按这张表裁剪。
      */
-    private static final Map<String, Set<String>> SCOPE_SLICES = Map.of(
-            "TABLES", Set.of("tableDefinitions", "tableRelations"),
-            "TABLE_RELATIONS", Set.of("tableRelations"),
-            "FORMS", Set.of("formDefinitions"),
-            "ACTIONS", Set.of("actionDefinitions"),
-            "DECISIONS", Set.of("decisionDefinitions"),
-            "PROCESS", Set.of("processDefinition"));
+    private static final Map<String, Set<String>> SCOPE_SLICES = Map.ofEntries(
+            Map.entry("TABLES", Set.of("tableDefinitions", "tableRelations")),
+            Map.entry("TABLE_RELATIONS", Set.of("tableRelations")),
+            Map.entry("FORMS", Set.of("formDefinitions")),
+            Map.entry("ACTIONS", Set.of("actionDefinitions")),
+            Map.entry("DECISIONS", Set.of("decisionDefinitions")),
+            Map.entry("PROCESS", Set.of("processDefinition")),
+            Map.entry("EMAIL_TEMPLATES", Set.of("emailTemplates")),
+            Map.entry("CONNECTIONS", Set.of("emailConnections")),
+            Map.entry("EMAIL_MONITORS", Set.of("emailMonitorRules")),
+            Map.entry("VIEWS", Set.of("mainTableViews")),
+            Map.entry("SERVICE_TASK_BINDINGS", Set.of("serviceTaskBindings")));
 
     /** scope 允许的切片 key；ALL 返回全部。供本类与 Apply 编排（component）共用。 */
     public static Set<String> allowedSlices(String scope) {
@@ -177,11 +191,16 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
      * 即便模型仍旧多给，{@code allowedSlices} 的裁剪也会兜住，但少生成就少一次校验失败的机会。</p>
      */
     private String buildProposalMessage(AiStudioChatRequest request, String scope) {
+        String upsertNote = UPSERT_SCOPES.contains(scope)
+                ? "This slice is applied as an upsert keyed by name: list ONLY the items you add or change; "
+                        + "every existing item you do not list stays untouched, nothing is deleted.\n"
+                : "";
         return buildTranscript(request) + "\n\n"
                 + "========== Scoped change request (system-provided, highest priority) ==========\n"
                 + "Regenerate ONLY the '" + scope + "' slice of the design to fulfil the user's latest request.\n"
                 + "The GENERATED_DATA block must contain exactly these keys and nothing else: "
                 + allowedSlices(scope) + ".\n"
+                + upsertNote
                 + "Do NOT output any other slice (no process, forms, actions, decisions or tables outside the "
                 + "scope), do NOT rename the function unit, and do NOT include an icon.\n"
                 + "========== End of scoped change request ==========";

@@ -3,6 +3,9 @@ package com.developer.service.impl;
 import com.developer.dto.FunctionUnitContextDTO;
 import com.developer.entity.ActionDefinition;
 import com.developer.entity.DecisionDefinition;
+import com.developer.entity.EmailConnection;
+import com.developer.entity.EmailMonitorRule;
+import com.developer.entity.EmailTemplate;
 import com.developer.entity.FieldDefinition;
 import com.developer.entity.ForeignKey;
 import com.developer.entity.FormDefinition;
@@ -30,6 +33,39 @@ import java.util.stream.Collectors;
 class AiContextSerializer {
 
     FunctionUnitContextDTO buildContextDTO(FunctionUnit fu) {
+        return buildContextDTO(fu, List.of(), List.of());
+    }
+
+    FunctionUnitContextDTO buildContextDTO(FunctionUnit fu,
+                                           List<EmailTemplate> emailTemplates,
+                                           List<EmailMonitorRule> emailMonitorRules) {
+        return buildContextDTO(fu, emailTemplates, emailMonitorRules, List.of(), null, List.of());
+    }
+
+    FunctionUnitContextDTO buildContextDTO(FunctionUnit fu,
+                                           List<EmailTemplate> emailTemplates,
+                                           List<EmailMonitorRule> emailMonitorRules,
+                                           List<Map<String, Object>> viewSnapshots,
+                                           Map<String, Object> orgCatalog) {
+        return buildContextDTO(fu, emailTemplates, emailMonitorRules, viewSnapshots, orgCatalog, List.of());
+    }
+
+    /**
+     * 带邮件三阶段切片的上下文。模板与监控不挂在 {@link FunctionUnit} 上，由调用方按 FU 查出传入；
+     * 连接走实体关联。连接只输出安全视图（见 {@link #serializeEmailConnections}）。
+     */
+    /**
+     * @param viewSnapshots {@code MainTableViewService#snapshotViewsForFunctionUnit} 的输出（带库 id），
+     *                      这里换成表名/表单名引用后放进上下文
+     * @param orgCatalog    {@link AiOrgCatalogReader#readContext()}；null 表示不可用（上下文里省略）
+     * @param automationFlows {@link AiAutomationFlowCatalogReader#toContext}；service task 绑定只能引用其中的 flowKey
+     */
+    FunctionUnitContextDTO buildContextDTO(FunctionUnit fu,
+                                           List<EmailTemplate> emailTemplates,
+                                           List<EmailMonitorRule> emailMonitorRules,
+                                           List<Map<String, Object>> viewSnapshots,
+                                           Map<String, Object> orgCatalog,
+                                           List<Map<String, Object>> automationFlows) {
         // Explicitly trigger lazy loading (ensure all associations are loaded within @Transactional)
         List<TableDefinition> tables = fu.getTableDefinitions();
         if (tables != null) tables.size();
@@ -43,6 +79,8 @@ class AiContextSerializer {
         if (relations != null) relations.size();
         ProcessDefinition pd = fu.getProcessDefinition();
         Icon icon = fu.getIcon();
+        List<EmailConnection> connections = fu.getEmailConnections();
+        if (connections != null) connections.size();
 
         return FunctionUnitContextDTO.builder()
                 .functionUnitId(fu.getId())
@@ -55,7 +93,135 @@ class AiContextSerializer {
                 .tableRelations(serializeTableRelations(relations, tables))
                 .processDefinition(serializeProcessDefinition(pd))
                 .icon(serializeIcon(icon))
+                .emailTemplates(serializeEmailTemplates(emailTemplates))
+                .emailConnections(serializeEmailConnections(connections))
+                .emailMonitorRules(serializeEmailMonitorRules(emailMonitorRules, connections))
+                .mainTableViews(serializeMainTableViews(viewSnapshots, tables, forms))
+                .orgCatalog(orgCatalog)
+                .serviceTasks(serializeServiceTasks(pd))
+                .automationFlows(automationFlows != null ? automationFlows : List.of())
                 .build();
+    }
+
+    /** BPMN 里的 service task 及其当前 ap 绑定；存量 BPMN 解析失败只记 warn（上下文是顾问材料，Apply 前另有校验）。 */
+    private List<Map<String, Object>> serializeServiceTasks(ProcessDefinition pd) {
+        if (pd == null || pd.getBpmnXml() == null || pd.getBpmnXml().isBlank()) return List.of();
+        try {
+            List<Map<String, Object>> out = new java.util.ArrayList<>();
+            for (com.developer.util.BpmnServiceTaskScanner.ServiceTaskInfo t
+                    : com.developer.util.BpmnServiceTaskScanner.scan(pd.getBpmnXml())) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", t.id());
+                m.put("name", t.name());
+                m.put("serviceType", t.serviceType());
+                m.put("flowKey", t.flowKey());
+                m.put("legacyFlowId", t.legacyFlowId());
+                out.add(m);
+            }
+            return out;
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(AiContextSerializer.class)
+                    .warn("Existing BPMN could not be scanned for service tasks; context omits them: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** 视图快照去 id：mainTableId → mainTableName，detailFormId → detailFormName；找不到对应表的视图跳过。 */
+    private List<Map<String, Object>> serializeMainTableViews(List<Map<String, Object>> snapshots,
+                                                              List<TableDefinition> tables,
+                                                              List<FormDefinition> forms) {
+        if (snapshots == null || snapshots.isEmpty()) return List.of();
+        Map<Long, String> tableNameById = new HashMap<>();
+        if (tables != null) {
+            for (TableDefinition t : tables) {
+                if (t.getId() != null) tableNameById.put(t.getId(), t.getTableName());
+            }
+        }
+        Map<Long, String> formNameById = new HashMap<>();
+        if (forms != null) {
+            for (FormDefinition f : forms) {
+                if (f.getId() != null) formNameById.put(f.getId(), f.getFormName());
+            }
+        }
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        for (Map<String, Object> snap : snapshots) {
+            Long mainTableId = snap.get("mainTableId") instanceof Number n ? n.longValue() : null;
+            String mainTableName = mainTableId != null ? tableNameById.get(mainTableId) : null;
+            if (mainTableName == null) continue;
+            Map<String, Object> v = new LinkedHashMap<>();
+            v.put("mainTableName", mainTableName);
+            v.put("viewName", snap.get("viewName"));
+            v.put("isDefault", snap.get("isDefault"));
+            v.put("status", snap.get("status"));
+            v.put("restrictToInvolvedUsers", snap.get("restrictToInvolvedUsers"));
+            Long detailFormId = snap.get("detailFormId") instanceof Number n ? n.longValue() : null;
+            v.put("detailFormName", detailFormId != null ? formNameById.get(detailFormId) : null);
+            v.put("accessRules", snap.get("accessRules"));
+            v.put("sortConfig", snap.get("sortConfig"));
+            v.put("filterConfig", snap.get("filterConfig"));
+            v.put("fields", snap.get("fields"));
+            out.add(v);
+        }
+        return out;
+    }
+
+    private List<Map<String, Object>> serializeEmailTemplates(List<EmailTemplate> templates) {
+        if (templates == null) return List.of();
+        return templates.stream().map(t -> {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("name", t.getName());
+            map.put("subject", t.getSubject());
+            map.put("bodyHtml", t.getBodyHtml());
+            map.put("enabled", t.getEnabled());
+            return map;
+        }).collect(Collectors.toList());
+    }
+
+    /**
+     * 连接的安全视图：白名单输出，绝不带 username / credentialEncrypted / oauth* / token*。
+     * {@code hasCredentials} 让模型知道哪些入站连接能被监控模板引用。
+     */
+    private List<Map<String, Object>> serializeEmailConnections(List<EmailConnection> connections) {
+        if (connections == null) return List.of();
+        return connections.stream().map(c -> {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("name", c.getName());
+            map.put("connectionType", c.getConnectionType() != null ? c.getConnectionType().name() : null);
+            map.put("direction", c.getDirection() != null ? c.getDirection().name() : null);
+            map.put("fromName", c.getFromName());
+            map.put("mailboxAddress", c.getMailboxAddress());
+            map.put("enabled", c.getEnabled());
+            map.put("hasCredentials", c.getCredentialEncrypted() != null && !c.getCredentialEncrypted().isBlank());
+            return map;
+        }).collect(Collectors.toList());
+    }
+
+    /** 监控模板（无起始事件绑定的规则）；connectionUid 换成模型可引用的 connectionName。 */
+    private List<Map<String, Object>> serializeEmailMonitorRules(List<EmailMonitorRule> rules,
+                                                                 List<EmailConnection> connections) {
+        if (rules == null) return List.of();
+        Map<String, String> nameByUid = new HashMap<>();
+        if (connections != null) {
+            for (EmailConnection c : connections) {
+                if (c.getConnectionUid() != null) nameByUid.put(c.getConnectionUid(), c.getName());
+            }
+        }
+        return rules.stream()
+                .filter(r -> r.getSourceRuleId() == null
+                        && (r.getStartEventId() == null || r.getStartEventId().isBlank()))
+                .map(r -> {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("name", r.getName());
+                    map.put("enabled", r.getEnabled());
+                    map.put("connectionName", nameByUid.get(r.getConnectionUid()));
+                    map.put("folderLabel", r.getFolderLabel());
+                    map.put("actionType", r.getActionType() != null ? r.getActionType().name() : null);
+                    map.put("extractionRules", r.getExtractionRules());
+                    map.put("correlation", r.getCorrelation());
+                    map.put("pollIntervalSeconds", r.getPollIntervalSeconds());
+                    map.put("reviewOnMissing", r.getReviewOnMissing());
+                    return map;
+                }).collect(Collectors.toList());
     }
 
     private List<Map<String, Object>> serializeTableDefinitions(List<TableDefinition> tables) {

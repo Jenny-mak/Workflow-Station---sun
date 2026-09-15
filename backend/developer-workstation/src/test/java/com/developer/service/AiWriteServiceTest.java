@@ -13,6 +13,7 @@ import com.developer.enums.TableType;
 import com.developer.exception.AiGenerationException;
 import com.developer.repository.FunctionUnitRepository;
 import com.developer.repository.IconRepository;
+import com.developer.service.impl.AiEmailProposalWriter;
 import com.developer.service.impl.AiWriteServiceImpl;
 import com.developer.util.XmlEncodingUtil;
 import jakarta.persistence.EntityManager;
@@ -23,6 +24,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -443,4 +445,40 @@ class AiWriteServiceTest {
               </bpmn:process>
             </bpmn:definitions>
             """;
+
+    // ==================== Email slices: upsert scopes never clear, delegate to AiEmailProposalWriter ====================
+
+    @Test
+    void applyGeneratedData_emailScope_modifyMode_keepsExistingDesignAndDelegatesToEmailWriter() {
+        FormDefinition existingForm = FormDefinition.builder().id(5L).formName("keep_me").build();
+        functionUnit.getFormDefinitions().add(existingForm);
+        when(functionUnitRepository.findById(1L)).thenReturn(Optional.of(functionUnit));
+        when(functionUnitRepository.save(any(FunctionUnit.class))).thenAnswer(inv -> inv.getArgument(0));
+        AiEmailProposalWriter emailWriter = mock(AiEmailProposalWriter.class);
+        ReflectionTestUtils.setField(writeService, "emailProposalWriter", emailWriter);
+
+        AiGeneratedData data = AiGeneratedData.builder()
+                .emailTemplates(List.of(Map.of("name", "Approved", "subject", "s", "bodyHtml", "<p/>")))
+                .build();
+
+        writeService.applyGeneratedData(1L, data, "EMAIL_TEMPLATES");
+
+        // MODIFY 模式下 scoped 清理对 upsert scope 必须是 no-op：既有表单原样保留
+        assertEquals(1, functionUnit.getFormDefinitions().size());
+        assertSame(existingForm, functionUnit.getFormDefinitions().get(0));
+        verify(emailWriter).write(functionUnit, data);
+    }
+
+    @Test
+    void applyGeneratedData_emailSlicesWithoutWiredWriter_failsExplicitly() {
+        when(functionUnitRepository.findById(1L)).thenReturn(Optional.of(functionUnit));
+
+        AiGeneratedData data = AiGeneratedData.builder()
+                .emailConnections(List.of(Map.of("name", "notify@x.com")))
+                .build();
+
+        AiGenerationException ex = assertThrows(AiGenerationException.class,
+                () -> writeService.applyGeneratedData(1L, data, "CONNECTIONS"));
+        assertEquals("AI_WRITE_EMAIL_WRITER_UNAVAILABLE", ex.getErrorCode());
+    }
 }

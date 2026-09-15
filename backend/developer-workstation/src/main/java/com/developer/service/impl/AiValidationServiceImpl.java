@@ -66,6 +66,11 @@ public class AiValidationServiceImpl implements AiValidationService {
         structureValidator.validateDecisionDefinitions(generatedData.getDecisionDefinitions(), result);
         structureValidator.validateTableRelations(generatedData, result);
         structureValidator.validateIcon(generatedData.getIcon(), result);
+        structureValidator.validateEmailTemplates(generatedData.getEmailTemplates(), result);
+        structureValidator.validateEmailConnections(generatedData.getEmailConnections(), result);
+        structureValidator.validateEmailMonitorRules(generatedData.getEmailMonitorRules(), result);
+        structureValidator.validateMainTableViews(generatedData.getMainTableViews(), result);
+        structureValidator.validateServiceTaskBindings(generatedData.getServiceTaskBindings(), result);
 
         // SVG security validation and BPMN XML validation
         securityValidator.validateSvg(generatedData.getIcon(), result);

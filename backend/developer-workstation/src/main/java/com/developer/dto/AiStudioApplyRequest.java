@@ -21,7 +21,7 @@ public class AiStudioApplyRequest {
     private Long functionUnitId;
 
     @NotBlank
-    @Pattern(regexp = "TABLES|FORMS|ACTIONS|DECISIONS|PROCESS|TABLE_RELATIONS|ALL")
+    @Pattern(regexp = "TABLES|FORMS|ACTIONS|DECISIONS|PROCESS|TABLE_RELATIONS|EMAIL_TEMPLATES|CONNECTIONS|EMAIL_MONITORS|VIEWS|SERVICE_TASK_BINDINGS|ALL")
     private String scope;
 
     @NotNull
