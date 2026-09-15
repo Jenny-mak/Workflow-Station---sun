@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import type { TaskActionInfo } from '@/api/task'
@@ -7,6 +7,11 @@ import type { FormField, FormTab, PortalViewContext } from '@/components/formRen
 import { createCustomActionReturnFlows } from './customActionReturnFlows'
 import { createCustomActionFormPopup } from './customActionFormPopup'
 import type { PreparedFormPopupContext } from './customActionTypes'
+import {
+  actionConfirmMessage,
+  actionRequiresComment,
+  tryParseActionConfigJson,
+} from '@/utils/actionButtonConfig'
 
 export type { PreparedFormPopupContext } from './customActionTypes'
 
@@ -21,6 +26,7 @@ export function useCustomActions(options: {
   approveDialogTitle: Ref<string>
   currentApproveAction: Ref<string>
   approveForm: { comment: string }
+  approveCommentRequired?: Ref<boolean>
   loadTaskDetail: () => Promise<void>
   /**
    * Resolve the popup's target form content (with tableBindings) from the host's
@@ -37,9 +43,9 @@ export function useCustomActions(options: {
    */
   preparePopupContext?: (formContent: any, formConfig: Record<string, unknown>) => PreparedFormPopupContext | null
   /** Open the Delegate dialog for a DELEGATE Action bound to this task node. */
-  onDelegate?: () => void
+  onDelegate?: (action: TaskActionInfo) => void
   /** Open the Transfer dialog for a TRANSFER Action bound to this task node. */
-  onTransfer?: () => void
+  onTransfer?: (action: TaskActionInfo) => void
   /** Open the Urge dialog for an URGE Action bound to this task node. */
   onUrge?: () => void
 }) {
@@ -100,6 +106,35 @@ export function useCustomActions(options: {
     formPopupViewContext,
   })
 
+  const fallbackApproveCommentRequired = ref(false)
+  const approveCommentRequired = options.approveCommentRequired ?? fallbackApproveCommentRequired
+
+  async function confirmIfNeeded(config: Record<string, unknown>): Promise<boolean> {
+    const msg = actionConfirmMessage(config)
+    if (!msg) return true
+    try {
+      await ElMessageBox.confirm(msg, t('common.confirm'), { type: 'warning' })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function openApproveDialog(action: TaskActionInfo, completeAction: 'APPROVE' | 'REJECT') {
+    const config = tryParseActionConfigJson(action.configJson)
+    if (config == null) {
+      ElMessage.error(t('task.configParseFailed'))
+      return
+    }
+    if (!(await confirmIfNeeded(config))) return
+    if (completeAction === 'APPROVE' && !options.validateSubTableAssigneesForComplete()) return
+    approveCommentRequired.value = actionRequiresComment(config)
+    options.currentApproveAction.value = completeAction
+    options.approveDialogTitle.value = action.actionName
+    options.approveForm.comment = ''
+    options.approveDialogVisible.value = true
+  }
+
   function handleCustomAction(action: TaskActionInfo) {
     const actionType = (action.actionType || '').trim().toUpperCase()
     switch (actionType) {
@@ -107,25 +142,12 @@ export function useCustomActions(options: {
         options.saveCurrentTaskForm()
         break
       case 'APPROVE':
-        if (!options.validateSubTableAssigneesForComplete()) return
-        options.currentApproveAction.value = 'APPROVE'
-        options.approveDialogTitle.value = action.actionName
-        options.approveForm.comment = ''
-        options.approveDialogVisible.value = true
-        break
       case 'PROCESS_SUBMIT':
-        if (!options.validateSubTableAssigneesForComplete()) return
-        options.currentApproveAction.value = 'APPROVE'
-        options.approveDialogTitle.value = action.actionName
-        options.approveForm.comment = ''
-        options.approveDialogVisible.value = true
+        void openApproveDialog(action, 'APPROVE')
         break
       case 'REJECT':
       case 'PROCESS_REJECT':
-        options.currentApproveAction.value = 'REJECT'
-        options.approveDialogTitle.value = action.actionName
-        options.approveForm.comment = ''
-        options.approveDialogVisible.value = true
+        void openApproveDialog(action, 'REJECT')
         break
       case 'FORM_POPUP':
         try {
@@ -146,14 +168,14 @@ export function useCustomActions(options: {
         break
       case 'DELEGATE':
         if (options.onDelegate) {
-          options.onDelegate()
+          options.onDelegate(action)
         } else {
           ElMessage.warning(t('task.unknownActionType', { type: action.actionType }))
         }
         break
       case 'TRANSFER':
         if (options.onTransfer) {
-          options.onTransfer()
+          options.onTransfer(action)
         } else {
           ElMessage.warning(t('task.unknownActionType', { type: action.actionType }))
         }

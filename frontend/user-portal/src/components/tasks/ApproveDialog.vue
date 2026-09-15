@@ -9,12 +9,16 @@
       label-width="auto"
       label-position="left"
     >
-      <el-form-item :label="$t('task.comment')">
+      <el-form-item
+        :label="$t('task.comment')"
+        :required="commentRequired"
+        data-testid="approve-comment-field"
+      >
         <el-input
           v-model="formData.comment"
           type="textarea"
           :rows="4"
-          :placeholder="$t('task.commentPlaceholder')"
+          :placeholder="commentRequired ? $t('task.commentRequired') : $t('task.commentPlaceholder')"
         />
       </el-form-item>
     </el-form>
@@ -41,6 +45,7 @@ const props = defineProps<{
   title: string
   formData: { comment: string }
   submitting: boolean
+  commentRequired?: boolean
 }>()
 
 const emit = defineEmits<{

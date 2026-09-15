@@ -1,9 +1,13 @@
-import { unref, type MaybeRef, type Ref } from 'vue'
+import { ref, unref, type MaybeRef, type Ref } from 'vue'
 import { writeSubTableRows, subTableStoreKey, isCanonicalStoreKey } from './subTableStore'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { completeTask, delegateTask, transferTask, urgeTask } from '@/api/task'
+import { completeTask, delegateTask, transferTask, urgeTask, type TaskActionInfo } from '@/api/task'
+import {
+  actionRequiresComment,
+  tryParseActionConfigJson,
+} from '@/utils/actionButtonConfig'
 import { userApi, type UserOption } from '@/api/user'
 import {
   resolveAssigneeFieldForBinding,
@@ -101,6 +105,18 @@ export function useTaskActions(options: {
 }) {
   const { t } = useI18n()
   const router = useRouter()
+  const approveCommentRequired = ref(false)
+  const actionReasonRequired = ref(false)
+
+  function applyActionReasonRequired(action?: TaskActionInfo): boolean {
+    const config = tryParseActionConfigJson(action?.configJson)
+    if (config == null) {
+      ElMessage.error(t('task.configParseFailed'))
+      return false
+    }
+    actionReasonRequired.value = actionRequiresComment(config)
+    return true
+  }
   function validateSubTableAssigneesForComplete(): boolean {
     for (const b of options.subTableBindings.value) {
       const hasMarker = hasMiAssignmentMarker(b.formFields)
@@ -137,18 +153,21 @@ export function useTaskActions(options: {
   }
   function handleApprove() {
     if (!validateSubTableAssigneesForComplete()) return
+    approveCommentRequired.value = false
     options.currentApproveAction.value = 'APPROVE'
     options.approveDialogTitle.value = t('task.approve')
     options.approveForm.comment = ''
     options.approveDialogVisible.value = true
   }
   function handleReject() {
+    approveCommentRequired.value = false
     options.currentApproveAction.value = 'REJECT'
     options.approveDialogTitle.value = t('task.reject')
     options.approveForm.comment = ''
     options.approveDialogVisible.value = true
   }
-  function handleDelegate() {
+  function handleDelegate(action?: TaskActionInfo) {
+    if (!applyActionReasonRequired(action)) return
     options.currentAction.value = 'delegate'
     options.actionDialogTitle.value = t('task.delegate')
     options.actionForm.targetUserId = ''
@@ -160,7 +179,8 @@ export function useTaskActions(options: {
     options.userOptions.value = []
     options.actionDialogVisible.value = true
   }
-  function handleTransfer() {
+  function handleTransfer(action?: TaskActionInfo) {
+    if (!applyActionReasonRequired(action)) return
     options.currentAction.value = 'transfer'
     options.actionDialogTitle.value = t('task.transfer')
     options.actionForm.targetUserId = ''
@@ -169,6 +189,7 @@ export function useTaskActions(options: {
     options.actionDialogVisible.value = true
   }
   function handleUrge() {
+    actionReasonRequired.value = false
     options.currentAction.value = 'urge'
     options.actionDialogTitle.value = t('task.urge')
     options.actionForm.reason = ''
@@ -220,6 +241,10 @@ export function useTaskActions(options: {
     return submitted
   }
   async function submitApprove() {
+    if (approveCommentRequired.value && !String(options.approveForm.comment || '').trim()) {
+      ElMessage.warning(t('task.commentRequired'))
+      return
+    }
     if (options.currentApproveAction.value === 'APPROVE' && !validateSubTableAssigneesForComplete()) return
     if (options.currentApproveAction.value === 'APPROVE' && options.validateTaskForm) {
       const valid = await options.validateTaskForm()
@@ -284,6 +309,14 @@ export function useTaskActions(options: {
     }
   }
   async function submitAction() {
+    if (
+      actionReasonRequired.value
+      && (options.currentAction.value === 'delegate' || options.currentAction.value === 'transfer')
+      && !String(options.actionForm.reason || '').trim()
+    ) {
+      ElMessage.warning(t('task.reasonRequired'))
+      return
+    }
     if (options.currentAction.value === 'delegate') {
       const targetType = options.actionForm.targetType || 'USER'
       if (targetType === 'BU_ROLE') {
@@ -348,6 +381,8 @@ export function useTaskActions(options: {
     handleTransfer,
     handleUrge,
     submitApprove,
-    submitAction
+    submitAction,
+    approveCommentRequired,
+    actionReasonRequired,
   }
 }
