@@ -292,12 +292,6 @@
         <!-- Approve/Reject Config -->
         <template v-if="selectedAction.actionType === 'APPROVE' || selectedAction.actionType === 'REJECT'">
           <el-divider>{{ t('action.approvalConfig') }}</el-divider>
-          <el-form-item :label="t('action.targetStatus')">
-            <el-input
-              v-model="actionConfig.targetStatus"
-              :placeholder="t('action.targetStatusPlaceholder')"
-            />
-          </el-form-item>
           <el-form-item
             :label="t('action.requireComment')"
             data-testid="action-require-comment"
@@ -367,12 +361,6 @@
         <!-- Withdraw Config -->
         <template v-if="selectedAction.actionType === 'WITHDRAW'">
           <el-divider>{{ t('action.withdrawConfig') }}</el-divider>
-          <el-form-item :label="t('action.targetStatus')">
-            <el-input
-              v-model="actionConfig.targetStatus"
-              :placeholder="t('action.targetStatusCancelledPlaceholder')"
-            />
-          </el-form-item>
           <el-form-item :label="t('action.allowedFromStatus')">
             <el-select
               v-model="actionConfig.allowedFromStatus"
