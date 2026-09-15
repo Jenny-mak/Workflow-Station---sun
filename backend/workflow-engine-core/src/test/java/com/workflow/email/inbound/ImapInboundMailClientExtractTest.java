@@ -3,6 +3,7 @@ package com.workflow.email.inbound;
 import jakarta.activation.DataHandler;
 import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
+import jakarta.mail.Part;
 import jakarta.mail.Session;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeBodyPart;
@@ -89,6 +90,23 @@ class ImapInboundMailClientExtractTest {
     }
 
     @Test
+    void extractParts_rfc822WithAttachmentDisposition_doesNotInlineBody() throws Exception {
+        MimeMessage message = mixedOuterTextAndRfc822Attachment();
+
+        StringBuilder text = new StringBuilder();
+        StringBuilder html = new StringBuilder();
+        List<com.workflow.email.extract.EmailAttachment> attachments = new ArrayList<>();
+        new ImapInboundMailClient().extractParts(message, text, html, attachments);
+
+        assertThat(text.toString()).contains("Please process this request");
+        assertThat(text.toString()).doesNotContain("SECRET_ATTACHED_MSG_BODY");
+        assertThat(html.toString()).doesNotContain("SECRET_ATTACHED_MSG_BODY");
+        assertThat(attachments).hasSize(1);
+        assertThat(attachments.get(0).filename()).isEqualTo("message.eml");
+        assertThat(attachments.get(0).content().length).isGreaterThan(0);
+    }
+
+    @Test
     void extractParts_keepsNamedAttachmentAndSkipsInlineCid() throws Exception {
         Session session = Session.getInstance(new Properties());
 
@@ -169,6 +187,30 @@ class ImapInboundMailClientExtractTest {
         assertThat(attachments).hasSize(1);
         assertThat(attachments.get(0).filename()).isEqualTo("quote.pdf");
         assertThat(attachments.get(0).content()).isEqualTo("pdf-bytes".getBytes());
+    }
+
+    private static MimeMessage mixedOuterTextAndRfc822Attachment() throws Exception {
+        Session session = Session.getInstance(new Properties());
+        MimeMessage inner = new MimeMessage(session);
+        inner.setSubject("Other case");
+        inner.setText("SECRET_ATTACHED_MSG_BODY");
+        inner.saveChanges();
+
+        MimeBodyPart rfc822 = new MimeBodyPart();
+        rfc822.setContent(inner, "message/rfc822");
+        rfc822.setDisposition(Part.ATTACHMENT);
+
+        MimeBodyPart outerText = new MimeBodyPart();
+        outerText.setText("Please process this request");
+
+        MimeMultipart mixed = new MimeMultipart("mixed");
+        mixed.addBodyPart(outerText);
+        mixed.addBodyPart(rfc822);
+
+        MimeMessage message = new MimeMessage(session);
+        message.setContent(mixed);
+        message.saveChanges();
+        return message;
     }
 
     private static MimeMessage mixedPlainAndPdf() throws Exception {

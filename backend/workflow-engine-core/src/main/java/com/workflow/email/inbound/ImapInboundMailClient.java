@@ -310,11 +310,17 @@ public class ImapInboundMailClient implements InboundMailClient {
     }
 
     static boolean isAttachmentPart(Part part) throws Exception {
-        if (part.isMimeType("multipart/*") || part.isMimeType("message/rfc822")) {
+        if (part.isMimeType("multipart/*")) {
             return false;
         }
         String disposition = part.getDisposition();
-        if (Part.ATTACHMENT.equalsIgnoreCase(disposition)) {
+        boolean attached = Part.ATTACHMENT.equalsIgnoreCase(disposition);
+        // Nested forwards without disposition stay in the body (#1467); Outlook attached
+        // messages are message/rfc822 + attachment and must not be inlined.
+        if (part.isMimeType("message/rfc822")) {
+            return attached;
+        }
+        if (attached) {
             return true;
         }
         String filename = decodeFilename(part.getFileName());
@@ -327,7 +333,7 @@ public class ImapInboundMailClient implements InboundMailClient {
     private static void collectAttachment(Part part, List<EmailAttachment> attachments) throws Exception {
         String filename = decodeFilename(part.getFileName());
         if (!StringUtils.hasText(filename)) {
-            filename = "attachment";
+            filename = part.isMimeType("message/rfc822") ? "message.eml" : "attachment";
         }
         byte[] bytes = readPartBytes(part);
         if (bytes.length == 0) {

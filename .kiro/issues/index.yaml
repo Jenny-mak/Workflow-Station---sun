@@ -4019,3 +4019,23 @@
     verify-portal-myrequest-file-details-actions.mjs 7/7（按钮未 disabled、Download sample.csv、Preview popup）。
     截图 2026-09-15_portal-myrequest-file-details-actions.png / _preview.png。
 
+- id: "1635"
+  status: fixed
+  fixed_at: "2026-09-15"
+  severity: major
+  category: bug
+  summary: "Email Monitor inlined Outlook attached message/rfc822 into email_body"
+  file: "backend/workflow-engine-core/src/main/java/com/workflow/email/inbound/ImapInboundMailClient.java"
+  note: |
+    入站邮件 Body 映射（TEXT_AND_HTML DIRECT / 整段正文）含另一封信的内容。
+    同事从邮件拖到撰写窗当附件，界面不显示 .msg；另存为 HTML 也没有这段。
+    根因：isAttachmentPart 对全部 message/rfc822 返回 false，extractParts 递归内层
+    text/plain|html 拼进外层 body。Outlook 附加邮件 MIME 多为 rfc822 + disposition=attachment。
+    修复：rfc822 仅在 Content-Disposition=attachment 时 collectAttachment（无文件名则 message.eml）；
+    无 disposition 的嵌套转发仍递归（#1467）。
+    验证：ImapInboundMailClientExtractTest 先红
+    （Please process this requestSECRET_ATTACHED_MSG_BODY）后绿；9 tests pass。
+    IMAP APPEND rfc822 附件样例后 Email-000004 body 仅 OUTER_BODY_ONLY。
+    Rebased onto origin/common_0731_SELF_AP; issue retargeted from #1633
+    which origin already used for To Do Current Assignee.
+
