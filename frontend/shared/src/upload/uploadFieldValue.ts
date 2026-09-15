@@ -121,12 +121,27 @@ export function persistUploadValue(
   return JSON.stringify(trimmed)
 }
 
+/**
+ * form-create sometimes invokes upload onChange with a single file object instead of
+ * el-upload's (file, fileList) pair. Spreading / for-of that object throws
+ * "X is not iterable" and aborts the POST.
+ */
+export function asUploadFileList<T extends UploadFileListItem>(value: unknown): T[] {
+  if (value == null || value === '') return []
+  if (Array.isArray(value)) {
+    return value.filter((item): item is T => item != null && typeof item === 'object')
+  }
+  if (typeof value !== 'object') return []
+  if (typeof (value as { preventDefault?: unknown }).preventDefault === 'function') return []
+  return [value as T]
+}
+
 export function persistFromUploadFileList(
-  fileList: UploadFileListItem[],
+  fileList: unknown,
   maxFiles: number,
 ): string {
   const files: StoredUploadFile[] = []
-  for (const item of fileList) {
+  for (const item of asUploadFileList(fileList)) {
     if (item.status && item.status !== 'success') continue
     stampStoredUploadUrl(item)
     const url = String(item.url || '').trim()
@@ -164,12 +179,13 @@ export function isInflightUploadStatus(status?: string): boolean {
  * so the first success cannot wipe the rest of a multi-file batch.
  */
 export function splitUploadFileList<T extends UploadFileListItem>(
-  liveList: T[],
+  liveList: T[] | unknown,
   maxFiles: number,
 ): { stored: string; display: T[] } {
-  const stored = persistFromUploadFileList(liveList, maxFiles)
+  const rows = asUploadFileList<T>(liveList)
+  const stored = persistFromUploadFileList(rows, maxFiles)
   const storedUrls = new Set(extractFileLinks(stored).map((link) => link.url))
-  const display = liveList.filter((item) => {
+  const display = rows.filter((item) => {
     if (isInflightUploadStatus(item.status)) return true
     stampStoredUploadUrl(item)
     const url = String(item.url || '').trim()

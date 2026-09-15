@@ -4004,3 +4004,18 @@
     角色池认领才用 You 标签。单测 todoCurrentAssignee.test.ts；
     截图 2026-09-14_todo-current-assignee-direct.png（123456 Direct Assignment=liam）。
 
+- id: "1634"
+  status: fixed
+  fixed_at: "2026-09-15"
+  severity: major
+  category: bug
+  summary: "My Request File details Download/Preview inherited el-form disabled and could not be clicked"
+  file: "frontend/shared/src/upload/FormUploadFileDetails.vue"
+  note: |
+    复现：/portal/applications/34cb12ea-b0bc-11f1-b946-bab74cb05d7e 打开 File details，
+    Download/Preview 为 el-button.is-disabled（el-drawer append-to-body 不打断 Vue inject）。
+    修复：provide(formContextKey, undefined) 同 RecordNoteField。
+    验证：FormUploadFileDetails.test.ts 先红后绿；user-portal build + user-portal-frontend 重建；
+    verify-portal-myrequest-file-details-actions.mjs 7/7（按钮未 disabled、Download sample.csv、Preview popup）。
+    截图 2026-09-15_portal-myrequest-file-details-actions.png / _preview.png。
+

@@ -1,5 +1,8 @@
 <template>
-  <div class="form-upload-drop-wrap">
+  <div
+    class="form-upload-drop-wrap"
+    @change.stop
+  >
     <FormUploadDropZone
       :action="resolvedAction"
       :accept="accept || ''"
@@ -32,6 +35,8 @@
       :readonly="disabled"
       :labels="detailLabels"
       :cannot-download="cannotDownload === true"
+      :help-href="uploadDetailsHelpHref"
+      :help-aria-label="t('form.uploadGuideLinkAria')"
     />
   </div>
 </template>
@@ -45,6 +50,7 @@ import FormUploadDropZone from '@platform-shared/upload/FormUploadDropZone.vue'
 import FormUploadDetailsDrawer from '@platform-shared/upload/FormUploadDetailsDrawer.vue'
 import type { UploadDetailFile } from '@platform-shared/upload/FormUploadFileDetails.vue'
 import {
+  asUploadFileList,
   resolveUploadMaxFileSizeMb,
   resolveUploadMaxFiles,
   splitUploadFileList,
@@ -54,6 +60,7 @@ import { queuedUploadRequest } from '@platform-shared/upload/queuedUploadRequest
 import type { UploadFileListItem } from '@platform-shared/upload/uploadFieldValue'
 import { isUploadUnauthorizedError } from '@platform-shared/upload/uploadAuthRefresh'
 import { clearUploadWidgetState, setUploadWidgetState } from '@platform-shared/upload/uploadSubmitGate'
+import { helpGuideAbsoluteUrl } from '@/utils/computedFieldGuide'
 
 type LiveFile = UploadFileListItem
 
@@ -112,12 +119,19 @@ function resolvedRequest(options: UploadRequestOptions): XMLHttpRequest | Promis
   if (typeof props.httpRequest === 'function') return props.httpRequest(options)
   return queuedUploadRequest(options)
 }
+const uploadDetailsHelpHref = helpGuideAbsoluteUrl('/form-upload#runtime')
 const detailLabels = computed(() => ({
   description: t('form.fileNet.description'),
   callbackUrl: t('form.fileNet.callbackUrl'),
   status: t('form.fileNet.status'),
   completed: t('form.fileNet.statusCompleted'),
+  save: t('common.save'),
+  saveSuccess: t('form.saveSuccess'),
   saveFailed: t('form.fileNet.saveFailed'),
+  download: t('form.fileNet.download'),
+  preview: t('common.preview'),
+  downloadFailed: t('common.downloadFailed'),
+  fileNotFound: t('common.fileNotFound'),
 }))
 
 function publishLiveList(list: LiveFile[]) {
@@ -128,24 +142,27 @@ function publishLiveList(list: LiveFile[]) {
 }
 
 function onLiveChange(_file: unknown, list?: LiveFile[]) {
-  if (!list) return
-  liveList.value = list
-  publishLiveList(list)
-  props.onChange?.(_file, list)
+  const rows = asUploadFileList<LiveFile>(list)
+  if (!rows.length) return
+  liveList.value = rows
+  publishLiveList(rows)
+  props.onChange?.(_file, rows)
 }
 
 function onSuccess(res: unknown, file?: LiveFile, list?: LiveFile[]) {
-  if (list) {
-    liveList.value = list
-    publishLiveList(list)
+  const rows = asUploadFileList<LiveFile>(list)
+  if (rows.length) {
+    liveList.value = rows
+    publishLiveList(rows)
   }
   props.onSuccess?.(res, file, list)
 }
 
 function onRemove(_file: unknown, list?: LiveFile[]) {
-  liveList.value = list ?? []
-  publishLiveList(list ?? [])
-  props.onRemove?.(_file, list)
+  const rows = asUploadFileList<LiveFile>(list)
+  liveList.value = rows
+  publishLiveList(rows)
+  props.onRemove?.(_file, rows)
 }
 
 function onExceed() {

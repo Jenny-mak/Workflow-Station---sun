@@ -686,6 +686,8 @@
     :labels="uploadDetailLabels"
     :preview-file="previewDetailsFile"
     :cannot-download="!!detailsCol && uploadPropsBlockDownload(detailsCol.props)"
+    :help-href="uploadDetailsHelpHref"
+    :help-aria-label="t('upload.guideLinkAria')"
   />
 </template>
 
@@ -702,6 +704,7 @@ import type { DialogColumn } from './subTableAddDialogHelpers'
 import { extractFileLinks } from '@platform-shared/list/fileNames'
 import { FILE_PREVIEW_PLAYLIST_KEY, openFilePreviewFromList } from '@/composables/filePreview/useFilePreview'
 import { uploadPropsBlockDownload } from '@/utils/filePreview'
+import { helpGuideAbsoluteUrl } from '@/utils/helpGuideUrl'
 import { warnIfUploadsBlocking } from '@platform-shared/upload/uploadSubmitGate'
 import {
   buildDialogLayoutGroups,
@@ -1078,12 +1081,19 @@ const {
   handleDuplicate,
 } = useSubTableDialogUpload(formData, () => props.columns, t)
 
+const uploadDetailsHelpHref = helpGuideAbsoluteUrl('/form-upload#runtime')
 const uploadDetailLabels = computed(() => ({
   description: t('upload.fileDescription'),
   callbackUrl: t('upload.callbackUrl'),
   status: t('upload.autoSendToFileNet'),
   completed: t('upload.statusCompleted'),
+  save: t('common.save'),
+  saveSuccess: t('upload.descriptionSaveSuccess'),
   saveFailed: t('upload.descriptionSaveFailed'),
+  download: t('filePreview.download'),
+  preview: t('upload.preview'),
+  downloadFailed: t('common.downloadFailed'),
+  fileNotFound: t('common.fileNotFound'),
 }))
 
 const detailsOpen = ref(false)

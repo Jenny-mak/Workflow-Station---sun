@@ -369,6 +369,8 @@
     :readonly="detailsReadonly"
     :labels="uploadDetailLabels"
     :cannot-download="!!detailsCol?.props?.cannotDownload || !!detailsCol?.props?.canNotDownload"
+    :help-href="uploadDetailsHelpHref"
+    :help-aria-label="t('form.uploadGuideLinkAria')"
   />
 </template>
 
@@ -399,6 +401,7 @@ import type { UploadFileListItem } from '@platform-shared/upload/uploadFieldValu
 import { isUploadUnauthorizedError } from '@platform-shared/upload/uploadAuthRefresh'
 import { clearUploadWidgetState, setUploadWidgetState, warnIfUploadsBlocking } from '@platform-shared/upload/uploadSubmitGate'
 import { useSubTableDialogComponentEvents } from '@/composables/designerSubTableField/useSubTableDialogComponentEvents'
+import { helpGuideAbsoluteUrl } from '@/utils/computedFieldGuide'
 
 const { t } = useI18n()
 
@@ -490,12 +493,19 @@ function writeUploadColumn(
   }
 }
 
+const uploadDetailsHelpHref = helpGuideAbsoluteUrl('/form-upload#runtime')
 const uploadDetailLabels = computed(() => ({
   description: t('form.fileNet.description'),
   callbackUrl: t('form.fileNet.callbackUrl'),
   status: t('form.fileNet.status'),
   completed: t('form.fileNet.statusCompleted'),
+  save: t('common.save'),
+  saveSuccess: t('form.saveSuccess'),
   saveFailed: t('form.fileNet.saveFailed'),
+  download: t('form.fileNet.download'),
+  preview: t('common.preview'),
+  downloadFailed: t('common.downloadFailed'),
+  fileNotFound: t('common.fileNotFound'),
 }))
 
 

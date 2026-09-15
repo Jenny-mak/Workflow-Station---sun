@@ -104,7 +104,7 @@ const isUploading = computed(() => props.status === 'uploading' || props.status 
 const isFail = computed(() => props.status === 'fail')
 const percent = computed(() => props.percent ?? 0)
 const ext = computed(() => {
-  const match = props.name.match(/\.([A-Za-z0-9]{1,6})$/)
+  const match = String(props.name || '').match(/\.([A-Za-z0-9]{1,6})$/)
   return (match?.[1] || 'FILE').toUpperCase()
 })
 const statusAria = computed(() => {

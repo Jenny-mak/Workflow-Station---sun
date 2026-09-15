@@ -59,7 +59,6 @@ try {
       text: el.textContent,
       disabled: el.hasAttribute('disabled'),
     })))}`)
-    const popupPromise = page.waitForEvent('popup', { timeout: 8000 }).catch(() => null)
     await cards.first().click({ force: true })
     const details = page.getByTestId('upload-file-details')
     const drawerOk = await details.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false)
@@ -68,25 +67,43 @@ try {
       const drawerShot = join(OUT, `${DATE}_portal-myrequest-upload-drawer.png`)
       await details.screenshot({ path: drawerShot })
       console.log(`screenshot ${drawerShot}`)
-      const link = details.locator('.upload-file-details__link').first()
-      if (await link.count()) {
-        await link.click()
-        const popup = await popupPromise
-        const dialog = page.locator('[data-test="file-preview-shell"]')
-        const previewOk = Boolean(popup) || await dialog.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false)
-        rec('Callback URL opens in-app preview', previewOk, popup ? 'popup' : 'dialog')
-        if (popup) {
-          await popup.waitForTimeout(1500)
-          const previewShot = join(OUT, `${DATE}_portal-myrequest-upload-preview.png`)
-          await popup.screenshot({ path: previewShot, fullPage: true })
-          console.log(`screenshot ${previewShot}`)
-        } else if (await dialog.count()) {
-          const previewShot = join(OUT, `${DATE}_portal-myrequest-upload-preview.png`)
-          await dialog.screenshot({ path: previewShot })
-          console.log(`screenshot ${previewShot}`)
-        }
-      } else {
-        rec('Callback URL opens in-app preview', false, 'no callback link')
+      const previewBtn = details.getByTestId('upload-file-preview')
+      rec('File details shows Preview', await previewBtn.isVisible())
+      rec(
+        'File details hides FileNet fields',
+        (await details.getByText('Callback URL', { exact: true }).count()) === 0
+          && (await details.getByText('Auto Send to FileNet', { exact: true }).count()) === 0,
+      )
+      const popupPromise = page.waitForEvent('popup', { timeout: 8000 }).catch(() => null)
+      await previewBtn.click()
+    const details = page.getByTestId('upload-file-details')
+    const drawerOk = await details.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false)
+    rec('Clicking a file card opens the details drawer', drawerOk)
+    if (drawerOk) {
+      const drawerShot = join(OUT, `${DATE}_portal-myrequest-upload-drawer.png`)
+      await details.screenshot({ path: drawerShot })
+      console.log(`screenshot ${drawerShot}`)
+      const previewBtn = details.getByTestId('upload-file-preview')
+      rec('File details shows Preview', await previewBtn.isVisible())
+      rec(
+        'File details hides FileNet fields',
+        (await details.getByText('Callback URL', { exact: true }).count()) === 0
+          && (await details.getByText('Auto Send to FileNet', { exact: true }).count()) === 0,
+      )
+      await previewBtn.click()
+      const popup = await popupPromise
+      const dialog = page.locator('[data-test="file-preview-shell"]')
+      const previewOk = Boolean(popup) || await dialog.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false)
+      rec('Preview button opens in-app preview', previewOk, popup ? 'popup' : 'dialog')
+      if (popup) {
+        await popup.waitForTimeout(1500)
+        const previewShot = join(OUT, `${DATE}_portal-myrequest-upload-preview.png`)
+        await popup.screenshot({ path: previewShot, fullPage: true })
+        console.log(`screenshot ${previewShot}`)
+      } else if (await dialog.count()) {
+        const previewShot = join(OUT, `${DATE}_portal-myrequest-upload-preview.png`)
+        await dialog.screenshot({ path: previewShot })
+        console.log(`screenshot ${previewShot}`)
       }
     }
   }

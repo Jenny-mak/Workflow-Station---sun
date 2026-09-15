@@ -873,6 +873,7 @@ export default {
       status: 'Auto Send to FileNet',
       statusCompleted: 'Completed',
       saveFailed: 'Could not save the file description',
+      download: 'Download',
       detailsTitle: 'File details',
     },
     subTablePermission: {
