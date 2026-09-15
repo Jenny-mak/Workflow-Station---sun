@@ -59,6 +59,38 @@
       </button>
     </div>
 
+    <!-- ============ 任务：与 My Requests 分流的 To Do 入口 ============ -->
+    <section class="task-overview-card">
+      <header class="block-head">
+        <h2 class="block-title">
+          {{ t('dashboard.tasks') }}
+        </h2>
+        <router-link
+          :to="DASHBOARD_ROUTES.todo"
+          class="block-link"
+        >
+          {{ t('dashboard.viewAll') }} →
+        </router-link>
+      </header>
+
+      <div class="task-figures">
+        <router-link
+          :to="DASHBOARD_ROUTES.todo"
+          class="task-figure is-todo"
+        >
+          <span class="task-figure-label">{{ t('dashboard.todoTasks') }}</span>
+          <span class="task-figure-value">{{ overviewLoading ? '–' : taskOverview.pendingCount }}</span>
+        </router-link>
+        <router-link
+          :to="DASHBOARD_ROUTES.completedTasks"
+          class="task-figure is-completed"
+        >
+          <span class="task-figure-label">{{ t('dashboard.completedToday') }}</span>
+          <span class="task-figure-value">{{ overviewLoading ? '–' : taskOverview.completedTodayCount }}</span>
+        </router-link>
+      </div>
+    </section>
+
     <!-- ============ 主视觉：个人 / 团队两本账 ============ -->
     <section class="ledger">
       <div class="ledger-half">
@@ -67,7 +99,7 @@
             {{ t('dashboard.myRequests') }}
           </h2>
           <router-link
-            to="/my-applications"
+            :to="DASHBOARD_ROUTES.myRequests"
             class="ledger-link"
           >
             {{ t('dashboard.viewAll') }} →
@@ -165,6 +197,96 @@
       </div>
     </section>
 
+    <!-- ============ 我最近的任务 ============ -->
+    <section class="block">
+      <header class="block-head">
+        <h2 class="block-title">
+          {{ t('dashboard.recentTasks') }}
+        </h2>
+        <router-link
+          :to="DASHBOARD_ROUTES.todo"
+          class="block-link"
+        >
+          {{ t('dashboard.viewAll') }} →
+        </router-link>
+      </header>
+
+      <el-skeleton
+        v-if="overviewLoading && recentTasks.length === 0"
+        :rows="4"
+        animated
+      />
+
+      <div
+        v-else-if="recentTasks.length > 0"
+        class="table-scroll"
+      >
+        <table class="data-table task-table">
+          <thead>
+            <tr>
+              <th scope="col">
+                {{ t('dashboard.colRequest') }}
+              </th>
+              <th scope="col">
+                {{ t('task.taskName') }}
+              </th>
+              <th scope="col">
+                {{ t('task.assignmentType') }}
+              </th>
+              <th scope="col">
+                {{ t('task.functionUnit') }}
+              </th>
+              <th scope="col">
+                {{ t('task.createTime') }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="task in recentTasks"
+              :key="taskKey(task)"
+              class="data-row"
+              tabindex="0"
+              role="link"
+              @click="openTask(task)"
+              @keyup.enter="openTask(task)"
+            >
+              <td class="cell-name">
+                {{ taskRequestLabel(task) }}
+              </td>
+              <td>
+                <span class="task-name">{{ task.taskName || task.name || '—' }}</span>
+              </td>
+              <td class="cell-muted">
+                {{ t(`task.${assignmentDisplayKey(task)}`) }}
+              </td>
+              <td class="cell-muted">
+                {{ task.functionUnitName || task.functionUnitCode || '—' }}
+              </td>
+              <td class="cell-muted">
+                {{ formatDate(task.createTime || task.createdAt) }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div
+        v-else
+        class="block-empty"
+      >
+        <p class="empty-text">
+          {{ t('dashboard.noTasks') }}
+        </p>
+        <router-link
+          :to="DASHBOARD_ROUTES.todo"
+          class="empty-action"
+        >
+          {{ t('dashboard.openTodoTasks') }}
+        </router-link>
+      </div>
+    </section>
+
     <!-- ============ 我的申请 ============ -->
     <section class="block">
       <header class="block-head">
@@ -172,7 +294,7 @@
           {{ t('dashboard.recentRequests') }}
         </h2>
         <router-link
-          to="/my-applications"
+          :to="DASHBOARD_ROUTES.myRequests"
           class="block-link"
         >
           {{ t('dashboard.viewAll') }} →
@@ -432,11 +554,18 @@ import { useI18n } from 'vue-i18n'
 import { Plus, Refresh, WarningFilled } from '@element-plus/icons-vue'
 import { formatDate } from '@/utils/dateFormat'
 import { getStoredUser } from '@/api/auth'
-import type { TeamRequestItem } from '@/api/dashboard'
+import type { RecentTask, TeamRequestItem } from '@/api/dashboard'
 import type { ProcessInstance } from '@/api/process'
 import { useDashboardOverview } from '@/composables/dashboard/useDashboardOverview'
 import { useRequestsBoard } from '@/composables/dashboard/useRequestsBoard'
 import { useTeamRequests } from '@/composables/dashboard/useTeamRequests'
+import { assignmentDisplayKey } from '@/utils/taskAssignmentDisplay'
+import {
+  DASHBOARD_ROUTES,
+  dashboardMyRequestsRoute,
+  dashboardRequestDetailRoute,
+  dashboardTaskDetailRoute
+} from './dashboardNavigation'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -448,6 +577,7 @@ const {
   loadedAt,
   taskOverview,
   processOverview,
+  recentTasks,
   loadDashboardData
 } = useDashboardOverview()
 
@@ -532,25 +662,25 @@ const myRequestFigures = computed(() => [
     key: 'initiated',
     value: processOverview.value.initiatedCount,
     label: t('dashboard.initiatedProcesses'),
-    to: { path: '/my-applications' }
+    to: dashboardMyRequestsRoute()
   },
   {
     key: 'inProgress',
     value: processOverview.value.inProgressCount,
     label: t('dashboard.inProgressProcesses'),
-    to: { path: '/my-applications', query: { status: 'RUNNING' } }
+    to: dashboardMyRequestsRoute('RUNNING')
   },
   {
     key: 'completedThisMonth',
     value: processOverview.value.completedThisMonthCount,
     label: t('dashboard.completedThisMonth'),
-    to: { path: '/my-applications', query: { status: 'COMPLETED' } }
+    to: dashboardMyRequestsRoute('COMPLETED')
   },
   {
     key: 'draft',
     value: processOverview.value.draftCount,
     label: t('dashboard.myDrafts'),
-    to: { path: '/my-applications', query: { status: 'DRAFT' } }
+    to: dashboardMyRequestsRoute('DRAFT')
   }
 ])
 
@@ -583,8 +713,19 @@ const requestLabel = (row: ProcessInstance) =>
 const teamRequestLabel = (row: TeamRequestItem) =>
   row.requestId || row.businessKey || row.processDefinitionName
 
+const taskKey = (task: RecentTask) => task.taskId || task.id || `${task.taskName}-${task.createTime}`
+
+const taskRequestLabel = (task: RecentTask) =>
+  task.requestId || task.processDefinitionName || task.processName || '—'
+
+const openTask = (task: RecentTask) => {
+  const location = dashboardTaskDetailRoute(task)
+  if (location) router.push(location)
+}
+
 const openRequest = (id: string) => {
-  if (id) router.push(`/applications/${id}`)
+  const location = dashboardRequestDetailRoute(id)
+  if (location) router.push(location)
 }
 
 onMounted(() => {
@@ -760,6 +901,70 @@ onMounted(() => {
   cursor: pointer;
 }
 
+// ==================== 任务概览 ====================
+.task-overview-card {
+  @extend %surface-card;
+
+  margin-top: 22px;
+}
+
+.task-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--ws-line);
+}
+
+.task-figure {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'label value';
+  align-items: center;
+  min-height: 112px;
+  padding: 22px 24px 20px 28px;
+  background: var(--ws-card-bg);
+  color: var(--ws-text);
+  text-decoration: none;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 20px auto 20px 0;
+    width: 4px;
+    background: var(--hsbc-red);
+  }
+
+  &.is-completed::before { background: var(--success-green); }
+
+  &:hover {
+    background: var(--background-light);
+  }
+
+  &:focus-visible {
+    z-index: 1;
+    outline: 2px solid var(--hsbc-red);
+    outline-offset: -2px;
+  }
+}
+
+.task-figure-label {
+  grid-area: label;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.task-figure-value {
+  grid-area: value;
+  margin-left: 24px;
+  font-size: 42px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
 // ==================== 主视觉：两本账 ====================
 .ledger {
   display: grid;
@@ -859,7 +1064,7 @@ onMounted(() => {
 .figure-label {
   font-size: 11px;
   line-height: 1.35;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   color: var(--ws-text-secondary);
 }
 
@@ -1041,6 +1246,12 @@ onMounted(() => {
 
 .cell-muted { color: var(--ws-text-secondary); }
 
+.task-name {
+  display: block;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .status {
   display: inline-flex;
   align-items: center;
@@ -1111,6 +1322,15 @@ onMounted(() => {
 
 @media (max-width: 900px) {
   .ledger { grid-template-columns: 1fr; }
+
+  .task-figures { grid-template-columns: 1fr; }
+
+  .task-figure {
+    min-height: 96px;
+    padding-block: 20px;
+  }
+
+  .task-figure-label { font-size: 18px; }
 
   // 窄屏放不下四格量表，改两行两格；竖线只留在每行中间那道
   .figures {

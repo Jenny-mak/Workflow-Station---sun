@@ -2,6 +2,8 @@ import { request } from './request'
 
 export interface TaskOverview {
   pendingCount: number
+  claimableCount: number
+  todoCount: number
   overdueCount: number
   completedTodayCount: number
   avgProcessingHours: number
@@ -22,14 +24,27 @@ export interface ProcessOverview {
 }
 
 export interface RecentTask {
-  id: string
-  name: string
+  taskId?: string
+  id?: string
+  taskName?: string
+  name?: string
+  processDefinitionName?: string
   processName?: string
+  requestId?: string | null
+  functionUnitName?: string | null
+  functionUnitCode?: string | null
+  assignmentType?: string
+  bpmnAssigneeType?: string
   assignee?: string
-  status: string
-  priority?: string
-  createdAt: string
+  status?: string
+  priority?: string | number
+  createTime?: string
+  createdAt?: string
   dueDate?: string
+  isOverdue?: boolean
+  claimPoolTask?: boolean
+  claimedByCurrentUser?: boolean
+  claimable?: boolean
 }
 
 export interface RecentProcess {
