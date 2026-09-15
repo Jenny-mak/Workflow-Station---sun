@@ -1,5 +1,6 @@
 package com.admin.bi.service;
 
+import com.admin.bi.component.BiDashboardRegistryResponseAssembler;
 import com.admin.bi.component.DashboardSyncComponent;
 import com.admin.bi.dto.request.DashboardRegistryUpdateRequest;
 import com.admin.bi.dto.response.DashboardRegistryResponse;
@@ -8,6 +9,7 @@ import com.admin.bi.enums.DashboardStatus;
 import com.admin.bi.repository.BiDashboardAssignmentRepository;
 import com.admin.bi.repository.BiDashboardRegistryRepository;
 import com.admin.bi.repository.BiDataViewAssignmentRepository;
+import com.admin.bi.repository.BiSupersetRoleRepository;
 import com.admin.bi.service.impl.BiDashboardRegistryServiceImpl;
 import com.admin.exception.DashboardHasAssignmentsException;
 import net.jqwik.api.*;
@@ -50,7 +52,8 @@ class BiDashboardRegistryServicePropertyTest {
         assignmentRepository = mock(BiDashboardAssignmentRepository.class);
         dataViewAssignmentRepository = mock(BiDataViewAssignmentRepository.class);
         dashboardSyncComponent = mock(DashboardSyncComponent.class);
-        service = new BiDashboardRegistryServiceImpl(registryRepository, assignmentRepository, dashboardSyncComponent);
+        service = new BiDashboardRegistryServiceImpl(registryRepository, assignmentRepository, dashboardSyncComponent,
+                new BiDashboardRegistryResponseAssembler(mock(BiSupersetRoleRepository.class)));
         org.springframework.test.util.ReflectionTestUtils.setField(
                 service, "dataViewAssignmentRepository", dataViewAssignmentRepository);
     }

@@ -919,6 +919,8 @@ export default {
       colDefaultLanding: '默认首页',
       colStatus: '状态',
       colLastSynced: '最近同步',
+      colSupersetRoles: 'Superset 角色',
+      supersetRolesUnrestricted: '未在 Superset 设置角色限制：所有被分配的用户都可查看',
       colActions: '操作',
       edit: '编辑',
       disable: '禁用',

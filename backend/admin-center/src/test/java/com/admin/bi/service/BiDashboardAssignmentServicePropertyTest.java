@@ -1,16 +1,20 @@
 package com.admin.bi.service;
 
+import com.admin.bi.component.DashboardRoleGate;
+import com.admin.bi.config.BiProperties;
 import com.admin.bi.dto.request.DashboardAssignmentCreateRequest;
 import com.admin.bi.dto.response.DashboardAssignmentResponse;
 import com.admin.bi.dto.response.UserDashboardResponse;
 import com.admin.bi.entity.BiDashboardAssignment;
 import com.admin.bi.entity.BiDashboardRegistry;
+import com.admin.bi.entity.BiSupersetRole;
 import com.admin.bi.enums.AssignmentTargetType;
 import com.admin.bi.enums.DashboardStatus;
 import com.admin.bi.enums.LayoutMode;
 import com.admin.bi.repository.BiDashboardAssignmentRepository;
 import com.admin.bi.repository.BiDashboardRegistryRepository;
 import com.admin.bi.service.impl.BiDashboardAssignmentServiceImpl;
+import com.admin.bi.enums.SupersetRoleStatus;
 import com.admin.exception.AssignmentTargetNotFoundException;
 import com.admin.exception.DashboardInactiveException;
 import com.admin.exception.DashboardNotFoundException;
@@ -54,6 +58,8 @@ class BiDashboardAssignmentServicePropertyTest {
     private BusinessUnitRepository businessUnitRepository;
     private UserRoleRepository userRoleRepository;
     private UserBusinessUnitService userBusinessUnitService;
+    private BiRbacMappingService rbacMappingService;
+    private BiProperties biProperties;
     private BiDashboardAssignmentServiceImpl service;
 
     @BeforeTry
@@ -65,10 +71,13 @@ class BiDashboardAssignmentServicePropertyTest {
         businessUnitRepository = mock(BusinessUnitRepository.class);
         userRoleRepository = mock(UserRoleRepository.class);
         userBusinessUnitService = mock(UserBusinessUnitService.class);
+        rbacMappingService = mock(BiRbacMappingService.class);
+        biProperties = new BiProperties();
         service = new BiDashboardAssignmentServiceImpl(
                 assignmentRepository, registryRepository,
                 userRepository, roleRepository, businessUnitRepository,
-                userRoleRepository, userBusinessUnitService);
+                userRoleRepository, userBusinessUnitService,
+                new DashboardRoleGate(rbacMappingService, biProperties, userRoleRepository));
     }
 
     // ========== Arbitraries ==========
@@ -516,6 +525,88 @@ class BiDashboardAssignmentServicePropertyTest {
             case ROLE -> when(roleRepository.existsById(targetId)).thenReturn(exists);
             case BUSINESS_UNIT -> when(businessUnitRepository.existsById(targetId)).thenReturn(exists);
         }
+    }
+
+    // ========== Property 18: Dashboard 角色门禁（RBAC 映射 × Superset dashboard_roles） ==========
+
+    /**
+     * Property 18: Dashboard 角色门禁
+     *
+     * For any assigned, ACTIVE dashboard:
+     * - no Superset roles on the dashboard  → always visible (unrestricted);
+     * - Superset roles present               → visible iff the user's mapped ACTIVE Superset roles
+     *                                          intersect them, or include the Superset admin role.
+     * The RBAC mapping is consulted only when at least one restricted dashboard is assigned.
+     *
+     * Feature: bi-management, Property 18: Dashboard role gate
+     * Validates: Requirements 7.14, 7.15
+     */
+    @Property(tries = 200)
+    @Tag("Feature: bi-management, Property 18: Dashboard role gate")
+    void dashboardRoleGate(
+            @ForAll("roleIdSets") Set<Integer> dashboardRoleIds,
+            @ForAll("roleIdSets") Set<Integer> mappedRoleIds,
+            @ForAll boolean mappedIncludesAdmin
+    ) {
+        String userId = UUID.randomUUID().toString();
+        List<String> sysRoleIds = List.of("role-a", "role-b");
+        String csv = dashboardRoleIds.isEmpty() ? null : dashboardRoleIds.stream()
+                .sorted().map(String::valueOf).collect(Collectors.joining(","));
+
+        BiDashboardRegistry dashboard = BiDashboardRegistry.builder()
+                .id("dash-gate")
+                .dashboardTitle("Gated")
+                .embedId(UUID.randomUUID())
+                .supersetDashboardUuid(UUID.randomUUID())
+                .supersetDashboardId(1)
+                .supersetRoleIds(csv)
+                .status(DashboardStatus.ACTIVE)
+                .lastSyncedAt(LocalDateTime.now())
+                .build();
+
+        when(assignmentRepository.findByTargetTypeAndTargetId(AssignmentTargetType.USER, userId))
+                .thenReturn(List.of(buildAssignment(dashboard.getId(), AssignmentTargetType.USER, userId, 0)));
+        when(userRoleRepository.findAllRoleIdsByUserId(userId)).thenReturn(sysRoleIds);
+        when(userBusinessUnitService.getUserBusinessUnitIds(userId)).thenReturn(List.of());
+        when(registryRepository.findById(dashboard.getId())).thenReturn(Optional.of(dashboard));
+
+        List<BiSupersetRole> mapped = new ArrayList<>();
+        for (Integer id : mappedRoleIds) {
+            mapped.add(supersetRole(id, "Role" + id));
+        }
+        if (mappedIncludesAdmin) {
+            mapped.add(supersetRole(9999, biProperties.getSuperset().getAdminRoleName()));
+        }
+        when(rbacMappingService.getEffectiveSupersetRoles(sysRoleIds)).thenReturn(mapped);
+
+        List<UserDashboardResponse> result = service.getUserDashboards(userId, null);
+
+        boolean intersects = dashboardRoleIds.stream().anyMatch(mappedRoleIds::contains);
+        boolean expectedVisible = dashboardRoleIds.isEmpty() || mappedIncludesAdmin || intersects;
+        assertThat(result.stream().map(UserDashboardResponse::getDashboardId).collect(Collectors.toList()))
+                .as("dashboardRoles=%s mapped=%s admin=%s", dashboardRoleIds, mappedRoleIds, mappedIncludesAdmin)
+                .isEqualTo(expectedVisible ? List.of(dashboard.getId()) : List.of());
+
+        if (dashboardRoleIds.isEmpty()) {
+            verify(rbacMappingService, never()).getEffectiveSupersetRoles(anyList());
+        } else {
+            verify(rbacMappingService).getEffectiveSupersetRoles(sysRoleIds);
+        }
+    }
+
+    @Provide
+    Arbitrary<Set<Integer>> roleIdSets() {
+        return Arbitraries.integers().between(1, 6).set().ofMinSize(0).ofMaxSize(3);
+    }
+
+    private static BiSupersetRole supersetRole(int supersetRoleId, String name) {
+        return BiSupersetRole.builder()
+                .id(supersetRoleId)
+                .supersetRoleId(supersetRoleId)
+                .name(name)
+                .status(SupersetRoleStatus.ACTIVE)
+                .lastSyncedAt(LocalDateTime.now())
+                .build();
     }
 
     private BiDashboardAssignment buildAssignment(

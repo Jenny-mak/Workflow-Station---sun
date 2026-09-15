@@ -269,6 +269,8 @@ bi:
     admin-username: ${BI_SUPERSET_USERNAME}
     admin-password: ${BI_SUPERSET_PASSWORD}
     guest-token-timeout-seconds: 30
+    # Superset AUTH_ROLE_ADMIN. Mapped users holding it bypass the per-dashboard role filter (embed path).
+    admin-role-name: Admin
   sync:
     cron: ${BI_SYNC_CRON:0 0 */6 * * ?}
     enabled: ${BI_SYNC_ENABLED:true}

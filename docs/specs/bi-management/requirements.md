@@ -146,5 +146,6 @@
 11. WHEN Admin_Center_Authenticated_User 查询 RBAC Mapping 列表，THE RBAC_Mapping_Registry SHALL 返回所有 Sys_Role 及其对应的 Superset_Role 映射信息，支持按 Sys_Role Name、Sys_Role Type 筛选
 12. THE RBAC_Mapping_Registry SHALL 仅允许映射状态为 ACTIVE 的 Superset_Role，状态为 INACTIVE 的 Superset_Role 在映射编辑界面中展示为不可选
 13. WHEN 已映射的 Superset_Role 被标记为 INACTIVE，THE RBAC_Mapping_Registry SHALL 保留该映射记录但在查询有效映射时排除该 Superset_Role
-14. WHEN 请求 Guest Token 时，THE Admin_Center SHALL 根据当前用户的 Sys_Role 查询 RBAC_Mapping_Registry，获取对应的 ACTIVE 状态的 Superset_Role 列表，并将其作为 rls（Row Level Security）角色参数传递给 Superset Guest Token API
-15. WHEN 某个用户拥有多个 Sys_Role，THE Admin_Center SHALL 合并所有 Sys_Role 对应的 Superset_Role 映射，去重后传递给 Guest Token API
+14. WHEN Dashboard Sync_Operation 执行时，THE Admin_Center SHALL 同步 Superset `dashboard_roles`（Dashboard 级 RBAC，需 Superset 开启 `DASHBOARD_RBAC`）到本地注册表；WHEN 用户查询有效 Dashboard 列表或请求 Guest Token 时，对于在 Superset 上设置了角色的 Dashboard，THE Admin_Center SHALL 仅当该用户的 Sys_Role 经 RBAC_Mapping_Registry 解析出的 ACTIVE Superset_Role 与 Dashboard 角色有交集、或包含 Superset 管理员角色（`bi.superset.admin-role-name`，默认 `Admin`）时才将其视为可见；未设置角色的 Dashboard 不受此限制
+    > 修订说明（2026-09）：原条款要求把映射角色作为 `rls` 参数传给 Guest Token API。Superset 的 `/api/v1/security/guest_token/` 不接受角色列表（`rls` 只接受行级过滤子句），guest 身份固定为 `GUEST_ROLE_NAME`；映射角色实际从未生效。现改为在 Admin_Center 侧按角色过滤 Dashboard 分配。
+15. WHEN 某个用户拥有多个 Sys_Role，THE Admin_Center SHALL 合并所有 Sys_Role 对应的 Superset_Role 映射，去重后参与上述交集判定

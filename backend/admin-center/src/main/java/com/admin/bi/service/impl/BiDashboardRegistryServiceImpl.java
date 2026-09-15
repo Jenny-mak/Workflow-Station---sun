@@ -1,5 +1,6 @@
 package com.admin.bi.service.impl;
 
+import com.admin.bi.component.BiDashboardRegistryResponseAssembler;
 import com.admin.bi.component.DashboardSyncComponent;
 import com.admin.bi.dto.request.DashboardRegistryUpdateRequest;
 import com.admin.bi.dto.response.DashboardRegistryResponse;
@@ -31,6 +32,7 @@ public class BiDashboardRegistryServiceImpl implements BiDashboardRegistryServic
     private final BiDashboardRegistryRepository registryRepository;
     private final BiDashboardAssignmentRepository assignmentRepository;
     private final DashboardSyncComponent dashboardSyncComponent;
+    private final BiDashboardRegistryResponseAssembler responseAssembler;
 
     /** Kept outside the constructor so existing service-level property tests remain source-compatible. */
     @Autowired
@@ -113,19 +115,6 @@ public class BiDashboardRegistryServiceImpl implements BiDashboardRegistryServic
     }
 
     private DashboardRegistryResponse toResponse(BiDashboardRegistry entity) {
-        return DashboardRegistryResponse.builder()
-                .id(entity.getId())
-                .dashboardTitle(entity.getDashboardTitle())
-                .description(entity.getDescription())
-                .embedId(entity.getEmbedId())
-                .supersetDashboardUuid(entity.getSupersetDashboardUuid())
-                .supersetDashboardId(entity.getSupersetDashboardId())
-                .tags(entity.getTags())
-                .isDefaultLanding(entity.getIsDefaultLanding())
-                .status(entity.getStatus())
-                .lastSyncedAt(entity.getLastSyncedAt())
-                .createdAt(entity.getCreatedAt())
-                .updatedAt(entity.getUpdatedAt())
-                .build();
+        return responseAssembler.toResponse(entity);
     }
 }

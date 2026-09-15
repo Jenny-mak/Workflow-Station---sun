@@ -858,6 +858,8 @@ export default {
       colDefaultLanding: '預設首頁',
       colStatus: '狀態',
       colLastSynced: '最近同步',
+      colSupersetRoles: 'Superset 角色',
+      supersetRolesUnrestricted: '未在 Superset 設定角色限制：所有被分配的使用者都可檢視',
       colActions: '操作',
       edit: '編輯',
       disable: '停用',

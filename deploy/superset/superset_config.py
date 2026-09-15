@@ -81,6 +81,11 @@ if os.getenv("SUPERSET_APP_ROOT", "").rstrip("/"):
 FEATURE_FLAGS = {
     "EMBEDDED_SUPERSET": True,
     "ALERTS": True,
+    # Dashboard-level RBAC: lets authors grant a dashboard to Superset roles
+    # (Dashboard properties -> Access -> Roles). admin-center syncs those
+    # grants (superset.dashboard_roles) and filters embedded dashboards by the
+    # user's RBAC Mapping. Dashboards with no roles stay unrestricted.
+    "DASHBOARD_RBAC": True,
 }
 
 # ==============================================================================

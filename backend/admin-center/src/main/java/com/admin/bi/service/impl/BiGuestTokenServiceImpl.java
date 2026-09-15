@@ -11,10 +11,8 @@ import com.admin.bi.repository.BiDashboardRegistryRepository;
 import com.admin.bi.service.BiDashboardAssignmentService;
 import com.admin.bi.service.BiDataViewAssignmentService;
 import com.admin.bi.service.BiGuestTokenService;
-import com.admin.bi.service.BiRbacMappingService;
 import com.admin.exception.DashboardInactiveException;
 import com.admin.exception.DashboardNotFoundException;
-import com.admin.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
@@ -37,9 +35,7 @@ public class BiGuestTokenServiceImpl implements BiGuestTokenService {
 
     private final BiDashboardRegistryRepository dashboardRegistryRepository;
     private final BiDashboardAssignmentService assignmentService;
-    private final BiRbacMappingService rbacMappingService;
     private final SupersetApiClient supersetApiClient;
-    private final UserRoleRepository userRoleRepository;
     private final BiProperties biProperties;
 
     /** Field injection keeps the long-standing constructor stable for property tests. */
@@ -59,9 +55,11 @@ public class BiGuestTokenServiceImpl implements BiGuestTokenService {
             throw new DashboardInactiveException(dashboardId);
         }
 
-        // 2. Verify the appropriate assignment context. Existing landing-page callers omit
-        // dataViewId and keep the Audience Assignment behaviour unchanged. Data -> Views callers
-        // must prove both table binding and access to the concrete published view.
+        // 2. Verify the appropriate assignment context. Landing-page callers omit dataViewId and go
+        //    through getUserDashboards, which already applies the RBAC-mapping role gate (Superset
+        //    dashboard_roles vs. the user's mapped Superset roles), so a role-restricted dashboard the
+        //    user cannot see is rejected here as well. Data -> Views callers must prove both the table
+        //    binding and access to the concrete published view (same gate, applied in that service).
         boolean isAssigned;
         if (request.getDataViewId() != null) {
             isAssigned = dataViewAssignmentService != null
@@ -78,20 +76,14 @@ public class BiGuestTokenServiceImpl implements BiGuestTokenService {
             throw new AccessDeniedException("Dashboard not assigned to user");
         }
 
-        // 3. Get user's system role IDs (including virtual group roles)
-        List<String> sysRoleIds = userRoleRepository.findAllRoleIdsByUserId(userId);
-
-        // 4. Get effective (ACTIVE) Superset role IDs via RBAC mapping
-        List<Integer> supersetRoleIds = rbacMappingService.getEffectiveSupersetRoleIds(sysRoleIds);
-
-        // 5. Call Superset API to get Guest Token
+        // 3. Call Superset API to get Guest Token. Superset's guest_token API takes no role list:
+        //    the guest always runs as GUEST_ROLE_NAME, scoped to this one dashboard resource.
         String embedId = dashboard.getEmbedId().toString();
-        String token = supersetApiClient.getGuestToken(embedId, supersetRoleIds);
+        String token = supersetApiClient.getGuestToken(embedId);
 
-        log.debug("Guest token obtained for user {} on dashboard {} with {} superset roles",
-                userId, dashboardId, supersetRoleIds.size());
+        log.debug("Guest token obtained for user {} on dashboard {}", userId, dashboardId);
 
-        // 6. Return response
+        // 4. Return response
         String publicSupersetHost = StringUtils.hasText(biProperties.getSuperset().getPublicHost())
                 ? biProperties.getSuperset().getPublicHost()
                 : biProperties.getSuperset().getHost();

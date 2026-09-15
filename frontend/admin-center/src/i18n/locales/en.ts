@@ -924,6 +924,8 @@ export default {
       colDefaultLanding: 'Default Landing',
       colStatus: 'Status',
       colLastSynced: 'Last Synced',
+      colSupersetRoles: 'Superset Roles',
+      supersetRolesUnrestricted: 'No Superset role restriction: every assigned user can view it',
       colActions: 'Actions',
       edit: 'Edit',
       disable: 'Disable',

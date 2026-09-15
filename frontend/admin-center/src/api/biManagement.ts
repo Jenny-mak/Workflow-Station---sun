@@ -20,6 +20,10 @@ export interface DashboardRegistryResponse {
   supersetDashboardId: number
   tags: string
   isDefaultLanding: boolean
+  /** Superset role IDs granted on the dashboard (synced from dashboard_roles); empty = unrestricted */
+  supersetRoleIds: number[]
+  /** Names for supersetRoleIds, resolved from the synced Superset role registry */
+  supersetRoleNames: string[]
   status: DashboardStatus
   lastSyncedAt: string
   createdAt: string

@@ -1,5 +1,6 @@
 package com.admin.bi.service.impl;
 
+import com.admin.bi.component.DashboardRoleGate;
 import com.admin.bi.dto.request.DashboardAssignmentCreateRequest;
 import com.admin.bi.dto.response.DashboardAssignmentResponse;
 import com.admin.bi.dto.response.UserDashboardResponse;
@@ -45,6 +46,7 @@ public class BiDashboardAssignmentServiceImpl implements BiDashboardAssignmentSe
     private final BusinessUnitRepository businessUnitRepository;
     private final UserRoleRepository userRoleRepository;
     private final UserBusinessUnitService userBusinessUnitService;
+    private final DashboardRoleGate dashboardRoleGate;
 
     @Override
     @Transactional
@@ -169,7 +171,8 @@ public class BiDashboardAssignmentServiceImpl implements BiDashboardAssignmentSe
             mergedMap.put(a.getDashboardId(), a);
         }
 
-        // 5. Filter to only ACTIVE dashboards and sort by displayOrder
+        // 5. Filter to only ACTIVE dashboards the user's mapped Superset roles may see, sort by displayOrder
+        DashboardRoleGate.Check roleGate = dashboardRoleGate.forSysRoles(userId, roleIds);
         return mergedMap.values().stream()
                 .map(assignment -> {
                     Optional<BiDashboardRegistry> dashOpt = registryRepository.findById(assignment.getDashboardId());
@@ -177,6 +180,9 @@ public class BiDashboardAssignmentServiceImpl implements BiDashboardAssignmentSe
                         return null;
                     }
                     BiDashboardRegistry dash = dashOpt.get();
+                    if (!roleGate.allows(dash)) {
+                        return null;
+                    }
                     return UserDashboardResponse.builder()
                             .dashboardId(dash.getId())
                             .dashboardTitle(dash.getDashboardTitle())

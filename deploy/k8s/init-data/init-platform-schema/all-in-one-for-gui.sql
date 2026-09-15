@@ -4363,3 +4363,13 @@ CREATE INDEX IF NOT EXISTS idx_bi_data_view_assignment_dashboard
 
 COMMENT ON TABLE bi_data_view_assignment IS
     'Dashboard assignments to request/sub tables shown in User Portal Data Views';
+
+-- =============================================================================
+-- 82-bi-dashboard-registry-superset-roles.sql
+-- Source file: deploy/init-scripts/00-schema/82-bi-dashboard-registry-superset-roles.sql
+-- =============================================================================
+
+ALTER TABLE bi_dashboard_registry ADD COLUMN IF NOT EXISTS superset_role_ids TEXT;
+
+COMMENT ON COLUMN bi_dashboard_registry.superset_role_ids IS
+    'Sorted CSV of Superset role IDs from superset.dashboard_roles; NULL = unrestricted';

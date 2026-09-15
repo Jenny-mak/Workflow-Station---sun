@@ -383,7 +383,7 @@ services:
       SSO_REDIRECT_PORTAL_HTTP_PREFIX: ${SSO_REDIRECT_PORTAL_HTTP_PREFIX:-http://localhost:3000/portal/sso/callback}
       SSO_REDIRECT_DW_PREFIX: ${SSO_REDIRECT_DW_PREFIX:-http://localhost:3000/dev/sso/callback}
       SSO_REDIRECT_DW_HTTP_PREFIX: ${SSO_REDIRECT_DW_HTTP_PREFIX:-http://localhost:3000/dev/sso/callback}
-      SUPERSET_HOST: ${SUPERSET_HOST:-http://superset-final:8088}
+      SUPERSET_HOST: ${SUPERSET_HOST:-http://superset-final:8088/bi}
       # Browser-facing base URL returned to the portal for embedding iframes. Under the
       # single-FQDN model this is the /bi subpath on the shared origin; the embedded SDK
       # builds `${supersetDomain}/embedded/<id>` -> http://localhost:3000/bi/embedded/<id>.

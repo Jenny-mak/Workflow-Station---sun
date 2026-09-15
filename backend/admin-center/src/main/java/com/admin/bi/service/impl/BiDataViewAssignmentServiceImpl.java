@@ -1,5 +1,6 @@
 package com.admin.bi.service.impl;
 
+import com.admin.bi.component.DashboardRoleGate;
 import com.admin.bi.dto.request.DataViewAssignmentRequest;
 import com.admin.bi.dto.request.DataViewAssignmentBatchRequest;
 import com.admin.bi.dto.response.DataViewAssignmentResponse;
@@ -52,6 +53,7 @@ public class BiDataViewAssignmentServiceImpl implements BiDataViewAssignmentServ
     private final UserRoleRepository userRoleRepository;
     private final RoleRepository roleRepository;
     private final UserBusinessUnitService userBusinessUnitService;
+    private final DashboardRoleGate dashboardRoleGate;
 
     @Override
     @Transactional
@@ -203,10 +205,14 @@ public class BiDataViewAssignmentServiceImpl implements BiDataViewAssignmentServ
     @Transactional(readOnly = true)
     public List<DataViewDashboardResponse> getDashboardsForView(String userId, Long viewId) {
         ViewContext view = requireAccessibleView(userId, viewId);
+        // Same RBAC-mapping role gate as the landing page: a dashboard that carries Superset roles is
+        // listed only when the user's mapped Superset roles cover it (see DashboardRoleGate).
+        DashboardRoleGate.Check roleGate = dashboardRoleGate.forUser(userId);
         return assignmentRepository.findByTableIdOrderByCreatedAtAsc(view.tableId()).stream()
                 .map(a -> dashboardRepository.findById(a.getDashboardId()).orElse(null))
                 .filter(Objects::nonNull)
                 .filter(d -> d.getStatus() == DashboardStatus.ACTIVE)
+                .filter(roleGate::allows)
                 .map(d -> DataViewDashboardResponse.builder()
                         .dashboardId(d.getId())
                         .dashboardTitle(d.getDashboardTitle())
@@ -220,7 +226,12 @@ public class BiDataViewAssignmentServiceImpl implements BiDataViewAssignmentServ
     @Transactional(readOnly = true)
     public boolean canAccessDashboardForView(String userId, String dashboardId, Long viewId) {
         ViewContext view = requireAccessibleView(userId, viewId);
-        return assignmentRepository.existsByDashboardIdAndTableId(dashboardId, view.tableId());
+        if (!assignmentRepository.existsByDashboardIdAndTableId(dashboardId, view.tableId())) {
+            return false;
+        }
+        return dashboardRepository.findById(dashboardId)
+                .map(dashboardRoleGate.forUser(userId)::allows)
+                .orElse(false);
     }
 
     private BiDashboardRegistry requireActiveDashboard(String dashboardId) {

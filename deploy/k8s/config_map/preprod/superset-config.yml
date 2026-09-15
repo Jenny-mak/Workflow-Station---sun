@@ -9,6 +9,8 @@ data:
 
     FEATURE_FLAGS = {
         "EMBEDDED_SUPERSET": True,
+        # Dashboard-level RBAC; admin-center syncs dashboard_roles and filters embeds by RBAC Mapping.
+        "DASHBOARD_RBAC": True,
     }
 
     # Secret key — injected via Secret (SUPERSET_SECRET_KEY). Fail closed if missing:

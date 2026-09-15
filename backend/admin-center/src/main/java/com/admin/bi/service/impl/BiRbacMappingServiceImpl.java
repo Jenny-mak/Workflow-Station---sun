@@ -238,9 +238,19 @@ public class BiRbacMappingServiceImpl implements BiRbacMappingService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<BiSupersetRole> getEffectiveSupersetRoles(List<String> sysRoleIds) {
+        Map<Integer, BiSupersetRole> distinct = new LinkedHashMap<>();
+        for (BiSupersetRole role : resolveActiveSupersetRoles(sysRoleIds)) {
+            distinct.putIfAbsent(role.getSupersetRoleId(), role);
+        }
+        return new ArrayList<>(distinct.values());
+    }
+
     /**
      * 给定系统角色 ID 列表，解析出有效（ACTIVE）的 Superset 角色实体（去重前）。
-     * 供 getEffectiveSupersetRoleIds / getEffectiveSupersetRoleNames 共用。
+     * 供 getEffectiveSupersetRoleIds / getEffectiveSupersetRoleNames / getEffectiveSupersetRoles 共用。
      */
     private List<BiSupersetRole> resolveActiveSupersetRoles(List<String> sysRoleIds) {
         if (sysRoleIds == null || sysRoleIds.isEmpty()) {
