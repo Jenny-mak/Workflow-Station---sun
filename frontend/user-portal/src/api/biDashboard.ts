@@ -1,4 +1,4 @@
-import axios, { AxiosRequestConfig } from 'axios'
+import axios from 'axios'
 
 export interface UserDashboardResponse {
   dashboardId: string
@@ -18,6 +18,15 @@ export interface GuestTokenResponse {
 
 export interface GuestTokenRequest {
   dashboardId: string
+  /** Present for Data -> Views embeds; omitted for the legacy landing dashboard. */
+  dataViewId?: number
+}
+
+export interface DataViewDashboardResponse {
+  dashboardId: string
+  dashboardTitle: string
+  description: string
+  embedId: string
 }
 
 /**
@@ -41,12 +50,17 @@ adminCenterService.interceptors.response.use(
 
 export const biDashboardApi = {
   getUserDashboards: (userId: string, activeBusinessUnitId?: string) =>
-    adminCenterService.get<any, UserDashboardResponse[]>(`/bi/assignments/user/${userId}`, {
+    adminCenterService.get<unknown, UserDashboardResponse[]>(`/bi/assignments/user/${userId}`, {
       params: activeBusinessUnitId ? { activeBusinessUnitId } : undefined,
     }),
 
   getGuestToken: (data: GuestTokenRequest, userId?: string) =>
-    adminCenterService.post<any, GuestTokenResponse>('/bi/guest-token', data, {
+    adminCenterService.post<unknown, GuestTokenResponse>('/bi/guest-token', data, {
       headers: userId ? { 'X-User-Id': userId } : undefined,
     }),
+
+  getDataViewDashboards: (viewId: number) =>
+    adminCenterService.get<unknown, DataViewDashboardResponse[]>(
+      `/bi/data-view-assignments/views/${viewId}/dashboards`,
+    ),
 }

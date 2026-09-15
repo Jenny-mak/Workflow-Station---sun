@@ -6,15 +6,20 @@ import com.admin.bi.dto.request.GuestTokenRequest;
 import com.admin.bi.dto.response.GuestTokenResponse;
 import com.admin.bi.dto.response.UserDashboardResponse;
 import com.admin.bi.entity.BiDashboardRegistry;
+import com.admin.bi.enums.DashboardStatus;
 import com.admin.bi.repository.BiDashboardRegistryRepository;
 import com.admin.bi.service.BiDashboardAssignmentService;
+import com.admin.bi.service.BiDataViewAssignmentService;
 import com.admin.bi.service.BiGuestTokenService;
 import com.admin.bi.service.BiRbacMappingService;
+import com.admin.exception.DashboardInactiveException;
 import com.admin.exception.DashboardNotFoundException;
 import com.admin.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -37,6 +42,11 @@ public class BiGuestTokenServiceImpl implements BiGuestTokenService {
     private final UserRoleRepository userRoleRepository;
     private final BiProperties biProperties;
 
+    /** Field injection keeps the long-standing constructor stable for property tests. */
+    @Lazy
+    @Autowired
+    private BiDataViewAssignmentService dataViewAssignmentService;
+
     @Override
     @Transactional(readOnly = true)
     public GuestTokenResponse getGuestToken(String userId, GuestTokenRequest request) {
@@ -45,11 +55,23 @@ public class BiGuestTokenServiceImpl implements BiGuestTokenService {
         // 1. Verify dashboard exists
         BiDashboardRegistry dashboard = dashboardRegistryRepository.findById(dashboardId)
                 .orElseThrow(() -> new DashboardNotFoundException(dashboardId));
+        if (dashboard.getStatus() != DashboardStatus.ACTIVE) {
+            throw new DashboardInactiveException(dashboardId);
+        }
 
-        // 2. Verify user is assigned this dashboard
-        List<UserDashboardResponse> userDashboards = assignmentService.getUserDashboards(userId, null);
-        boolean isAssigned = userDashboards.stream()
-                .anyMatch(d -> dashboardId.equals(d.getDashboardId()));
+        // 2. Verify the appropriate assignment context. Existing landing-page callers omit
+        // dataViewId and keep the Audience Assignment behaviour unchanged. Data -> Views callers
+        // must prove both table binding and access to the concrete published view.
+        boolean isAssigned;
+        if (request.getDataViewId() != null) {
+            isAssigned = dataViewAssignmentService != null
+                    && dataViewAssignmentService.canAccessDashboardForView(
+                    userId, dashboardId, request.getDataViewId());
+        } else {
+            List<UserDashboardResponse> userDashboards = assignmentService.getUserDashboards(userId, null);
+            isAssigned = userDashboards.stream()
+                    .anyMatch(d -> dashboardId.equals(d.getDashboardId()));
+        }
 
         if (!isAssigned) {
             log.warn("User {} attempted to access unassigned dashboard {}", userId, dashboardId);

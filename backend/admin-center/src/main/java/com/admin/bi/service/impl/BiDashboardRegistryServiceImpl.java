@@ -8,6 +8,7 @@ import com.admin.bi.entity.BiDashboardRegistry;
 import com.admin.bi.enums.DashboardStatus;
 import com.admin.bi.repository.BiDashboardAssignmentRepository;
 import com.admin.bi.repository.BiDashboardRegistryRepository;
+import com.admin.bi.repository.BiDataViewAssignmentRepository;
 import com.admin.bi.service.BiDashboardRegistryService;
 import com.admin.exception.DashboardHasAssignmentsException;
 import com.admin.exception.DashboardNotFoundException;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,10 @@ public class BiDashboardRegistryServiceImpl implements BiDashboardRegistryServic
     private final BiDashboardRegistryRepository registryRepository;
     private final BiDashboardAssignmentRepository assignmentRepository;
     private final DashboardSyncComponent dashboardSyncComponent;
+
+    /** Kept outside the constructor so existing service-level property tests remain source-compatible. */
+    @Autowired
+    private BiDataViewAssignmentRepository dataViewAssignmentRepository;
 
     @Override
     public SyncResultResponse syncDashboards() {
@@ -96,7 +102,9 @@ public class BiDashboardRegistryServiceImpl implements BiDashboardRegistryServic
         BiDashboardRegistry entity = registryRepository.findById(id)
                 .orElseThrow(() -> new DashboardNotFoundException(id));
 
-        long assignmentCount = assignmentRepository.countByDashboardId(id);
+        long assignmentCount = assignmentRepository.countByDashboardId(id)
+                + (dataViewAssignmentRepository != null
+                ? dataViewAssignmentRepository.countByDashboardId(id) : 0L);
         if (assignmentCount > 0) {
             throw new DashboardHasAssignmentsException(id);
         }

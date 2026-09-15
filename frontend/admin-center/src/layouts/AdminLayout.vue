@@ -93,8 +93,11 @@
             <el-menu-item index="/bi-management/dashboard-registry">
               {{ t('menu.biDashboardRegistry') }}
             </el-menu-item>
-            <el-menu-item index="/bi-management/dashboard-assignment">
-              {{ t('menu.biDashboardAssignment') }}
+            <el-menu-item index="/bi-management/audience-assignment">
+              {{ t('menu.biAudienceAssignment') }}
+            </el-menu-item>
+            <el-menu-item index="/bi-management/data-view-assignment">
+              {{ t('menu.biDataViewAssignment') }}
             </el-menu-item>
             <el-menu-item index="/bi-management/rbac-mapping">
               {{ t('menu.biRbacMapping') }}
