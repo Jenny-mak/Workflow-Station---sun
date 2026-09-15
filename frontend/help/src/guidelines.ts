@@ -324,6 +324,7 @@ export const NAV_TREE: NavNode[] = [
         children: [
           { kind: 'leaf', id: 'ac-bi-reg', titleKey: 'nav.acBiRegistry' },
           { kind: 'leaf', id: 'ac-bi-assign', titleKey: 'nav.acBiAssignment' },
+          { kind: 'leaf', id: 'ac-bi-data-view-assign', titleKey: 'nav.acBiDataViewAssignment' },
           { kind: 'leaf', id: 'ac-bi-rbac', titleKey: 'nav.acBiRbac' },
         ],
       },

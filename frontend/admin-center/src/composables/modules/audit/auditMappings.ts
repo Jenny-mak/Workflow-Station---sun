@@ -52,7 +52,8 @@ export const resourceTypeText = (t: AuditTranslate, rt: string | null | undefine
     case 'RELATION_TABLE_ROW': return [RT, t('menu.tableData')].join(sep)
     case 'AUTH':               return t('common.auth', 'Auth')
     case 'BI_DASHBOARD':       return [t('menu.biManagement'), t('menu.biDashboardRegistry')].join(sep)
-    case 'BI_ASSIGNMENT':      return [t('menu.biManagement'), t('menu.biDashboardAssignment')].join(sep)
+    case 'BI_ASSIGNMENT':      return [t('menu.biManagement'), t('menu.biAudienceAssignment')].join(sep)
+    case 'BI_DATA_VIEW_ASSIGNMENT': return [t('menu.biManagement'), t('menu.biDataViewAssignment')].join(sep)
     case 'BI_RBAC':            return [t('menu.biManagement'), t('menu.biRbacMapping')].join(sep)
     // 自动化两页是顶级菜单项，无父级分组，故不拼 sep
     case 'AUTOMATION_FLOW':    return t('menu.automationFlows')

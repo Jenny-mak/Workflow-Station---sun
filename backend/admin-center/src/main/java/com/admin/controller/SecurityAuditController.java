@@ -104,7 +104,7 @@ public class SecurityAuditController {
     static final List<String> ALL_RESOURCE_TYPES = List.of(
             "AUTH",
             "AUTOMATION_FLOW", "AUTOMATION_PIECE",
-            "BI_ASSIGNMENT", "BI_DASHBOARD", "BI_RBAC",
+            "BI_ASSIGNMENT", "BI_DATA_VIEW_ASSIGNMENT", "BI_DASHBOARD", "BI_RBAC",
             "BUSINESS_UNIT",
             "RELATION_TABLE", "RELATION_TABLE_ROW",
             "ROLE",

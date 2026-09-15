@@ -60,6 +60,32 @@ COMMENT ON COLUMN bi_dashboard_assignment.target_type IS 'USER / ROLE / BUSINESS
 COMMENT ON COLUMN bi_dashboard_assignment.layout_mode IS 'SINGLE / MULTI / WIDGET';
 
 -- =====================================================
+-- 2b. Data View Assignment (bi_data_view_assignment)
+-- Binds dashboards to request/sub tables exposed under User Portal Data -> Views
+-- =====================================================
+CREATE TABLE IF NOT EXISTS bi_data_view_assignment (
+    id                  VARCHAR(64) PRIMARY KEY,
+    dashboard_id        VARCHAR(64) NOT NULL REFERENCES bi_dashboard_registry(id),
+    function_unit_id    BIGINT      NOT NULL REFERENCES dw_function_units(id) ON DELETE CASCADE,
+    table_id            BIGINT      NOT NULL REFERENCES dw_table_definitions(id) ON DELETE CASCADE,
+    created_at          TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by          VARCHAR(64),
+    updated_at          TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by          VARCHAR(64),
+    CONSTRAINT uk_bi_data_view_assignment UNIQUE (dashboard_id, table_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bi_data_view_assignment_fu
+    ON bi_data_view_assignment(function_unit_id);
+CREATE INDEX IF NOT EXISTS idx_bi_data_view_assignment_table
+    ON bi_data_view_assignment(table_id);
+CREATE INDEX IF NOT EXISTS idx_bi_data_view_assignment_dashboard
+    ON bi_data_view_assignment(dashboard_id);
+
+COMMENT ON TABLE bi_data_view_assignment IS
+    'Dashboard assignments to request/sub tables shown in User Portal Data Views';
+
+-- =====================================================
 -- 3. Superset Role (bi_superset_role)
 -- Locally synced Superset roles from ab_role table
 -- =====================================================

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Expand, Fold, List } from '@element-plus/icons-vue'
+import { DataAnalysis, Expand, Fold, Grid, List } from '@element-plus/icons-vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -7,9 +7,11 @@ import type { GridDisplayRow } from '@/utils/mainTableViewGridRuntime'
 import { useMainTableViewPage } from '@/composables/mainTableView/useMainTableViewPage'
 import { isMainTableView } from '@/composables/mainTableView/mainTableViewNav'
 import { searchListFilterUsers } from '@/composables/list/searchListFilterUsers'
+import DataViewDashboardPanel from '@/components/mainTableView/DataViewDashboardPanel.vue'
 
 const {
   t, Search, Download, Refresh, dataLoading, selectedViewId, searchKeyword,
+  contentMode, dataViewDashboards, dataViewDashboardsLoading,
   currentPage, pageSize, gridRuntime, filterDialogVisible, filterDialogField,
   filterDraft, widthDialogVisible, widthDialogField, widthDraft, tableRef, selectedTableRows,
   importProgressVisible, importProgressPercent, importProgressFileName,
@@ -119,11 +121,11 @@ const {
 
       <!-- Right: Data grid -->
       <div
-        v-loading="dataLoading"
+        v-loading="dataViewDashboardsLoading || (contentMode === 'data' && dataLoading)"
         class="data-grid-panel"
       >
         <template v-if="selectedFuCode && selectedViewId">
-          <div class="grid-toolbar">
+          <div class="view-context-bar">
             <el-select
               v-model="selectedViewId"
               :placeholder="t('mainTableView.selectView')"
@@ -137,6 +139,41 @@ const {
                 :value="v.id"
               />
             </el-select>
+            <div
+              v-if="dataViewDashboards.length"
+              class="content-mode-switch"
+              role="tablist"
+              :aria-label="t('mainTableView.displayMode')"
+            >
+              <button
+                type="button"
+                class="content-mode-option"
+                :class="{ 'is-active': contentMode === 'data' }"
+                role="tab"
+                :aria-selected="contentMode === 'data'"
+                @click="contentMode = 'data'"
+              >
+                <el-icon><Grid /></el-icon>
+                <span>{{ t('mainTableView.recordsMode') }}</span>
+              </button>
+              <button
+                type="button"
+                class="content-mode-option"
+                :class="{ 'is-active': contentMode === 'dashboard' }"
+                role="tab"
+                :aria-selected="contentMode === 'dashboard'"
+                @click="contentMode = 'dashboard'"
+              >
+                <el-icon><DataAnalysis /></el-icon>
+                <span>{{ t('mainTableView.dashboardMode') }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="contentMode === 'data'"
+            class="grid-toolbar"
+          >
             <el-input
               v-model="searchKeyword"
               :placeholder="t('common.search')"
@@ -171,8 +208,14 @@ const {
             </span>
           </div>
 
+          <DataViewDashboardPanel
+            v-if="contentMode === 'dashboard' && selectedViewId"
+            :view-id="selectedViewId"
+            :dashboards="dataViewDashboards"
+          />
+
           <div
-            v-if="displayColumns.length"
+            v-else-if="displayColumns.length"
             ref="gridScrollRef"
             class="mtv-data-grid-scroll"
           >
@@ -316,7 +359,7 @@ const {
         </div>
 
         <div
-          v-if="displayTotal > 0"
+          v-if="contentMode === 'data' && displayTotal > 0"
           class="pagination-wrap"
         >
           <ListPagination
@@ -592,6 +635,71 @@ const {
   margin-bottom: 16px;
   align-items: center;
   flex-shrink: 0;
+}
+.view-context-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  flex-shrink: 0;
+}
+.content-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  background: var(--el-fill-color-light);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 4%);
+}
+.content-mode-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--el-text-color-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+
+  &:hover:not(.is-active) {
+    color: var(--el-text-color-primary);
+    background: var(--el-fill-color);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--el-color-primary-light-5);
+    outline-offset: 1px;
+  }
+
+  &.is-active {
+    color: var(--el-color-primary);
+    background: var(--el-bg-color);
+    box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+  }
+}
+
+@media (max-width: 760px) {
+  .view-context-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .content-mode-switch {
+    align-self: flex-start;
+  }
 }
 .grid-hint {
   font-size: 12px;

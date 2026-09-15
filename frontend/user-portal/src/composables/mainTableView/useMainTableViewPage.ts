@@ -36,6 +36,7 @@ import {
   sortViewsByName,
   tableGroupKey,
 } from '@/composables/mainTableView/mainTableViewNav'
+import { biDashboardApi, type DataViewDashboardResponse } from '@/api/biDashboard'
 
 export function useMainTableViewPage() {
   const { t, locale } = useI18n()
@@ -52,6 +53,10 @@ const allRows = ref<MainTableViewDataRow[]>([])
 const dataTotal = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
+const contentMode = ref<'data' | 'dashboard'>('data')
+const dataViewDashboards = ref<DataViewDashboardResponse[]>([])
+const dataViewDashboardsLoading = ref(false)
+let latestDashboardQuery = 0
 // Every state change reloads, so a slow response for an abandoned view must not overwrite a newer
 // one. Only the reply to the most recently issued request is allowed to land.
 let latestQuery = 0
@@ -322,6 +327,31 @@ async function loadData() {
   }
 }
 
+async function loadDataViewDashboards() {
+  const viewId = selectedViewId.value
+  const queryId = ++latestDashboardQuery
+  // Clear the previous table's bindings immediately. Besides preventing stale dashboard content,
+  // this keeps the mode switch hidden while the newly selected table is being resolved.
+  dataViewDashboards.value = []
+  if (!viewId) {
+    contentMode.value = 'data'
+    return
+  }
+  dataViewDashboardsLoading.value = true
+  try {
+    const response = await biDashboardApi.getDataViewDashboards(viewId)
+    if (queryId !== latestDashboardQuery) return
+    dataViewDashboards.value = response || []
+    if (!dataViewDashboards.value.length) contentMode.value = 'data'
+  } catch {
+    if (queryId !== latestDashboardQuery) return
+    contentMode.value = 'data'
+    ElMessage.error(t('mainTableView.loadDashboardsFailed'))
+  } finally {
+    if (queryId === latestDashboardQuery) dataViewDashboardsLoading.value = false
+  }
+}
+
 watch(selectedFuCode, async (code) => {
   if (!code) return
   currentPage.value = 1
@@ -336,10 +366,12 @@ watch(selectedFuCode, async (code) => {
 
 watch(selectedViewId, (id) => {
   currentPage.value = 1
+  contentMode.value = 'data'
   if (id) {
     resetRuntimeForView(id)
   }
   loadData()
+  loadDataViewDashboards()
 })
 
 // FK drill-down to a view in the SAME function unit only changes the query (viewId + fk), not the path,
@@ -387,7 +419,7 @@ function formatCell(colOrValue: MainTableViewFieldColumn | unknown, row?: GridDi
   return formatMainTableViewCell(colOrValue)
 }
 
-function isRowSelectable(_row: GridDisplayRow) {
+function isRowSelectable() {
   return true
 }
 
@@ -746,6 +778,7 @@ onMounted(async () => {
 })
   return {
     t, Search, Download, Refresh, Upload, dataLoading, functionUnits, views, selectedViewId, searchKeyword,
+    contentMode, dataViewDashboards, dataViewDashboardsLoading,
     gridColumns, allRows, dataTotal, currentPage, pageSize, gridRuntime, filterDialogVisible, filterDialogField,
     filterDraft, widthDialogVisible, widthDialogField, widthDraft, tableRef, selectedTableRows, importing,
     importInputRef, importProgressVisible, importProgressPercent, importProgressPhase, importProgressFileName,

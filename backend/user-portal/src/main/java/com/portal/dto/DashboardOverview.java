@@ -39,6 +39,10 @@ public class DashboardOverview {
     public static class TaskOverview {
         /** 待办任务数 */
         private Long pendingCount;
+        /** 当前用户可认领的任务数 */
+        private Long claimableCount;
+        /** 已直接分配或由当前用户认领的待办数 */
+        private Long todoCount;
         /** 逾期任务数 */
         private Long overdueCount;
         /** 今日完成数 */

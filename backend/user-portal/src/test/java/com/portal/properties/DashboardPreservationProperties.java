@@ -116,6 +116,10 @@ class DashboardPreservationProperties {
         assertNotNull(taskOverview, "TaskOverview should not be null");
         assertEquals((long) taskCount, taskOverview.getPendingCount(),
                 "pendingCount should equal total task count");
+        assertEquals(0L, taskOverview.getClaimableCount(),
+                "direct tasks should not be counted as claimable");
+        assertEquals((long) taskCount, taskOverview.getTodoCount(),
+                "direct tasks should be counted as personal To Do");
         assertEquals((long) expectedOverdueCount, taskOverview.getOverdueCount(),
                 "overdueCount should equal count of overdue tasks");
         assertEquals((long) completedTodayFromFlowable, taskOverview.getCompletedTodayCount(),
@@ -352,6 +356,41 @@ class DashboardPreservationProperties {
     // ========================================================================
     // Generators
     // ========================================================================
+
+    @Example
+    void taskOverviewShouldSeparateClaimableFromPersonalTodo() {
+        String userId = "user_dashboard";
+        TaskQueryComponent taskQueryComponent = Mockito.mock(TaskQueryComponent.class);
+        WorkflowEngineClient workflowEngineClient = Mockito.mock(WorkflowEngineClient.class);
+        DashboardComponent dashboardComponent = new DashboardComponent(
+                taskQueryComponent,
+                workflowEngineClient,
+                Mockito.mock(BusinessUnitRepository.class),
+                Mockito.mock(UserBusinessUnitRepository.class),
+                Mockito.mock(ProcessInstanceRepository.class),
+                Mockito.mock(com.portal.repository.ProcessDraftRepository.class),
+                Mockito.mock(com.portal.service.UserDisplayNameResolver.class),
+                Mockito.mock(com.portal.component.RequestIdEnricher.class));
+        ReflectionTestUtils.setField(dashboardComponent, "aggregationExecutor",
+                (java.util.concurrent.Executor) Runnable::run);
+
+        List<TaskInfo> tasks = List.of(
+                TaskInfo.builder().taskId("free-pool").claimPoolTask(true).claimable(true).build(),
+                TaskInfo.builder().taskId("my-pool").claimPoolTask(true).claimedByCurrentUser(true).build(),
+                TaskInfo.builder().taskId("other-pool").claimPoolTask(true).build(),
+                TaskInfo.builder().taskId("direct").assignmentType("USER").build());
+        when(taskQueryComponent.queryTasks(any(TaskQueryRequest.class)))
+                .thenReturn(PageResponse.of(tasks, 0, tasks.size(), tasks.size()));
+        when(workflowEngineClient.getCompletedTasks(
+                eq(userId), anyInt(), anyInt(), any(), any(), any()))
+                .thenReturn(Optional.of(Map.of("totalElements", 0)));
+
+        DashboardOverview.TaskOverview overview = dashboardComponent.getTaskOverview(userId);
+
+        assertEquals(4L, overview.getPendingCount());
+        assertEquals(1L, overview.getClaimableCount());
+        assertEquals(2L, overview.getTodoCount());
+    }
 
     @Provide
     Arbitrary<String> userIds() {

@@ -40,6 +40,35 @@ export interface DashboardAssignmentResponse {
   updatedAt: string
 }
 
+export interface DataViewAssignmentResponse {
+  id: string
+  dashboardId: string
+  dashboardTitle: string
+  functionUnitId: number
+  functionUnitCode: string
+  functionUnitName: string
+  tableId: number
+  tableName: string
+  tableDisplayName: string
+  tableType: 'MAIN' | 'SUB'
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DataViewFunctionUnitOption {
+  id: number
+  code: string
+  name: string
+}
+
+export interface DataViewTableOption {
+  id: number
+  functionUnitId: number
+  tableName: string
+  tableDisplayName: string
+  tableType: 'MAIN' | 'SUB'
+}
+
 export interface SyncResultResponse {
   created: number
   updated: number
@@ -100,6 +129,18 @@ export interface DashboardAssignmentCreateRequest {
   isDefault?: boolean
 }
 
+export interface DataViewAssignmentRequest {
+  dashboardId: string
+  functionUnitId: number
+  tableId: number
+}
+
+export interface DataViewAssignmentBatchRequest {
+  dashboardIds: string[]
+  functionUnitId: number
+  tableId: number
+}
+
 export interface RbacMappingUpdateRequest {
   supersetRoleIds: number[]
 }
@@ -118,6 +159,7 @@ export interface RoleOptionResponse {
 
 export interface GuestTokenRequest {
   dashboardId: string
+  dataViewId?: number
 }
 
 // ==================== Paginated Response ====================
@@ -187,6 +229,7 @@ export interface RbacMappingListQuery {
 
 const DASHBOARD_BASE = '/bi/dashboards'
 const ASSIGNMENT_BASE = '/bi/assignments'
+const DATA_VIEW_ASSIGNMENT_BASE = '/bi/data-view-assignments'
 const RBAC_BASE = '/bi/rbac'
 const GUEST_TOKEN_BASE = '/bi/guest-token'
 
@@ -221,7 +264,7 @@ export const biManagementApi = {
       del<void>(`${DASHBOARD_BASE}/${id}`),
   },
 
-  /** Dashboard Assignment Management */
+  /** Audience Assignment Management (legacy user/role/business-unit assignment). */
   assignment: {
     /** Create assignment record */
     create: (data: DashboardAssignmentCreateRequest) =>
@@ -245,6 +288,36 @@ export const biManagementApi = {
     /** Get user's effective dashboard list */
     getUserDashboards: (userId: string) =>
       get<UserDashboardResponse[]>(`${ASSIGNMENT_BASE}/user/${userId}`),
+  },
+
+  /** Dashboard-to-table bindings used by User Portal Data -> Views. */
+  dataViewAssignment: {
+    create: (data: DataViewAssignmentRequest) =>
+      post<DataViewAssignmentResponse>(DATA_VIEW_ASSIGNMENT_BASE, data),
+
+    createBatch: (data: DataViewAssignmentBatchRequest) =>
+      post<DataViewAssignmentResponse[]>(`${DATA_VIEW_ASSIGNMENT_BASE}/batch`, data),
+
+    list: (params?: {
+      page?: number
+      size?: number
+      dashboardTitle?: string
+      functionUnitId?: number
+    }) => get<PageResponse<DataViewAssignmentResponse>>(DATA_VIEW_ASSIGNMENT_BASE, { params }),
+
+    update: (id: string, data: DataViewAssignmentRequest) =>
+      put<DataViewAssignmentResponse>(`${DATA_VIEW_ASSIGNMENT_BASE}/${id}`, data),
+
+    delete: (id: string) =>
+      del<void>(`${DATA_VIEW_ASSIGNMENT_BASE}/${id}`),
+
+    listFunctionUnits: () =>
+      get<DataViewFunctionUnitOption[]>(`${DATA_VIEW_ASSIGNMENT_BASE}/function-units`),
+
+    listTables: (functionUnitId: number) =>
+      get<DataViewTableOption[]>(
+        `${DATA_VIEW_ASSIGNMENT_BASE}/function-units/${functionUnitId}/tables`,
+      ),
   },
 
   /** RBAC Mapping Management */

@@ -125,18 +125,19 @@ public class DashboardComponent {
             }
         }
 
-        // Fetch process stats in parallel with queryTasks (both hit workflow-engine; snapshot speeds first paint)
+        // Fetch process stats in parallel with the exact Mine ∪ claim-pool set shown on To Do.
+        // Dashboard task rows must carry task ids from that list; process-instance ids belong to
+        // My Requests and would open the wrong form.
         CompletableFuture<DashboardOverview.ProcessOverview> processOverviewFuture =
                 supplyWithRequestContext(() -> getProcessOverview(userId));
 
-        TaskQueryRequest dashTaskRequest = TaskQueryRequest.builder()
-                .userId(userId)
-                .page(0)
-                .size(1000)
-                .sortBy("createTime")
-                .sortDirection("desc")
-                .build();
-        PageResponse<TaskInfo> taskPage = taskQueryComponent.queryTasks(dashTaskRequest);
+        List<TaskInfo> dashboardTasks = new ArrayList<>(taskQueryComponent.listMergedTodoTasks(userId));
+        requestIdEnricher.enrichTaskRequestIds(dashboardTasks);
+        dashboardTasks.sort(Comparator.comparing(
+                TaskInfo::getCreateTime,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        PageResponse<TaskInfo> taskPage = PageResponse.of(
+                dashboardTasks, 0, Math.max(1, dashboardTasks.size()), dashboardTasks.size());
 
         // Overlaps with history inside buildTaskOverviewFromPage (local CPU or light logic)
         CompletableFuture<DashboardOverview.PerformanceOverview> performanceFuture =
@@ -181,6 +182,8 @@ public class DashboardComponent {
     private DashboardOverview.TaskOverview buildTaskOverviewFromPage(String userId, PageResponse<TaskInfo> taskPage) {
         List<TaskInfo> allTasks = taskPage.getContent();
         long pendingCount = taskPage.getTotalElements();
+        long claimableCount = 0;
+        long todoCount = 0;
         long overdueCount = 0;
         long urgentCount = 0;
         long highPriorityCount = 0;
@@ -190,6 +193,12 @@ public class DashboardComponent {
             }
             if (Boolean.TRUE.equals(t.getIsOverdue())) {
                 overdueCount++;
+            }
+            if (t.isClaimable()) {
+                claimableCount++;
+            }
+            if (!t.isClaimPoolTask() || t.isClaimedByCurrentUser()) {
+                todoCount++;
             }
             String p = t.getPriority();
             if (p != null) {
@@ -302,6 +311,8 @@ public class DashboardComponent {
 
         return DashboardOverview.TaskOverview.builder()
                 .pendingCount(pendingCount)
+                .claimableCount(claimableCount)
+                .todoCount(todoCount)
                 .overdueCount(overdueCount)
                 .completedTodayCount(completedTodayCount)
                 .avgProcessingHours(Math.round(avgProcessingHours * 10) / 10.0)

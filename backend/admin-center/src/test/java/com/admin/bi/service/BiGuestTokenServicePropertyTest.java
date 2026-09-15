@@ -35,6 +35,7 @@ class BiGuestTokenServicePropertyTest {
 
     private BiDashboardRegistryRepository dashboardRegistryRepository;
     private BiDashboardAssignmentService assignmentService;
+    private BiDataViewAssignmentService dataViewAssignmentService;
     private BiRbacMappingService rbacMappingService;
     private SupersetApiClient supersetApiClient;
     private UserRoleRepository userRoleRepository;
@@ -45,6 +46,7 @@ class BiGuestTokenServicePropertyTest {
     void setUp() {
         dashboardRegistryRepository = mock(BiDashboardRegistryRepository.class);
         assignmentService = mock(BiDashboardAssignmentService.class);
+        dataViewAssignmentService = mock(BiDataViewAssignmentService.class);
         rbacMappingService = mock(BiRbacMappingService.class);
         supersetApiClient = mock(SupersetApiClient.class);
         userRoleRepository = mock(UserRoleRepository.class);
@@ -57,9 +59,65 @@ class BiGuestTokenServicePropertyTest {
                 userRoleRepository,
                 biProperties
         );
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                service, "dataViewAssignmentService", dataViewAssignmentService);
     }
 
     // ========== Arbitraries ==========
+
+    @Example
+    void dataViewGuestTokenUsesTheConcreteViewAssignment() {
+        String dashboardId = "dashboard-data-view";
+        String userId = "portal-user";
+        long viewId = 42L;
+        BiDashboardRegistry dashboard = BiDashboardRegistry.builder()
+                .id(dashboardId)
+                .dashboardTitle("Data View Dashboard")
+                .embedId(UUID.randomUUID())
+                .status(DashboardStatus.ACTIVE)
+                .build();
+        when(dashboardRegistryRepository.findById(dashboardId)).thenReturn(Optional.of(dashboard));
+        when(dataViewAssignmentService.canAccessDashboardForView(userId, dashboardId, viewId))
+                .thenReturn(true);
+        when(userRoleRepository.findAllRoleIdsByUserId(userId)).thenReturn(List.of("role-1"));
+        when(rbacMappingService.getEffectiveSupersetRoleIds(List.of("role-1"))).thenReturn(List.of(7));
+        when(supersetApiClient.getGuestToken(dashboard.getEmbedId().toString(), List.of(7)))
+                .thenReturn("data-view-token");
+
+        GuestTokenRequest request = new GuestTokenRequest();
+        request.setDashboardId(dashboardId);
+        request.setDataViewId(viewId);
+
+        GuestTokenResponse response = service.getGuestToken(userId, request);
+
+        assertThat(response.getToken()).isEqualTo("data-view-token");
+        verify(dataViewAssignmentService).canAccessDashboardForView(userId, dashboardId, viewId);
+        verifyNoInteractions(assignmentService);
+    }
+
+    @Example
+    void dataViewGuestTokenRejectsAnUnassignedDashboard() {
+        String dashboardId = "dashboard-unassigned";
+        String userId = "portal-user";
+        long viewId = 43L;
+        BiDashboardRegistry dashboard = BiDashboardRegistry.builder()
+                .id(dashboardId)
+                .dashboardTitle("Unassigned")
+                .embedId(UUID.randomUUID())
+                .status(DashboardStatus.ACTIVE)
+                .build();
+        when(dashboardRegistryRepository.findById(dashboardId)).thenReturn(Optional.of(dashboard));
+        when(dataViewAssignmentService.canAccessDashboardForView(userId, dashboardId, viewId))
+                .thenReturn(false);
+
+        GuestTokenRequest request = new GuestTokenRequest();
+        request.setDashboardId(dashboardId);
+        request.setDataViewId(viewId);
+
+        assertThatThrownBy(() -> service.getGuestToken(userId, request))
+                .isInstanceOf(AccessDeniedException.class);
+        verifyNoInteractions(assignmentService, rbacMappingService, supersetApiClient);
+    }
 
     @Provide
     Arbitrary<String> dashboardIds() {
