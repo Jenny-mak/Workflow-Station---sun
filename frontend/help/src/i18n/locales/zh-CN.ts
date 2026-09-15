@@ -661,7 +661,7 @@ export default {
     advanceSample: '上传属性里的 Advance 开关',
     runtimeTitle: '运行时别人看到什么',
     runtimeBody:
-      '「多文件」关闭时，拖入或点选一个文件，保存值是单个 URL。打开后可以把多个文件拖进虚线框，也可以点击虚线框，在资源管理器里一次选多个文件（Ctrl 或 Shift 连选）。已上传文件以小卡片显示在框内，按文件名排序。点击卡片打开抽屉，里面是 File Description、Callback URL、Auto Send to FileNet（在接上 FileNet 归档前显示 Completed）。左键 Callback URL 打开站内预览；Ctrl 点击或右键仍走原始文件地址。若打开「禁止下载」，抽屉不展示 Callback URL，无法点到原始地址；有站内预览时点文件名即可预览。子表新增/编辑对话框同样用卡片和抽屉。子表列表格仍显示第一个文件名，其余用 +N，例如 report.pdf +2。如果上传字段配置了配套文件名列，会把原始文件名写进去，多个文件用分号加空格拼接。发送邮件从 FILE 字段取附件时会带上每一个已存文件。',
+      '「多文件」关闭时，拖入或点选一个文件，保存值是单个 URL。打开后可以把多个文件拖进虚线框，也可以点击虚线框，在资源管理器里一次选多个文件（Ctrl 或 Shift 连选）。已上传文件以小卡片显示在框内，按文件名排序。点击卡片打开 File details 抽屉。文件名右侧是 Preview；未打开「禁止下载」时还有 Download。File Description 下方有 Save，失焦不会自动保存。Callback URL 和 Auto Send to FileNet 暂时隐藏。子表新增/编辑对话框同样用卡片和抽屉。子表列表格仍显示第一个文件名，其余用 +N，例如 report.pdf +2。如果上传字段配置了配套文件名列，会把原始文件名写进去，多个文件用分号加空格拼接。发送邮件从 FILE 字段取附件时会带上每一个已存文件。同一表单上的 Basic Upload 也用这套抽屉。',
     runtimeSample: '子表单元格上的 report.pdf +2',
     failTitle: '失败时',
     failBody:

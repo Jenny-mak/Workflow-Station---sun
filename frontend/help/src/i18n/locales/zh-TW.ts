@@ -661,7 +661,7 @@ export default {
     advanceSample: '上傳屬性裡的 Advance 開關',
     runtimeTitle: '執行時別人看到什麼',
     runtimeBody:
-      '「多檔」關閉時，拖入或點選一個檔案，儲存值是單個 URL。打開後可以把多個檔案拖進虛線框，也可以點擊虛線框，在檔案總管裡一次選多個檔案（Ctrl 或 Shift 連選）。已上傳檔案以小卡片顯示在框內，按檔名排序。點擊卡片打開抽屜，裡面是 File Description、Callback URL、Auto Send to FileNet（接上 FileNet 歸檔前顯示 Completed）。左鍵 Callback URL 打開站內預覽；Ctrl 點擊或右鍵仍走原始檔案位址。若打開「禁止下載」，抽屜不展示 Callback URL，無法點到原始位址；有站內預覽時點檔名即可預覽。子表新增/編輯對話框同樣用卡片和抽屜。子表列表格仍顯示第一個檔案名，其餘用 +N，例如 report.pdf +2。如果上傳欄位設定了配套檔名欄，會把原始檔名寫進去，多個檔案用分號加空白拼接。傳送郵件從 FILE 欄位取附件時會帶上每一個已存檔案。',
+      '「多檔」關閉時，拖入或點選一個檔案，儲存值是單個 URL。打開後可以把多個檔案拖進虛線框，也可以點擊虛線框，在檔案總管裡一次選多個檔案（Ctrl 或 Shift 連選）。已上傳檔案以小卡片顯示在框內，按檔名排序。點擊卡片打開 File details 抽屜。檔名右側是 Preview；未打開「禁止下載」時還有 Download。File Description 下方有 Save，失焦不會自動儲存。Callback URL 和 Auto Send to FileNet 暫時隱藏。子表新增/編輯對話框同樣用卡片和抽屜。子表列表格仍顯示第一個檔案名，其餘用 +N，例如 report.pdf +2。如果上傳欄位設定了配套檔名欄，會把原始檔名寫進去，多個檔案用分號加空白拼接。傳送郵件從 FILE 欄位取附件時會帶上每一個已存檔案。同一表單上的 Basic Upload 也用這套抽屜。',
     runtimeSample: '子表儲存格上的 report.pdf +2',
     failTitle: '失敗時',
     failBody:

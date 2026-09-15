@@ -15,6 +15,7 @@ import {
   resolveUploadMaxFileSizeMb,
   resolveUploadMaxFiles,
   splitUploadFileList,
+  asUploadFileList,
   uploadValueFingerprint,
   isDuplicateUploadFile,
   rejectUploadFileReason,
@@ -150,6 +151,18 @@ describe('splitUploadFileList', () => {
     const { stored, display } = splitUploadFileList([live], 10)
     expect(stored).toBe('/api/v1/upload/files/c?originalName=c.pdf')
     expect(display[0].url).toBe('/api/v1/upload/files/c?originalName=c.pdf')
+  })
+
+  it('accepts a single file object from form-create onChange', () => {
+    const live = { status: 'ready' as const, name: 'a.pdf', url: '' }
+    const { stored, display } = splitUploadFileList(live, 10)
+    expect(stored).toBe('')
+    expect(display).toEqual([live])
+  })
+
+  it('drops holes and DOM events so a native change cannot abort upload', () => {
+    expect(asUploadFileList([undefined, { name: 'a.pdf' }])).toEqual([{ name: 'a.pdf' }])
+    expect(asUploadFileList({ preventDefault() {}, target: {} })).toEqual([])
   })
 })
 

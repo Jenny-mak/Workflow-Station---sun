@@ -917,6 +917,7 @@ export default {
       status: 'Auto Send to FileNet',
       statusCompleted: 'Completed',
       saveFailed: '文件描述保存失败',
+      download: '下载',
       detailsTitle: '文件详情',
     },
     subTablePermission: {

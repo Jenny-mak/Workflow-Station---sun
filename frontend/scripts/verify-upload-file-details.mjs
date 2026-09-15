@@ -167,6 +167,20 @@ try {
     if (await details.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false)) {
       previewDetailsOk = true
       await details.scrollIntoViewIfNeeded()
+      rec(
+        'Form Preview File details shows Preview and Download',
+        await details.getByTestId('upload-file-preview').isVisible()
+          && await details.getByTestId('upload-file-download').isVisible(),
+      )
+      rec(
+        'Form Preview File details shows Save under description',
+        await details.getByTestId('upload-file-save').isVisible(),
+      )
+      rec(
+        'Form Preview File details hides FileNet fields',
+        (await details.getByText('Callback URL', { exact: true }).count()) === 0
+          && (await details.getByText('Auto Send to FileNet', { exact: true }).count()) === 0,
+      )
       const previewShot = resolve(DW_SHOTS, `${DATE}_dw-form-preview-upload-details.png`)
       await details.screenshot({ path: previewShot })
       console.log(`screenshot ${previewShot}`)
@@ -256,8 +270,18 @@ try {
   rec('Portal start form shows file details after upload', portalVisible)
   if (portalVisible) {
     rec(
-      'Portal start form status is Completed',
-      (await portalDetails.locator('.el-tag').first().innerText()).includes('Completed'),
+      'Portal File details shows Preview and Download',
+      await portalDetails.getByTestId('upload-file-preview').isVisible()
+        && await portalDetails.getByTestId('upload-file-download').isVisible(),
+    )
+    rec(
+      'Portal File details shows Save under description',
+      await portalDetails.getByTestId('upload-file-save').isVisible(),
+    )
+    rec(
+      'Portal File details hides FileNet fields',
+      (await portalDetails.getByText('Callback URL', { exact: true }).count()) === 0
+        && (await portalDetails.getByText('Auto Send to FileNet', { exact: true }).count()) === 0,
     )
     await portalDetails.scrollIntoViewIfNeeded()
     const portalShot = resolve(PORTAL_SHOTS, `${DATE}_portal-upload-file-details.png`)
@@ -310,6 +334,9 @@ const required = new Set([
   'Advance on reveals Header Info',
   'Found a Portal start form with Upload',
   'Portal start form shows file details after upload',
+  'Portal File details shows Preview and Download',
+  'Portal File details shows Save under description',
+  'Portal File details hides FileNet fields',
 ])
 const failed = results.filter((r) => !r.ok)
 const requiredFailed = failed.filter((r) => required.has(r.n))

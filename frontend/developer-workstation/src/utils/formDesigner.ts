@@ -250,7 +250,7 @@ function stampPreviewUploadRule(
     _file?: { status?: string },
     fileList?: Array<{ url?: string; name?: string; status?: string; response?: unknown }>,
   ) => {
-    const { stored, display } = splitUploadFileList(fileList ?? [], maxFiles)
+    const { stored, display } = splitUploadFileList(fileList ?? _file, maxFiles)
     formData.value[field] = display
     const links = extractFileLinks(stored)
     if (uploadSession && links[0]) {
@@ -262,7 +262,7 @@ function stampPreviewUploadRule(
     _file?: unknown,
     fileList?: Array<{ url?: string; name?: string; status?: string; response?: unknown }>,
   ) => {
-    const { stored, display } = splitUploadFileList(fileList ?? [], maxFiles)
+    const { stored, display } = splitUploadFileList(fileList ?? _file, maxFiles)
     formData.value[field] = display
     const links = extractFileLinks(stored)
     if (uploadSession) {

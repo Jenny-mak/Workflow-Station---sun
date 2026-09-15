@@ -909,6 +909,7 @@ export default {
       status: 'Auto Send to FileNet',
       statusCompleted: 'Completed',
       saveFailed: '檔案描述儲存失敗',
+      download: '下載',
       detailsTitle: '檔案詳情',
     },
     uploadLimitExceed: '最多允許 {limit} 個檔案',

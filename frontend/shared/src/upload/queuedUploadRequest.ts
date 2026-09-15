@@ -27,12 +27,35 @@ export interface QueuedUploadRequestOptions {
 }
 
 /**
+ * form-create {@code inject:true} calls prop functions as {@code handler({ args })}.
+ * el-upload calls {@code httpRequest(options)} with {@code options.file} set.
+ */
+export function resolveQueuedUploadOptions(raw: unknown): QueuedUploadRequestOptions | null {
+  if (!raw || typeof raw !== 'object') return null
+  const rec = raw as Record<string, unknown>
+  const file = rec.file
+  if (file && typeof file === 'object' && typeof (file as File).name === 'string') {
+    return rec as unknown as QueuedUploadRequestOptions
+  }
+  if (Array.isArray(rec.args) && rec.args.length) {
+    return resolveQueuedUploadOptions(rec.args[0])
+  }
+  return null
+}
+
+/**
  * Custom {@code el-upload} http-request: same one-file POST as the native action,
  * gated to {@link MAX_UPLOAD_CONCURRENCY}, returning the XHR so Element Plus can abort.
  */
-export function queuedUploadRequest(options: QueuedUploadRequestOptions): XMLHttpRequest {
+export function queuedUploadRequest(raw: QueuedUploadRequestOptions): XMLHttpRequest {
   const xhr = new XMLHttpRequest()
+  const options = resolveQueuedUploadOptions(raw)
   const session = { aborted: false, sent: false, notified: false }
+  if (!options) {
+    const onError = (raw as { onError?: (error: Error) => void })?.onError
+    if (typeof onError === 'function') onError(new Error('UPLOAD_NO_FILE'))
+    return xhr
+  }
   const nativeAbort = xhr.abort.bind(xhr)
   xhr.abort = () => {
     session.aborted = true

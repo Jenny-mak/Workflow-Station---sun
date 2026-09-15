@@ -53,6 +53,7 @@ const sections: GuideSection[] = [
     samples: [{ code: 'Field = fileupload', hintKey: 'formUploadGuide.scenesSample' }],
   },
   {
+    anchor: 'runtime',
     titleKey: 'formUploadGuide.runtimeTitle',
     bodyKey: 'formUploadGuide.runtimeBody',
     samples: [{ code: 'report.pdf +2', hintKey: 'formUploadGuide.runtimeSample' }],

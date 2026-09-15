@@ -478,6 +478,8 @@
           :labels="uploadDetailLabels"
           :preview-file="previewCurrentFile"
           :cannot-download="!!field.cannotDownload"
+          :help-href="uploadDetailsHelpHref"
+          :help-aria-label="t('upload.guideLinkAria')"
         />
       </div>
     </template>
@@ -534,6 +536,8 @@
           :labels="uploadDetailLabels"
           :preview-file="previewCurrentFile"
           :cannot-download="!!field.cannotDownload"
+          :help-href="uploadDetailsHelpHref"
+          :help-aria-label="t('upload.guideLinkAria')"
         />
       </div>
     </template>
@@ -737,6 +741,7 @@ import { useFieldSensitiveMask } from '@/composables/fieldRenderer/useFieldSensi
 import { FORM_RENDERER_FIELDS_CTX } from './formRendererFieldsContext'
 import { INLINE_LOOKUP_CASCADE_CTX } from '@/composables/formRenderer/inlineFormLookupCascadeContext'
 import { isAdvancedUploadType, isAnyUploadType } from '@platform-shared/upload/uploadRuleType'
+import { helpGuideAbsoluteUrl } from '@/utils/helpGuideUrl'
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -883,12 +888,19 @@ const {
   openDetails,
 } = useFieldUpload(props, emit)
 
+const uploadDetailsHelpHref = helpGuideAbsoluteUrl('/form-upload#runtime')
 const uploadDetailLabels = computed(() => ({
   description: t('upload.fileDescription'),
   callbackUrl: t('upload.callbackUrl'),
   status: t('upload.autoSendToFileNet'),
   completed: t('upload.statusCompleted'),
+  save: t('common.save'),
+  saveSuccess: t('upload.descriptionSaveSuccess'),
   saveFailed: t('upload.descriptionSaveFailed'),
+  download: t('filePreview.download'),
+  preview: t('upload.preview'),
+  downloadFailed: t('common.downloadFailed'),
+  fileNotFound: t('common.fileNotFound'),
 }))
 
 // Editor — registers onBeforeUnmount first (matches original order).

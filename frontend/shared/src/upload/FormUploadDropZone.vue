@@ -3,6 +3,7 @@
     class="form-upload-box"
     :class="{ 'is-compact': compact, 'is-disabled': disabled }"
     data-testid="form-upload-drop"
+    @change.stop
   >
     <el-upload
       v-if="!disabled"
@@ -63,7 +64,7 @@ import { computed } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 import type { UploadRequestOptions, UploadStatus, UploadUserFile } from 'element-plus'
 import FormUploadFileCard from './FormUploadFileCard.vue'
-import { extractStoredUploadUrl, rejectUploadFileReason } from './uploadFieldValue'
+import { asUploadFileList, extractStoredUploadUrl, rejectUploadFileReason } from './uploadFieldValue'
 import type { UploadFileListItem } from './uploadFieldValue'
 
 const props = defineProps<{
@@ -105,8 +106,10 @@ function elStatus(status?: string): UploadStatus | undefined {
   return status && EL_UPLOAD_STATUSES.includes(status) ? (status as UploadStatus) : undefined
 }
 
+const rows = computed(() => asUploadFileList(props.fileList))
+
 const elFileList = computed<UploadUserFile[]>(() =>
-  (props.fileList || []).map((file) => ({
+  rows.value.map((file) => ({
     ...file,
     name: String(file.name || file.url || ''),
     status: elStatus(file.status),
@@ -114,8 +117,7 @@ const elFileList = computed<UploadUserFile[]>(() =>
 )
 
 const sortedFiles = computed(() => {
-  const list = [...(props.fileList || [])]
-  return list.sort((a, b) => String(a.name || a.url || '').localeCompare(String(b.name || b.url || '')))
+  return [...rows.value].sort((a, b) => String(a.name || a.url || '').localeCompare(String(b.name || b.url || '')))
 })
 
 function cardKey(file: UploadFileListItem): string {
@@ -123,7 +125,7 @@ function cardKey(file: UploadFileListItem): string {
 }
 
 function beforeUpload(file: File): boolean {
-  const reason = rejectUploadFileReason(file, props.fileList || [], props.maxFileSizeMb)
+  const reason = rejectUploadFileReason(file, rows.value, props.maxFileSizeMb)
   if (reason === 'size') {
     props.handleSizeExceed?.(props.maxFileSizeMb ?? 0)
     return false
@@ -146,7 +148,7 @@ function openDetails(file: UploadFileListItem): void {
 }
 
 function removeFile(file: UploadFileListItem): void {
-  const next = (props.fileList || []).filter((item) => item !== file)
+  const next = rows.value.filter((item) => item !== file)
   props.handleRemove?.(file, next)
 }
 </script>
