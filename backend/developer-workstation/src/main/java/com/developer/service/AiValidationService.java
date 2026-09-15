@@ -18,6 +18,13 @@ public interface AiValidationService {
     AiValidationResult validate(AiGeneratedData generatedData);
 
     /**
+     * 带"已有表目录"的校验：scoped 提案（FORMS / TABLE_RELATIONS 等）不含 tableDefinitions，
+     * 其表引用要对着功能单元里已经存在的表解析。{@code existingTableFields} 为 表名 → 字段名集合；
+     * 提案自带的同名表定义优先。
+     */
+    AiValidationResult validate(AiGeneratedData generatedData, java.util.Map<String, java.util.Set<String>> existingTableFields);
+
+    /**
      * 计算 AI 生成数据的质量评分
      * <p>
      * 四维度评分：完整性（是否包含所有实体类型）、一致性（引用完整性得分）、

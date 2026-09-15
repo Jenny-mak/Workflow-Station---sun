@@ -422,6 +422,7 @@ import { ArrowLeft, MagicStick, Check, Close, Promotion, UploadFilled, Loading }
 import { useFunctionUnitStore } from '@/stores/functionUnit'
 import { functionUnitApi, type ValidationResult } from '@/api/functionUnit'
 import { aiGenerationApi, type AiStudioProposalJob } from '@/api/aiGeneration'
+import { pickHttpErrorBodyMessage } from '@/utils/httpErrorMessage'
 import ProcessDesigner from '@/components/designer/ProcessDesigner.vue'
 import TableDesigner from '@/components/designer/TableDesigner.vue'
 import FormDesigner from '@/components/designer/FormDesigner.vue'
@@ -862,11 +863,10 @@ async function applyProposal(msg: CopilotMessage) {
     await store.refreshAll(fuId.value)
     stageReloadKey.value++
   } catch (e: any) {
-    const reason = e?.response?.data?.error?.message
-      ?? e?.response?.data?.message
-      ?? e?.message
-      ?? String(e)
-    ElMessage.error(t('ai.studio.workspace.proposalApplyFailed', { reason }))
+    // 校验失败时后端在 error.details.errors 里逐条给出字段路径与原因；pickHttpErrorBodyMessage 会把它们
+    // 拼成 "message (path: reason; …)"，与全局拦截器的提示同一份文案，只是这里多了阶段语境
+    const reason = pickHttpErrorBodyMessage(e?.response?.data) ?? e?.message ?? String(e)
+    ElMessage.error({ message: t('ai.studio.workspace.proposalApplyFailed', { reason }), duration: 8000, showClose: true })
   } finally {
     applyingProposalMsg.value = null
   }

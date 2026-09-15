@@ -246,13 +246,26 @@ public abstract class BaseController {
         // Forward DeveloperBusinessException with its actual message, code, and suggestion
         // so the frontend can display meaningful errors instead of "Request processing failed"
         if (e instanceof DeveloperBusinessException dbe) {
-            ErrorResponse error = ErrorResponse.builder()
+            ErrorResponse.ErrorResponseBuilder builder = ErrorResponse.builder()
                     .code(dbe.getErrorCode() != null ? dbe.getErrorCode() : "BIZ_ERROR")
                     .message(dbe.getMessage())
                     .suggestion(dbe.getSuggestion())
                     .timestamp(Instant.now())
-                    .traceId(UUID.randomUUID().toString())
-                    .build();
+                    .traceId(UUID.randomUUID().toString());
+            // AI 校验失败带着逐条错误：不放进 details 前端只能看到一句"validation failed"，用户无从下手
+            if (e instanceof com.developer.exception.AiValidationFailedException ave && ave.getErrors() != null) {
+                List<Map<String, String>> errors = ave.getErrors().stream()
+                        .map(err -> {
+                            Map<String, String> m = new HashMap<>();
+                            m.put("errorType", err.getErrorType());
+                            m.put("fieldPath", err.getFieldPath());
+                            m.put("description", err.getDescription());
+                            return m;
+                        })
+                        .toList();
+                builder.details(Map.of("errors", errors));
+            }
+            ErrorResponse error = builder.build();
             String code = dbe.getErrorCode();
             HttpStatus httpStatus = HttpStatus.BAD_REQUEST;
             if (code != null && code.startsWith("CONFLICT_")) {

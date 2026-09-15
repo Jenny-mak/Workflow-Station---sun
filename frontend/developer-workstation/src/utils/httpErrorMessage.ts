@@ -1,3 +1,22 @@
+/** 单条明细 → 文案：校验错误对象（fieldPath/description）优先，其它对象取 message/description，再退到 key=value。 */
+function detailEntryToText(v: unknown): string {
+  if (v == null) return ''
+  if (typeof v !== 'object') return String(v).trim()
+  const o = v as Record<string, unknown>
+  const desc = typeof o.description === 'string' ? o.description.trim()
+    : typeof o.message === 'string' ? o.message.trim() : ''
+  const path = typeof o.fieldPath === 'string' ? o.fieldPath.trim()
+    : typeof o.field === 'string' ? o.field.trim() : ''
+  if (path && desc) return `${path}: ${desc}`
+  if (desc) return desc
+  if (path) return path
+  // 兜底：不再 String(obj) 出 "[object Object]"，而是 key=value 平铺
+  return Object.entries(o)
+    .filter(([, val]) => val != null && typeof val !== 'object')
+    .map(([k, val]) => `${k}=${String(val)}`)
+    .join(', ')
+}
+
 function flattenUnknownDetails(details: unknown): string | undefined {
   if (details == null) return undefined
   if (typeof details === 'string' && details.trim().length > 0) return details.trim()
@@ -5,10 +24,7 @@ function flattenUnknownDetails(details: unknown): string | undefined {
     const vals = Object.values(details as Record<string, unknown>).flatMap(v =>
       Array.isArray(v) ? v : [v]
     )
-    const parts = vals
-      .map(v => (typeof v === 'string' ? v : v != null ? String(v) : ''))
-      .map(s => s.trim())
-      .filter(Boolean)
+    const parts = vals.map(detailEntryToText).map(s => s.trim()).filter(Boolean)
     if (parts.length) return parts.join('; ')
   }
   return undefined

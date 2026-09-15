@@ -19,14 +19,31 @@ import java.util.Set;
 @Component
 public class AiReferenceValidator {
 
-    @SuppressWarnings("unchecked")
     void validateReferenceIntegrity(AiGeneratedData generatedData, AiValidationResult result) {
+        validateReferenceIntegrity(generatedData, result, Map.of());
+    }
+
+    /**
+     * @param existingTableFields 功能单元里已存在的表（表名 → 字段名），作为 scoped 提案的引用兜底目录：
+     *                            FORMS / TABLE_RELATIONS 提案不含 tableDefinitions，表单绑定与关系引用的
+     *                            却是库里的表；提案自带的同名表定义优先
+     */
+    @SuppressWarnings("unchecked")
+    void validateReferenceIntegrity(AiGeneratedData generatedData, AiValidationResult result,
+                                    Map<String, Set<String>> existingTableFields) {
         List<Map<String, Object>> tables = generatedData.getTableDefinitions();
         if (tables == null) tables = List.of();
 
         // Build lookup: tableName -> table map, and tableName -> set of fieldNames
         Map<String, Map<String, Object>> tableMap = new HashMap<>();
         Map<String, Set<String>> tableFieldMap = new HashMap<>();
+        if (existingTableFields != null) {
+            for (Map.Entry<String, Set<String>> e : existingTableFields.entrySet()) {
+                if (e.getKey() == null) continue;
+                tableMap.put(e.getKey(), Map.of("tableName", e.getKey()));
+                tableFieldMap.put(e.getKey(), e.getValue() != null ? new HashSet<>(e.getValue()) : new HashSet<>());
+            }
+        }
         for (Map<String, Object> table : tables) {
             String tableName = (String) table.get("tableName");
             if (tableName != null) {

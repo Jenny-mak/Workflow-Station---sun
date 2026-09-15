@@ -52,6 +52,12 @@ public class AiValidationServiceImpl implements AiValidationService {
 
     @Override
     public AiValidationResult validate(AiGeneratedData generatedData) {
+        return validate(generatedData, java.util.Map.of());
+    }
+
+    @Override
+    public AiValidationResult validate(AiGeneratedData generatedData,
+                                       java.util.Map<String, java.util.Set<String>> existingTableFields) {
         AiValidationResult result = AiValidationResult.builder().build();
 
         if (generatedData == null) {
@@ -77,7 +83,8 @@ public class AiValidationServiceImpl implements AiValidationService {
         securityValidator.validateBpmnXml(generatedData.getProcessDefinition(), result);
 
         // Reference integrity and uniqueness validation
-        referenceValidator.validateReferenceIntegrity(generatedData, result);
+        referenceValidator.validateReferenceIntegrity(generatedData, result,
+                existingTableFields != null ? existingTableFields : java.util.Map.of());
         referenceValidator.validateUniqueness(generatedData, result);
 
         return result;

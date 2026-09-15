@@ -43,6 +43,7 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
     private final AiWriteService aiWriteService;
     private final FunctionUnitWorkspaceAccessService functionUnitWorkspaceAccessService;
     private final AiStudioProposalReferenceValidator referenceValidator;
+    private final com.developer.repository.TableDefinitionRepository tableDefinitionRepository;
     private final ObjectMapper objectMapper;
 
     public AiStudioChatComponentImpl(AiStudioChatService aiStudioChatService,
@@ -52,6 +53,7 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
                                      AiWriteService aiWriteService,
                                      FunctionUnitWorkspaceAccessService functionUnitWorkspaceAccessService,
                                      AiStudioProposalReferenceValidator referenceValidator,
+                                     com.developer.repository.TableDefinitionRepository tableDefinitionRepository,
                                      ObjectMapper objectMapper) {
         this.aiStudioChatService = aiStudioChatService;
         this.aiStudioProposalJobService = aiStudioProposalJobService;
@@ -60,7 +62,30 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
         this.aiWriteService = aiWriteService;
         this.functionUnitWorkspaceAccessService = functionUnitWorkspaceAccessService;
         this.referenceValidator = referenceValidator;
+        this.tableDefinitionRepository = tableDefinitionRepository;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * scoped 提案（FORMS / TABLE_RELATIONS…）不带 tableDefinitions，而 allowedSlices 也会把模型顺带
+     * 输出的表定义裁掉——表单绑定、关系引用的都是库里已有的表。这里把本 FU 的表名→字段名交给校验器
+     * 当兜底目录；提案自带表定义（TABLES / ALL）时不需要，交空表以保持原有严格语义。
+     */
+    private Map<String, java.util.Set<String>> existingTableFieldsFor(Long functionUnitId, AiGeneratedData data) {
+        if (data.getTableDefinitions() != null && !data.getTableDefinitions().isEmpty()) {
+            return Map.of();
+        }
+        Map<String, java.util.Set<String>> out = new LinkedHashMap<>();
+        for (com.developer.entity.TableDefinition t : tableDefinitionRepository.findByFunctionUnitIdWithFields(functionUnitId)) {
+            java.util.Set<String> fields = new java.util.LinkedHashSet<>();
+            if (t.getFieldDefinitions() != null) {
+                for (com.developer.entity.FieldDefinition f : t.getFieldDefinitions()) {
+                    if (f.getFieldName() != null) fields.add(f.getFieldName());
+                }
+            }
+            out.put(t.getTableName(), fields);
+        }
+        return out;
     }
 
     @Override
@@ -115,7 +140,8 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
             AiGenerationComponentImpl.normalizeTableRelations(data.getTableRelations());
             AiGenerationComponentImpl.normalizeCrossFieldRules(data.getFormDefinitions());
 
-            AiValidationResult validationResult = aiValidationService.validate(data);
+            AiValidationResult validationResult = aiValidationService.validate(data,
+                    existingTableFieldsFor(functionUnitId, data));
             if (!validationResult.isValid()) {
                 throw new AiValidationFailedException(validationResult.getErrors());
             }

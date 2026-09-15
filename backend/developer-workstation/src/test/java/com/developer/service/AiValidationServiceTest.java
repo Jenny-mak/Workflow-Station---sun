@@ -287,6 +287,31 @@ class AiValidationServiceTest {
     }
 
     @Test
+    void validate_scopedFormProposal_resolvesBindingsAgainstExistingTables() {
+        AiGeneratedData data = AiGeneratedData.builder()
+                .formDefinitions(List.of(Map.of("formName", "order_form", "formType", "PROCESS",
+                        "tableBindings", List.of(Map.of("tableName", "biz_order", "bindingType", "PRIMARY")))))
+                .build();
+
+        // 没有已有表目录：scoped 提案的绑定无处解析 → 失败（历史行为）
+        AiValidationResult without = validationService.validate(data);
+        assertFalse(without.isValid());
+        assertTrue(without.getErrors().stream().anyMatch(e -> e.getFieldPath().endsWith("tableBindings[0].tableName")));
+
+        // 交给它功能单元里已有的表 → 通过
+        AiValidationResult with = validationService.validate(data,
+                Map.of("biz_order", java.util.Set.of("id", "order_no"), "biz_order_item", java.util.Set.of("id")));
+        assertTrue(with.isValid(), () -> String.valueOf(with.getErrors()));
+
+        // 引用不在目录里的表仍然失败
+        AiGeneratedData ghost = AiGeneratedData.builder()
+                .formDefinitions(List.of(Map.of("formName", "f", "formType", "PROCESS",
+                        "tableBindings", List.of(Map.of("tableName", "ghost", "bindingType", "PRIMARY")))))
+                .build();
+        assertFalse(validationService.validate(ghost, Map.of("biz_order", java.util.Set.of("id"))).isValid());
+    }
+
+    @Test
     void validate_serviceTaskBindingWithLegacyKeysOrDuplicates_shouldFail() {
         AiGeneratedData data = AiGeneratedData.builder()
                 .serviceTaskBindings(List.of(

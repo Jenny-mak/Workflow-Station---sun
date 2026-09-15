@@ -23,6 +23,26 @@ describe('httpErrorMessage', () => {
     expect(msg).toBe('gateway retry hint')
   })
 
+  it('pickHttpErrorBodyMessage renders validation detail objects instead of [object Object]', () => {
+    const msg = pickHttpErrorBodyMessage({
+      success: false,
+      error: {
+        code: 'AI_VALIDATION_FAILED',
+        message: 'AI generated data validation failed',
+        details: {
+          errors: [
+            { errorType: 'REFERENCE_INTEGRITY', fieldPath: 'formDefinitions[0].tableBindings[0].tableName', description: "Referenced table 'ghost' does not exist" },
+            { errorType: 'FIELD_CONSTRAINT', description: 'name must not be empty' },
+          ],
+        },
+      },
+    })
+    expect(msg).toBe(
+      "AI generated data validation failed (formDefinitions[0].tableBindings[0].tableName: Referenced table 'ghost' does not exist; name must not be empty)",
+    )
+    expect(msg).not.toContain('[object Object]')
+  })
+
   it('pickHttpErrorBodyMessage reads Kong JSON message field', () => {
     expect(pickHttpErrorBodyMessage({ message: 'name resolution failed' })).toBe(
       'name resolution failed',
