@@ -6,6 +6,7 @@ import com.admin.bi.dto.response.RbacMappingResponse;
 import com.admin.bi.dto.response.RoleOptionResponse;
 import com.admin.bi.dto.response.SupersetRoleResponse;
 import com.admin.bi.dto.response.SyncResultResponse;
+import com.admin.bi.entity.BiSupersetRole;
 
 import java.util.List;
 
@@ -59,4 +60,10 @@ public interface BiRbacMappingService {
      * 供 Superset 网关鉴权端点注入 X-Remote-Roles 头使用（Superset 按角色名解析）。
      */
     List<String> getEffectiveSupersetRoleNames(List<String> sysRoleIds);
+
+    /**
+     * 给定系统角色 ID 列表，返回其映射到的、状态为 ACTIVE 的 Superset 角色实体（去重）。
+     * 嵌入链路按角色过滤 dashboard 时同时需要 ID（与 dashboard_roles 求交）和名称（识别 Admin）。
+     */
+    List<BiSupersetRole> getEffectiveSupersetRoles(List<String> sysRoleIds);
 }

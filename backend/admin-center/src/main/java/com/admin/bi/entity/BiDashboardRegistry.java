@@ -51,6 +51,13 @@ public class BiDashboardRegistry {
     @Column(name = "tags", length = 500)
     private String tags;
 
+    /**
+     * Superset role IDs granted on this dashboard (synced from Superset {@code dashboard_roles}),
+     * stored as a sorted CSV; null/blank = no role restriction. See {@link com.admin.bi.support.SupersetRoleIdCsv}.
+     */
+    @Column(name = "superset_role_ids", columnDefinition = "TEXT")
+    private String supersetRoleIds;
+
     @Column(name = "is_default_landing", nullable = false)
     @Builder.Default
     private Boolean isDefaultLanding = false;

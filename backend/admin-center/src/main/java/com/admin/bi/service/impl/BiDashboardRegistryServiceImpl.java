@@ -1,5 +1,6 @@
 package com.admin.bi.service.impl;
 
+import com.admin.bi.component.BiDashboardRegistryResponseAssembler;
 import com.admin.bi.component.DashboardSyncComponent;
 import com.admin.bi.dto.request.DashboardRegistryUpdateRequest;
 import com.admin.bi.dto.response.DashboardRegistryResponse;
@@ -8,6 +9,7 @@ import com.admin.bi.entity.BiDashboardRegistry;
 import com.admin.bi.enums.DashboardStatus;
 import com.admin.bi.repository.BiDashboardAssignmentRepository;
 import com.admin.bi.repository.BiDashboardRegistryRepository;
+import com.admin.bi.repository.BiDataViewAssignmentRepository;
 import com.admin.bi.service.BiDashboardRegistryService;
 import com.admin.exception.DashboardHasAssignmentsException;
 import com.admin.exception.DashboardNotFoundException;
@@ -15,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +32,11 @@ public class BiDashboardRegistryServiceImpl implements BiDashboardRegistryServic
     private final BiDashboardRegistryRepository registryRepository;
     private final BiDashboardAssignmentRepository assignmentRepository;
     private final DashboardSyncComponent dashboardSyncComponent;
+    private final BiDashboardRegistryResponseAssembler responseAssembler;
+
+    /** Kept outside the constructor so existing service-level property tests remain source-compatible. */
+    @Autowired
+    private BiDataViewAssignmentRepository dataViewAssignmentRepository;
 
     @Override
     public SyncResultResponse syncDashboards() {
@@ -96,7 +104,9 @@ public class BiDashboardRegistryServiceImpl implements BiDashboardRegistryServic
         BiDashboardRegistry entity = registryRepository.findById(id)
                 .orElseThrow(() -> new DashboardNotFoundException(id));
 
-        long assignmentCount = assignmentRepository.countByDashboardId(id);
+        long assignmentCount = assignmentRepository.countByDashboardId(id)
+                + (dataViewAssignmentRepository != null
+                ? dataViewAssignmentRepository.countByDashboardId(id) : 0L);
         if (assignmentCount > 0) {
             throw new DashboardHasAssignmentsException(id);
         }
@@ -105,19 +115,6 @@ public class BiDashboardRegistryServiceImpl implements BiDashboardRegistryServic
     }
 
     private DashboardRegistryResponse toResponse(BiDashboardRegistry entity) {
-        return DashboardRegistryResponse.builder()
-                .id(entity.getId())
-                .dashboardTitle(entity.getDashboardTitle())
-                .description(entity.getDescription())
-                .embedId(entity.getEmbedId())
-                .supersetDashboardUuid(entity.getSupersetDashboardUuid())
-                .supersetDashboardId(entity.getSupersetDashboardId())
-                .tags(entity.getTags())
-                .isDefaultLanding(entity.getIsDefaultLanding())
-                .status(entity.getStatus())
-                .lastSyncedAt(entity.getLastSyncedAt())
-                .createdAt(entity.getCreatedAt())
-                .updatedAt(entity.getUpdatedAt())
-                .build();
+        return responseAssembler.toResponse(entity);
     }
 }

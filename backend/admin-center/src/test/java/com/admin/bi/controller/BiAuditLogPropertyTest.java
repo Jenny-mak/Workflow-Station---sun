@@ -1,6 +1,9 @@
 package com.admin.bi.controller;
 
+import com.admin.bi.component.BiDashboardRegistryResponseAssembler;
+import com.admin.bi.component.DashboardRoleGate;
 import com.admin.bi.component.DashboardSyncComponent;
+import com.admin.bi.config.BiProperties;
 import com.admin.bi.dto.request.DashboardAssignmentCreateRequest;
 import com.admin.bi.dto.request.DashboardRegistryUpdateRequest;
 import com.admin.bi.dto.response.DashboardAssignmentResponse;
@@ -13,6 +16,8 @@ import com.admin.bi.enums.DashboardStatus;
 import com.admin.bi.enums.LayoutMode;
 import com.admin.bi.repository.BiDashboardAssignmentRepository;
 import com.admin.bi.repository.BiDashboardRegistryRepository;
+import com.admin.bi.repository.BiSupersetRoleRepository;
+import com.admin.bi.service.BiRbacMappingService;
 import com.admin.bi.service.impl.BiDashboardAssignmentServiceImpl;
 import com.admin.bi.service.impl.BiDashboardRegistryServiceImpl;
 import com.admin.repository.BusinessUnitRepository;
@@ -67,7 +72,8 @@ class BiAuditLogPropertyTest {
         assignmentRepository = mock(BiDashboardAssignmentRepository.class);
         dashboardSyncComponent = mock(DashboardSyncComponent.class);
         registryService = new BiDashboardRegistryServiceImpl(
-                registryRepository, assignmentRepository, dashboardSyncComponent);
+                registryRepository, assignmentRepository, dashboardSyncComponent,
+                new BiDashboardRegistryResponseAssembler(mock(BiSupersetRoleRepository.class)));
 
         userRepository = mock(UserRepository.class);
         roleRepository = mock(RoleRepository.class);
@@ -77,7 +83,8 @@ class BiAuditLogPropertyTest {
         assignmentService = new BiDashboardAssignmentServiceImpl(
                 assignmentRepository, registryRepository,
                 userRepository, roleRepository, businessUnitRepository,
-                userRoleRepository, userBusinessUnitService);
+                userRoleRepository, userBusinessUnitService,
+                new DashboardRoleGate(mock(BiRbacMappingService.class), new BiProperties(), userRoleRepository));
     }
 
     // ========== Arbitraries ==========

@@ -1,7 +1,8 @@
 # Superset 统一 SSO 网关（生产 k8s/Istio）— Phase 1 "E"
 
 把 Superset 登录接入平台统一 SSO。**作者/管理员**走 JWT 鉴权网关，**嵌入看板查看者**走不鉴权的
-嵌入 host（guest token 认证）。对应 dev 的双端口方案（作者 :8087 / 嵌入 :8089）。
+嵌入 host（guest token 认证）。dev 已于 2026-07 收敛为单 FQDN + `/bi` 路径（见
+`../SUPERSET_SSO_INTEGRATION.md` §1）；本 runbook 描述的双 host 是 prod 现状，待同样收敛。
 
 > **为什么不用 Istio ext_authz？** ext_authz provider 必须注册在 `meshConfig.extensionProviders`，
 > 这需要 mesh 管理员权限，受公司策略限制无法自助完成。因此作者鉴权改由**一个普通的 nginx
@@ -36,7 +37,11 @@ auth_request 后重新注入校验过的值。**防绕过**：`action: DENY` 的
 - **superset**：`deploy/superset/Dockerfile` 现在 COPY 了 `superset_security_manager.py`，且
   `superset_config.py`/k8s configmap 启用了 `AUTH_REMOTE_USER` + 自定义 SM + `RECAPTCHA_*`。
 - **admin-center**：新增了 `BiSupersetAuthController`（`/internal/bi/superset/authorize`，支持
-  `/authorize/**`）与 `BiRbacMappingService.getEffectiveSupersetRoleNames`。
+  `/authorize/**`）与 `BiRbacMappingService.getEffectiveSupersetRoleNames`；2026-09 起还含嵌入
+  角色门禁（Dashboard 同步 `dashboard_roles`、`getUserDashboards` 按 RBAC 映射过滤），**依赖平台库
+  新列 `bi_dashboard_registry.superset_role_ids`**（`init-scripts/00-schema/82-*.sql` / all-in-one 末段）。
+- **superset**（再补一条）：`superset_config.py` / configmap 的 `FEATURE_FLAGS` 需含 `DASHBOARD_RBAC`
+  （preprod configmap 已加），作者才能在看板属性里授予角色。
 - **superset-author-proxy（新）**：`deploy/superset/author-proxy/`（`FROM nginx:alpine` + 模板）。
   构建并推送到项目 nexus 仓库，使集群无需 dockerhub 即可拉取：
   ```bash
@@ -70,6 +75,16 @@ auth_request 后重新注入校验过的值。**防绕过**：`action: DENY` 的
    - 作者入口（前端/门户跳转）指向**作者 host**（`hermes-workflow-superset-author.*`）。
    - `INGRESS_HOST` 必须在 `workflow-platform-config` 内正确设置（网关 401 跳登录用它）。
    - DNS：两个 host 都需解析到 ingressgateway，并按需配 TLS。
+   - **`SUPERSET_HOST` 必须带 Superset 的 app root**：现 prod 未设 `SUPERSET_APP_ROOT`，保持
+     `http://hase-hermes-workflow-superset.__NAMESPACE__:80` 即可；一旦收敛到 `/bi`，同步改成
+     `…:80/bi`，否则 admin-center 铸 guest token 时 login 404（dev 踩过，作者 SSO 不受影响所以不易察觉）。
+   - **guest token 服务账号**：Secret 里的 `BI_SUPERSET_USERNAME/PASSWORD` 必须对应 Superset 元数据库
+     里真实存在的 DB 用户（Admin 角色）。`superset init` 和 SSO JIT 都不会建它，新库/换库后执行：
+     ```bash
+     kubectl -n <ns> exec deploy/hase-hermes-workflow-superset -- superset fab create-admin \
+       --username <BI_SUPERSET_USERNAME> --firstname BI --lastname ServiceAccount \
+       --email bi-service@<domain> --password <BI_SUPERSET_PASSWORD>
+     ```
 4. **PeerAuthentication（mTLS）必须开启**：防绕过策略按 `notPrincipals` 匹配来源 SA，
    只有 mTLS 才能填充 source principal。若命名空间未设 STRICT，需补一个 PeerAuthentication
    （或确认 mesh 默认 STRICT），否则 DENY 规则可能因无 principal 而失效。
@@ -96,6 +111,11 @@ kubectl -n <ns> run probe --rm -it --image=curlimages/curl --restart=Never -- \
   curl -i -H "X-Remote-User: attacker" http://hase-hermes-workflow-superset/login/
 
 # 5) 嵌入看板在 user-portal 正常渲染（与 dev /verify-ui 一致）
+
+# 6) guest token 与角色门禁：以平台 JWT 调 admin-center
+#    POST /api/v1/admin/bi/guest-token {"dashboardId":"<registry id>"}
+#    → 已分配且可见 → 200 + token；SUPERSET_API_ERROR 404 = SUPERSET_HOST 缺 app root，401 = 服务账号不存在
+#    → 看板在 Superset 设了角色、用户映射角色无交集 → 403 "Dashboard not assigned to user"
 ```
 
 ## 安全要点

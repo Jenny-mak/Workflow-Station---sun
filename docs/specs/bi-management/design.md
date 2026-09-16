@@ -233,10 +233,17 @@ frontend/user-portal/src/
 - 恢复 `INACTIVE` 为 `ACTIVE`（当 Superset 端重新出现时）
 
 #### BiGuestTokenService
-- 验证用户是否被分配了请求的 Dashboard
-- 根据用户的 Sys_Role 查询 RBAC 映射，获取 Superset_Role 列表
-- 调用 Superset REST API `/api/v1/security/guest_token/` 获取 Guest Token
-- 传递 `rls`（Row Level Security）角色参数
+- 验证用户是否被分配了请求的 Dashboard（复用 `BiDashboardAssignmentService.getUserDashboards`，因此同时受下述角色门禁约束）
+- 调用 Superset REST API `/api/v1/security/guest_token/` 获取 Guest Token（仅 `resources` 限定为该 dashboard；该 API 不接受角色列表，guest 固定为 `GUEST_ROLE_NAME`）
+
+#### Dashboard 角色门禁（RBAC Mapping 接入嵌入链路）
+- `DashboardSyncComponent` 同步 Superset `dashboard_roles` → `bi_dashboard_registry.superset_role_ids`（排序去重 CSV；空 = 无限制）
+- `BiDashboardAssignmentService.getUserDashboards` 在合并 USER/ROLE/BU 分配并过滤 ACTIVE 之后，再按角色过滤：
+  - Dashboard 无 Superset 角色 → 可见
+  - 有角色 → 用户 Sys_Role 经 `BiRbacMappingService.getEffectiveSupersetRoles` 解析出的 ACTIVE Superset 角色与之有交集，或包含 `bi.superset.admin-role-name`（默认 `Admin`）→ 可见；否则隐藏
+  - 仅在遇到第一个受限 Dashboard 时才查询映射（无受限 Dashboard 不访问映射表）
+- Admin Center「Dashboard Registry」页新增列「Superset Roles」展示同步到的角色名，便于排查"分配了却看不到"
+- 前置条件：Superset `FEATURE_FLAGS.DASHBOARD_RBAC = True`（作者才能在 Dashboard 属性中授予角色）
 
 #### SupersetApiClient
 - 封装 Superset REST API 调用
@@ -592,11 +599,21 @@ sequenceDiagram
 
 **Validates: Requirements 7.12, 7.13**
 
-### Property 17: Guest Token 角色合并
+### Property 17: Guest Token 角色合并（已废止）
 
-*For any* 拥有多个 Sys_Role 的用户，请求 Guest Token 时传递给 Superset API 的 Superset_Role 列表应为该用户所有 Sys_Role 对应的 ACTIVE Superset_Role 映射的去重并集。
+原属性断言"映射角色被传给 Superset Guest Token API"。Superset 的 guest_token API 不接受角色列表，该传参从未生效，属性随之废止；由 Property 18 / 19 取代。
+
+### Property 18: Dashboard 角色门禁
+
+*For any* 已分配且 ACTIVE 的 Dashboard：若其 Superset 角色集合为空则始终可见；否则当且仅当用户映射出的 ACTIVE Superset 角色与之有交集、或包含 Superset 管理员角色时可见。且仅当存在受限 Dashboard 时才查询 RBAC 映射。
 
 **Validates: Requirements 7.14, 7.15**
+
+### Property 19: Dashboard 角色同步
+
+*For any* Superset `dashboard_roles` 记录集合，同步后每条注册记录的 `superset_role_ids` 恰为该 Dashboard 被授予角色 ID 的排序去重 CSV（无角色为 NULL）；仅角色变化的 ACTIVE 记录计入 `updated`。
+
+**Validates: Requirements 1.4, 7.14**
 
 ## 错误处理
 
