@@ -6,7 +6,7 @@
 > createTime/dueDate）走 window；initiatorName / assignmentType 仍 portal fullScan
 > （fullScan 已改为引擎真 OFFSET，不再 `(page+1)*size` 前缀重扫）。
 > **默认不再把 standing-rule Proxy 并进 To Do**（Proxy 仍走 Delegations / assignmentTypes=DELEGATED）。
-> Delegations：My Rules + Audit 共享列表 + SQL 真分页；Proxy Tasks 页仍为空（另跟）。
+> Delegations：My Rules + Audit + 委托任务 Tab 共享列表；委托任务走 `assignmentTypes=DELEGATED`（与 To Do 筛选同一查询）。Tab i18n key 仍为 `delegation.proxyTasks`，文案为「委托任务 / Delegated」。
 > 投影表仍暂缓。
 > 关键决策：§6.1（行可见范围两级过滤）、§6.1.1（SUB 行身份取 `row_id` 优先，写入侧→MAIN→SUB
 > 三步走）、§6.2（深分页不设上限，改慢查询日志）、§6.3.1（共享表头**不再提供 Group 菜单**）、
@@ -821,7 +821,7 @@ Action 列可继续 `fixed="right"`（§6.6），不代替共享表头。
 
 | 入口 | 现状 | 处理 |
 |------|------|------|
-| `/delegations` 的 Proxy Tasks Tab | 空 stub | 做成列表的那次提交必须接全套 |
+| `/delegations` 的委托任务 Tab | 共享列表（`queryTodoTasks` + `assignmentTypes=DELEGATED`） | 与 To Do 同一套表头 / 筛选 / 列宽 / 分页 |
 
 **Admin — required（已接）**
 
@@ -1105,7 +1105,7 @@ UI 截图存 `frontend/<app>/verification-screenshots/`，提交与 PR 描述里
 
    决策依据：两侧栏是 Layout 手写，加菜单不会自动用上 `@platform-shared/list`。只写「请记得接」
    挡不住下一张裸表。分类表强迫每个新 `index` 做决定；规则 + review 管 agent；CI 挂上之后才
-   能卡住人。gap 仅允许已列路径（目前只剩 Delegations Proxy stub），禁止再开新 gap。
+   能卡住人。gap 仅允许已列路径，禁止再开新 gap。Delegations 委托任务 Tab 已接共享列表。
    DW 仍除外。
 
 ---

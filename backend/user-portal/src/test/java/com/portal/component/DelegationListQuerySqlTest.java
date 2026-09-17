@@ -80,6 +80,14 @@ class DelegationListQuerySqlTest {
     }
 
     @Test
+    void rulesPageSelectsStandingTargetColumns() {
+        component.queryRules("user-1", request(List.of()));
+        assertThat(pageSql()).contains("r.delegate_target_type");
+        assertThat(pageSql()).contains("r.delegate_bu_code");
+        assertThat(pageSql()).contains("r.delegate_role_code");
+    }
+
+    @Test
     void undeclaredFilterIsRefused() {
         assertThatThrownBy(() -> component.queryRules("user-1", request(
                 List.of(new ListColumnFilter("secret", "contains", "x", null)))))

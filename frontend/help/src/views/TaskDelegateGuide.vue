@@ -6,12 +6,13 @@
     crumb-key="taskDelegateGuide.crumb"
     flow-title-key="taskDelegateGuide.flowTitle"
     :flow-keys="flowKeys"
+    :related="related"
     :sections="sections"
   />
 </template>
 
 <script setup lang="ts">
-import GuideArticle, { type GuideSection } from '@/components/GuideArticle.vue'
+import GuideArticle, { type GuideRelated, type GuideSection } from '@/components/GuideArticle.vue'
 
 const flowKeys = [
   'taskDelegateGuide.flow1',
@@ -19,6 +20,10 @@ const flowKeys = [
   'taskDelegateGuide.flow3',
   'taskDelegateGuide.flow4',
   'taskDelegateGuide.flow5',
+]
+
+const related: GuideRelated[] = [
+  { to: '/up-delegations', titleKey: 'guides.upDelegations.title' },
 ]
 
 const sections: GuideSection[] = [

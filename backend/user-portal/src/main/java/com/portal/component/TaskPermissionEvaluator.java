@@ -2,14 +2,11 @@ package com.portal.component;
 
 import com.portal.client.WorkflowEngineClient;
 import com.portal.dto.TaskInfo;
-import com.portal.entity.DelegationRule;
-import com.portal.repository.DelegationRuleRepository;
 import com.portal.util.BuRolePoolTasks;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,7 +22,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TaskPermissionEvaluator {
 
-    private final DelegationRuleRepository delegationRuleRepository;
+    private final DelegationRuleMatcher delegationRuleMatcher;
     private final WorkflowEngineClient workflowEngineClient;
     private final WorkspaceTaskFilterComponent workspaceTaskFilterComponent;
 
@@ -231,6 +228,9 @@ public class TaskPermissionEvaluator {
         if (isSingleTaskDelegatee(task, userId, portalUsername)) {
             return true;
         }
+        if (isStandingDelegatee(task, userId, portalUsername)) {
+            return true;
+        }
 
         // BU Role claim pool: processing rights belong to the claimer only. The assignee match
         // above already let the holder through; everyone else in the role stays read-only whether
@@ -274,17 +274,6 @@ public class TaskPermissionEvaluator {
             }
         }
 
-        // Check delegation rules
-        if (assignee != null) {
-            List<DelegationRule> delegations = delegationRuleRepository
-                    .findActiveDelegationsForDelegate(userId, LocalDateTime.now());
-            for (DelegationRule delegation : delegations) {
-                if (samePortalUserId(assignee, delegation.getDelegatorId())) {
-                    return true;
-                }
-            }
-        }
-
         // Empty pool (no assignee/candidates/groups/target): allow initiator only when BPMN is initiator task;
         // BU_ROLE / HIERARCHY nodes that look empty must not appear on initiator todo.
         if (isEmptyAssignmentPool(task) && isInitiatorOfTask(task, userId, portalUsername)) {
@@ -316,6 +305,13 @@ public class TaskPermissionEvaluator {
                         && task.getDelegatedRoleCode() != null && !task.getDelegatedRoleCode().isBlank());
         return buRole && workspaceTaskFilterComponent.workspacePairMatches(
                 task.getDelegatedBuCode(), task.getDelegatedRoleCode(), userId);
+    }
+
+    /**
+     * Standing-rule USER or current-workspace BU+Role delegatee (not single-task {@code delegated_*}).
+     */
+    public boolean isStandingDelegatee(TaskInfo task, String userId, String portalUsername) {
+        return delegationRuleMatcher.matchesStanding(task, userId, portalUsername);
     }
 
     private static String blankToNull(String raw) {

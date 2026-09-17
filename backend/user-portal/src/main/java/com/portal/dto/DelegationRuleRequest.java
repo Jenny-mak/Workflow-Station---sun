@@ -1,18 +1,18 @@
 package com.portal.dto;
 
+import com.portal.enums.DelegateTargetType;
 import com.portal.enums.DelegationType;
-import lombok.Data;
-import lombok.Builder;
-import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 委托规则请求DTO
+ * Standing delegation rule request. Target is a user or a paired BU+Role.
  */
 @Data
 @Builder
@@ -20,26 +20,35 @@ import java.util.List;
 @AllArgsConstructor
 public class DelegationRuleRequest {
 
-    /** 被委托人ID */
-    @NotBlank(message = "{validation.delegate_id_required}")
+    /** USER target. Required when type is USER (default). */
     private String delegateId;
 
-    /** 委托类型 */
+    /** USER (default) or BU_ROLE. */
+    private DelegateTargetType delegateTargetType;
+
+    private String delegateBuCode;
+
+    private String delegateRoleCode;
+
     @NotNull(message = "{validation.delegation_type_required}")
     private DelegationType delegationType;
 
-    /** 流程类型筛选 */
+    /** Process definition keys when type is PARTIAL. */
     private List<String> processTypes;
 
-    /** 优先级筛选 */
     private List<String> priorityFilter;
 
-    /** 生效开始时间 */
     private LocalDateTime startTime;
 
-    /** 生效结束时间 */
     private LocalDateTime endTime;
 
-    /** 委托原因 */
     private String reason;
+
+    public DelegateTargetType effectiveTargetType() {
+        return delegateTargetType != null ? delegateTargetType : DelegateTargetType.USER;
+    }
+
+    public boolean isBuRoleTarget() {
+        return effectiveTargetType() == DelegateTargetType.BU_ROLE;
+    }
 }

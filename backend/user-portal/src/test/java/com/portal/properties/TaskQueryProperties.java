@@ -4,6 +4,7 @@ import com.portal.client.WorkflowEngineClient;
 import com.portal.component.ClaimForceUnclaimAnnotator;
 import com.portal.component.CompletedTaskListQueryComponent;
 import com.portal.component.DelegatedTaskQueryComponent;
+import com.portal.component.DelegationRuleMatcher;
 import com.portal.component.EngineVisibleTaskFetcher;
 import com.portal.component.MineTaskListCache;
 import com.portal.component.MineTaskScanner;
@@ -93,7 +94,9 @@ class TaskQueryProperties {
                 workflowEngineClient, processInstanceRepository, workspaceFilter);
         MineTaskListCache mineCache = new MineTaskListCache();
         TaskPermissionEvaluator permissionEvaluator =
-                new TaskPermissionEvaluator(delegationRuleRepository, workflowEngineClient, workspaceFilter);
+                new TaskPermissionEvaluator(
+                        new DelegationRuleMatcher(delegationRuleRepository, workspaceFilter),
+                        workflowEngineClient, workspaceFilter);
         ClaimForceUnclaimAnnotator claimAnnotator =
                 org.mockito.Mockito.mock(ClaimForceUnclaimAnnotator.class);
         MineTaskScanner mineScanner = new MineTaskScanner(
@@ -101,7 +104,9 @@ class TaskQueryProperties {
                 workspaceFilter, processInstanceRepository);
         taskQueryComponent = new TaskQueryComponent(
             workflowEngineClient,
-            new DelegatedTaskQueryComponent(workflowEngineClient, delegationRuleRepository),
+            new DelegatedTaskQueryComponent(workflowEngineClient,
+                    new DelegationRuleMatcher(delegationRuleRepository, workspaceFilter),
+                    requestIdEnricher),
             new TaskHistoryComponent(workflowEngineClient, processHistoryRepository),
             requestIdEnricher,
             org.mockito.Mockito.mock(CompletedTaskListQueryComponent.class),
@@ -121,6 +126,7 @@ class TaskQueryProperties {
                 .thenReturn(Collections.emptyList());
 
         when(portalWorkspaceAuthService.listWorkspaceContexts(any())).thenReturn(Collections.emptyList());
+        when(workflowEngineClient.getDelegatedRuntimeTasks(any(), any())).thenReturn(Optional.empty());
         
         // Mock 用户权限查询 - 返回包含虚拟组的权限信息
         // 使用 Answer 动态生成权限数据，使虚拟组与用户ID关联
@@ -226,8 +232,10 @@ class TaskQueryProperties {
         Map<String, Object> delegatorData = new HashMap<>();
         delegatorData.put("tasks", delegatorTasks);
         delegatorResponse.put("data", delegatorData);
-        when(workflowEngineClient.getUserTasks(eq(delegatorId), anyInt(), anyInt()))
+        when(workflowEngineClient.getUserTasks(eq(delegatorId), anyInt(), anyInt(), eq(false)))
                 .thenReturn(Optional.of(delegatorResponse));
+        when(workflowEngineClient.getDelegatorAssignedTasks(eq(delegatorId), anyInt(), anyInt()))
+                .thenReturn(delegatorResponse);
 
         TaskQueryRequest request = TaskQueryRequest.builder()
                 .userId(delegateId)
@@ -567,6 +575,10 @@ class TaskQueryProperties {
                         tasks, inv.getArgument(3), inv.getArgument(4), inv.getArgument(5))));
         when(workflowEngineClient.getUserTasks(anyString(), anyInt(), anyInt()))
                 .thenAnswer(inv -> Optional.of(engineWindowBody(tasks, inv.getArgument(1), inv.getArgument(2), null)));
+        when(workflowEngineClient.getUserTasks(anyString(), anyInt(), anyInt(), eq(false)))
+                .thenAnswer(inv -> Optional.of(engineWindowBody(tasks, inv.getArgument(1), inv.getArgument(2), null)));
+        when(workflowEngineClient.getDelegatorAssignedTasks(anyString(), anyInt(), anyInt()))
+                .thenAnswer(inv -> engineWindowBody(tasks, inv.getArgument(1), inv.getArgument(2), null));
     }
 
     private Map<String, Object> engineWindowBody(

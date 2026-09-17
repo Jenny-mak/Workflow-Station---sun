@@ -24,19 +24,31 @@ public interface DelegationRuleRepository extends JpaRepository<DelegationRule, 
 
     List<DelegationRule> findByDelegateIdAndStatus(String delegateId, DelegationStatus status);
 
-    @Query("SELECT d FROM DelegationRule d WHERE d.delegatorId = :delegatorId " +
-           "AND d.status = 'ACTIVE' " +
-           "AND (d.startTime IS NULL OR d.startTime <= :now) " +
-           "AND (d.endTime IS NULL OR d.endTime >= :now)")
+    @Query("SELECT d FROM DelegationRule d WHERE d.delegatorId = :delegatorId "
+            + "AND d.status = 'ACTIVE' "
+            + "AND (d.startTime IS NULL OR d.startTime <= :now) "
+            + "AND (d.endTime IS NULL OR d.endTime >= :now)")
     List<DelegationRule> findActiveDelegationRules(
             @Param("delegatorId") String delegatorId,
             @Param("now") LocalDateTime now);
 
-    @Query("SELECT d FROM DelegationRule d WHERE d.delegateId = :delegateId " +
-           "AND d.status = 'ACTIVE' " +
-           "AND (d.startTime IS NULL OR d.startTime <= :now) " +
-           "AND (d.endTime IS NULL OR d.endTime >= :now)")
+    @Query("SELECT d FROM DelegationRule d WHERE d.delegateId = :delegateId "
+            + "AND d.status = 'ACTIVE' "
+            + "AND (d.delegateTargetType IS NULL OR d.delegateTargetType = com.portal.enums.DelegateTargetType.USER) "
+            + "AND (d.startTime IS NULL OR d.startTime <= :now) "
+            + "AND (d.endTime IS NULL OR d.endTime >= :now)")
     List<DelegationRule> findActiveDelegationsForDelegate(
             @Param("delegateId") String delegateId,
+            @Param("now") LocalDateTime now);
+
+    @Query("SELECT d FROM DelegationRule d WHERE d.status = 'ACTIVE' "
+            + "AND d.delegateTargetType = com.portal.enums.DelegateTargetType.BU_ROLE "
+            + "AND LOWER(d.delegateBuCode) = LOWER(:buCode) "
+            + "AND LOWER(d.delegateRoleCode) = LOWER(:roleCode) "
+            + "AND (d.startTime IS NULL OR d.startTime <= :now) "
+            + "AND (d.endTime IS NULL OR d.endTime >= :now)")
+    List<DelegationRule> findActiveDelegationsForBuRole(
+            @Param("buCode") String buCode,
+            @Param("roleCode") String roleCode,
             @Param("now") LocalDateTime now);
 }

@@ -57,6 +57,7 @@
             selected-display-field="display_name"
             :prefetch-limit="DELEGATE_USER_LOOKUP_PAGE_SIZE"
             :remote-filter="true"
+            :exclude-primary-keys="excludeDelegateUserIds"
             :placeholder="$t('task.clickToSearchUser')"
             @update:model-value="onUserLookupModelUpdate"
             @select="onUserLookupSelect"
@@ -127,8 +128,6 @@
       <el-form-item
         :label="currentAction === 'urge' ? $t('task.urgeMessage') : $t('task.reasonDescription')"
         class="task-action-reason-item"
-        :required="reasonRequired && currentAction !== 'urge'"
-        data-testid="action-reason-field"
       >
         <el-input
           v-model="formData.reason"
@@ -161,6 +160,7 @@ import { permissionApi, type BusinessUnit, type RoleInfo } from '@/api/permissio
 import DesignerHelpLink from '@/components/DesignerHelpLink.vue'
 import LookupField from '@/components/lookup/LookupField.vue'
 import { extractLookupPrimaryKey } from '@/utils/mainTableViewLookupDisplay'
+import { currentPortalUserId } from '@/composables/delegations/useDelegationTargetPickers'
 
 /** Platform sys_users virtual relation table — same source as module-driven user lookup. */
 const SYSTEM_USER_LOOKUP_TABLE_ID = -1_000_000_001
@@ -203,7 +203,6 @@ const props = defineProps<{
   formData: TaskActionForm
   userOptions: UserOption[]
   submitting: boolean
-  reasonRequired?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -244,6 +243,10 @@ const showDelegateUserLookup = computed(() =>
   props.currentAction === 'delegate' && !isDelegateBuRole.value)
 const showTransferUserSelect = computed(() => props.currentAction === 'transfer')
 const showBuRoleSelect = computed(() => isDelegateBuRole.value)
+const excludeDelegateUserIds = computed(() => {
+  const id = currentPortalUserId()
+  return id ? [id] : []
+})
 
 watch(() => props.modelValue, (val) => {
   visible.value = val
@@ -329,7 +332,12 @@ async function onBuChange(value: CascaderValue | null | undefined) {
 }
 
 function applyUserLookupValue(val: unknown) {
-  props.formData.targetUserId = extractLookupPrimaryKey(val) ?? ''
+  const id = extractLookupPrimaryKey(val) ?? ''
+  if (id && excludeDelegateUserIds.value.includes(id)) {
+    ElMessage.warning(t('delegation.cannotDelegateSelf'))
+    return
+  }
+  props.formData.targetUserId = id
 }
 
 function onUserLookupSelect(row: Record<string, unknown>) {

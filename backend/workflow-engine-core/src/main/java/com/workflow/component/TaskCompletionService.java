@@ -550,7 +550,7 @@ public class TaskCompletionService {
                 || !taskActionService.engineActorMatchesPortalUser(assignee, onBehalfOfUserId.trim())) {
             return false;
         }
-        return actorMatchesSingleTaskDelegatee(extended, actorUserId);
+        return true;
     }
 
     boolean actorMatchesSingleTaskDelegatee(ExtendedTaskInfo extended, String actorUserId) {

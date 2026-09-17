@@ -158,6 +158,8 @@ const props = defineProps<{
   autoClearIfMissing?: boolean
   /** Bump to force a reload (script `api.refresh`). */
   reloadNonce?: number
+  /** Row PKs omitted from the dropdown (e.g. current user on Delegate). */
+  excludePrimaryKeys?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -209,19 +211,32 @@ const tableContentWidth = computed(() =>
   lookupTableContentWidth(visibleColumns.value, !!props.multiple),
 )
 
+const excludedPrimaryKeySet = computed(() => new Set(
+  (props.excludePrimaryKeys || [])
+    .map((key) => String(key).trim())
+    .filter(Boolean),
+))
+
+function isExcludedRow(row: Record<string, any>): boolean {
+  const excluded = excludedPrimaryKeySet.value
+  if (excluded.size === 0) return false
+  const pk = rowPk(row)
+  return pk != null && excluded.has(String(pk).trim())
+}
+
 // Client-side filtering on the loaded data (form lookup). Delegate uses remoteFilter.
 const filteredResults = computed(() => {
-  if (props.remoteFilter) return allRows.value
-  const kw = searchKeyword.value?.trim().toLowerCase()
-  if (!kw) return allRows.value
-
-  const fields = props.searchFields?.length ? props.searchFields : null
-  return allRows.value.filter(row => {
-    const values = fields
-      ? fields.map(f => row[f])
-      : Object.values(row)
-    return values.some(v => v != null && String(v).toLowerCase().includes(kw))
-  })
+  const source = (() => {
+    if (props.remoteFilter) return allRows.value
+    const kw = searchKeyword.value?.trim().toLowerCase()
+    if (!kw) return allRows.value
+    const fields = props.searchFields?.length ? props.searchFields : null
+    return allRows.value.filter((row) => {
+      const values = fields ? fields.map((f) => row[f]) : Object.values(row)
+      return values.some((v) => v != null && String(v).toLowerCase().includes(kw))
+    })
+  })()
+  return source.filter((row) => !isExcludedRow(row))
 })
 
 async function loadAllData() {
@@ -325,6 +340,7 @@ function emitMultiModel() {
 }
 
 function handleSelect(row: Record<string, any>) {
+  if (isExcludedRow(row)) return
   if (props.multiple) {
     const pk = rowPk(row)
     const idx = selectedRows.value.findIndex(r => String(rowPk(r)) === String(pk))
@@ -634,7 +650,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onViewportChange)
 })
 
-defineExpose({ effectiveViewFields, handleFocus, visibleColumns })
+defineExpose({ effectiveViewFields, handleFocus, visibleColumns, filteredResults })
 </script>
 
 <style lang="scss" scoped>

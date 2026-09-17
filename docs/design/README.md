@@ -47,8 +47,8 @@ Table Design 先建 VARCHAR 列，表单上把控件改成 Owner（**主表、�
 |------|------|
 | [portal-bu-rbac.md](./portal-bu-rbac.md) | **身份从哪来**：BU + 角色（UBR）模型、工作台上下文、JWT 硬约束 |
 | [portal-permission-self-service.md](./portal-permission-self-service.md) | **门户能做什么**：UBR 自助申请/代办/退出、无 UBR（`C` 为空集）时的访问模式 |
-| [portal-task-delegation.md](./portal-task-delegation.md) | **站立任务委托**：时间窗规则；目标为指定用户 **或** BU+Role；不改 `assignee`；须切工作台；与 UBR「代办申请」分域 |
-| [portal-task-single-delegate.md](./portal-task-single-delegate.md) | **单任务委托按钮**（已定稿）：不改 `assignee`；目标为指定用户 **或** BU+Role；不认领；须切到该工作台才可见 |
+| [portal-task-delegation.md](./portal-task-delegation.md) | **站立任务委托**（已定稿）：时间窗规则；目标为指定用户 **或** BU+Role；不改 `assignee`；须切工作台；默认 To Do 不合并；认领池未 hold 不叠；代办是任务级 `canProcess` 不是 UBR 转授；与 UBR「代办申请」分域 |
+| [portal-task-single-delegate.md](./portal-task-single-delegate.md) | **单任务委托按钮**（已定稿）：不改 `assignee`；目标为指定用户 **或** BU+Role；不认领；须切到该工作台才可见；未认领池无按钮；权限见 sibling §5.2b |
 
 > 身份两篇互补且已互链：前者是硬约束，后者是产品规则。任务委托有两条线（站立规则 / 单任务按钮），都是不改办理人、别人代 A 办——**不要**与 UBR「代办申请」混称，也**不要**把委托做成转办。用户可见用「委托 / 委托任务」；不用 Acting For。
 

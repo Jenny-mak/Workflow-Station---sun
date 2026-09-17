@@ -67,6 +67,9 @@
               >
                 {{ statusLabel(row.status) }}
               </el-tag>
+              <span v-else-if="col.field === 'delegateId'">
+                {{ targetLabel(row) }}
+              </span>
               <span v-else-if="col.field === 'delegationType'">
                 {{ typeLabel(row.delegationType) }}
               </span>
@@ -211,6 +214,16 @@ function typeLabel(type: string | undefined): string {
   const key = `delegation.${type.toLowerCase()}`
   const translated = t(key)
   return translated === key ? type : translated
+}
+
+function targetLabel(row: DelegationRule): string {
+  if (row.delegateTargetType === 'BU_ROLE' || (row.delegateBuCode && row.delegateRoleCode)) {
+    return t('delegation.targetBuRole', {
+      bu: row.delegateBuCode || '-',
+      role: row.delegateRoleCode || '-',
+    })
+  }
+  return row.delegateId || '-'
 }
 
 async function load() {

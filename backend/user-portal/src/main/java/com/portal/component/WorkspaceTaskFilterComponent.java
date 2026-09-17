@@ -229,6 +229,21 @@ public class WorkspaceTaskFilterComponent {
         return activeBu.equalsIgnoreCase(buCode.trim()) && activeRole.equalsIgnoreCase(roleCode.trim());
     }
 
+    public Optional<String> activeWorkspaceBuCode() {
+        return SecurityContextUtils.getCurrentActiveBusinessUnitId()
+                .map(WorkspaceTaskFilterComponent::normalizeBuId)
+                .map(this::resolveActiveBusinessUnitCode)
+                .filter(code -> code != null && !code.isBlank());
+    }
+
+    public Optional<String> activeWorkspaceRoleCode(String userId) {
+        String code = resolveActiveRoleCode(userId);
+        if (code == null || code.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(code);
+    }
+
     private static boolean equalsNormalizedBuId(String a, String b) {
         if (a == null || b == null) {
             return false;

@@ -2,9 +2,11 @@ package com.portal.properties;
 
 import com.portal.component.DelegationComponent;
 import com.portal.dto.DelegationRuleRequest;
+import com.portal.entity.DelegationAudit;
 import com.portal.entity.DelegationRule;
 import com.portal.enums.DelegationStatus;
 import com.portal.enums.DelegationType;
+import com.portal.enums.DelegateTargetType;
 import com.portal.exception.PortalException;
 import com.portal.repository.DelegationAuditRepository;
 import com.portal.repository.DelegationRuleRepository;
@@ -12,6 +14,7 @@ import com.platform.common.i18n.I18nService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -173,7 +176,7 @@ class DelegationRuleProperties {
 
         DelegationRuleRequest request = DelegationRuleRequest.builder()
                 .delegateId("new_delegate")
-                .delegationType(DelegationType.PARTIAL)
+                .delegationType(DelegationType.ALL)
                 .build();
 
         // 其他用户不能修改
@@ -322,5 +325,60 @@ class DelegationRuleProperties {
         delegationComponent.createDelegationRule(delegatorId, request);
 
         verify(delegationAuditRepository, times(1)).save(any());
+    }
+
+    @Test
+    void partialWithoutProcessTypesIsRejected() {
+        DelegationRuleRequest request = DelegationRuleRequest.builder()
+                .delegateId("delegate_1")
+                .delegationType(DelegationType.PARTIAL)
+                .build();
+        assertThrows(PortalException.class, () ->
+                delegationComponent.createDelegationRule("delegator_1", request));
+    }
+
+    @Test
+    void temporaryWithoutWindowIsRejected() {
+        DelegationRuleRequest request = DelegationRuleRequest.builder()
+                .delegateId("delegate_1")
+                .delegationType(DelegationType.TEMPORARY)
+                .build();
+        assertThrows(PortalException.class, () ->
+                delegationComponent.createDelegationRule("delegator_1", request));
+    }
+
+    @Test
+    void buRoleRequiresBothCodes() {
+        DelegationRuleRequest request = DelegationRuleRequest.builder()
+                .delegateTargetType(DelegateTargetType.BU_ROLE)
+                .delegateBuCode("HK")
+                .delegationType(DelegationType.ALL)
+                .build();
+        assertThrows(PortalException.class, () ->
+                delegationComponent.createDelegationRule("delegator_1", request));
+    }
+
+    @Test
+    void buRoleRulePersistsCodesAndNullDelegateId() {
+        when(delegationRuleRepository.save(any(DelegationRule.class)))
+                .thenAnswer(invocation -> {
+                    DelegationRule rule = invocation.getArgument(0);
+                    rule.setId(1L);
+                    return rule;
+                });
+        DelegationRuleRequest request = DelegationRuleRequest.builder()
+                .delegateTargetType(DelegateTargetType.BU_ROLE)
+                .delegateBuCode("HK")
+                .delegateRoleCode("APPROVER")
+                .delegationType(DelegationType.ALL)
+                .build();
+        DelegationRule rule = delegationComponent.createDelegationRule("delegator_1", request);
+        assertEquals(DelegateTargetType.BU_ROLE, rule.getDelegateTargetType());
+        assertNull(rule.getDelegateId());
+        assertEquals("HK", rule.getDelegateBuCode());
+        assertEquals("APPROVER", rule.getDelegateRoleCode());
+        ArgumentCaptor<DelegationAudit> auditCaptor = ArgumentCaptor.forClass(DelegationAudit.class);
+        verify(delegationAuditRepository).save(auditCaptor.capture());
+        assertEquals("HK/APPROVER", auditCaptor.getValue().getDelegateId());
     }
 }

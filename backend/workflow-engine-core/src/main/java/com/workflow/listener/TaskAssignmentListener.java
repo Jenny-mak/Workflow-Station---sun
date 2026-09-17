@@ -2,8 +2,10 @@ package com.workflow.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.component.BpmnActionParser;
+import com.workflow.component.UserTaskExtendedInfoWriter;
 import com.workflow.enums.AssigneeAnchor;
 import com.workflow.enums.AssigneeType;
+import com.workflow.enums.AssignmentType;
 import com.platform.messaging.support.NotificationDispatchHelper;
 import com.workflow.repository.ExtendedTaskInfoRepository;
 import com.workflow.service.LastUserTaskAssigneeQuery;
@@ -158,6 +160,34 @@ public class TaskAssignmentListener implements FlowableEventListener {
     }
 
     /**
+     * Non-MI user tasks still need {@code wf_extended_task_info} for claim/delegate.
+     * Existing rows (including MI JSON) are left unchanged.
+     */
+    private void persistRegularExtendedTask(TaskEntity task, AssignmentType type, String target) {
+        if (extendedTaskInfoRepository == null || task == null) {
+            return;
+        }
+        try {
+            UserTaskExtendedInfoWriter.persistIfAbsent(extendedTaskInfoRepository, task, type, target);
+        } catch (Exception e) {
+            log.warn("Failed to persist wf_extended_task_info for {}: {}", task.getId(), e.getMessage());
+        }
+    }
+
+    private static List<String> sanitizeCandidateIds(List<String> candidateUsers) {
+        List<String> ids = new ArrayList<>();
+        if (candidateUsers == null) {
+            return ids;
+        }
+        for (String candidateUser : candidateUsers) {
+            if (candidateUser != null && !candidateUser.isBlank()) {
+                ids.add(candidateUser.trim());
+            }
+        }
+        return ids;
+    }
+
+    /**
      * 分派失败留痕：写 task local 变量（可查询、TaskOrphanRepairService 修复后清除）并落 ExceptionRecord
      * （HIGH/CRITICAL 走既有 notificationManager 告警）。
      *
@@ -239,6 +269,7 @@ public class TaskAssignmentListener implements FlowableEventListener {
             } catch (Exception e) {
                 log.warn("ensureMultiInstanceExtendedTaskForPreassignedTask failed for {}: {}", taskId, e.getMessage());
             }
+            persistRegularExtendedTask(task, AssignmentType.USER, task.getAssignee());
             return;
         }
 
@@ -486,6 +517,7 @@ public class TaskAssignmentListener implements FlowableEventListener {
                 log.warn("ensureMultiInstanceExtendedTaskForPreassignedTask after resolve failed for {}: {}",
                         taskId, e.getMessage());
             }
+            persistRegularExtendedTask(task, AssignmentType.USER, resolvedAssignee);
             return;
         }
         List<String> cands = result.getCandidateUsers();
@@ -496,6 +528,8 @@ public class TaskAssignmentListener implements FlowableEventListener {
                 }
             }
             log.info("Task {} set candidate users: {}", taskId, cands);
+            persistRegularExtendedTask(task, AssignmentType.CANDIDATE_USERS,
+                    String.join(",", sanitizeCandidateIds(cands)));
             for (String candidateUser : cands) {
                 if (candidateUser != null && !candidateUser.isBlank()) {
                     notifyCandidateTask(candidateUser.trim(), taskId, task.getName(), processInstanceId);
@@ -552,6 +586,7 @@ public class TaskAssignmentListener implements FlowableEventListener {
             log.warn("ensureMultiInstanceExtendedTaskForPreassignedTask after rollback fallback failed for {}: {}",
                     taskId, e.getMessage());
         }
+        persistRegularExtendedTask(task, AssignmentType.USER, assignee);
         return true;
     }
 

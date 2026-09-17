@@ -5,6 +5,7 @@ import com.portal.component.ChangeHistoryComponent;
 import com.portal.component.ClaimForceUnclaimAnnotator;
 import com.portal.component.CompletedTaskListQueryComponent;
 import com.portal.component.DelegatedTaskQueryComponent;
+import com.portal.component.DelegationRuleMatcher;
 import com.portal.component.EngineVisibleTaskFetcher;
 import com.portal.component.MineTaskListCache;
 import com.portal.component.MineTaskScanner;
@@ -117,7 +118,9 @@ class TaskProcessProperties {
         WorkspaceTaskFilterComponent workspaceFilter = new WorkspaceTaskFilterComponent(
                 workflowEngineClient, virtualGroupAccessComponent, portalWorkspaceAuthService, businessUnitRepository);
         TaskPermissionEvaluator taskPermissionEvaluator =
-            new TaskPermissionEvaluator(delegationRuleRepository, workflowEngineClient, workspaceFilter);
+            new TaskPermissionEvaluator(
+                    new DelegationRuleMatcher(delegationRuleRepository, workspaceFilter),
+                    workflowEngineClient, workspaceFilter);
         EngineVisibleTaskFetcher engineFetcher = new EngineVisibleTaskFetcher(
                 workflowEngineClient, processInstanceRepository, workspaceFilter);
         MineTaskListCache mineCache = new MineTaskListCache();
@@ -129,7 +132,9 @@ class TaskProcessProperties {
                 new MiParticipantEnrichmentComponent(jdbcTemplate), requestIdEnricher);
         taskQueryComponent = new TaskQueryComponent(
             workflowEngineClient,
-            new DelegatedTaskQueryComponent(workflowEngineClient, delegationRuleRepository),
+            new DelegatedTaskQueryComponent(workflowEngineClient,
+                    new DelegationRuleMatcher(delegationRuleRepository, workspaceFilter),
+                    requestIdEnricher),
             new TaskHistoryComponent(workflowEngineClient, processHistoryRepository),
             requestIdEnricher,
             Mockito.mock(CompletedTaskListQueryComponent.class),

@@ -2,12 +2,14 @@ package com.portal.controller;
 
 import com.portal.component.DelegationComponent;
 import com.portal.component.DelegationListQueryComponent;
+import com.portal.component.DelegatedTaskQueryComponent;
 import com.platform.common.dto.ApiResponse;
 import com.portal.security.CurrentUserId;
 import com.portal.dto.DelegationListQueryRequest;
 import com.portal.dto.DelegationRuleRequest;
 import com.portal.dto.PageResponse;
 import com.portal.dto.PortalListPage;
+import com.portal.dto.TaskInfo;
 import com.portal.entity.DelegationAudit;
 import com.portal.entity.DelegationRule;
 import com.platform.common.i18n.I18nService;
@@ -32,6 +34,7 @@ public class DelegationController {
 
     private final DelegationComponent delegationComponent;
     private final DelegationListQueryComponent delegationListQueryComponent;
+    private final DelegatedTaskQueryComponent delegatedTaskQueryComponent;
     private final I18nService i18nService;
 
     @Operation(summary = "获取委托规则列表")
@@ -104,12 +107,11 @@ public class DelegationController {
         return ApiResponse.success(rule);
     }
 
-    @Operation(summary = "获取代理任务（委托给我的）")
+    @Operation(summary = "委托任务（站立规则 + 单任务 overlay）")
     @GetMapping("/proxy-tasks")
-    public ApiResponse<List<DelegationRule>> getProxyTasks(
+    public ApiResponse<List<TaskInfo>> getProxyTasks(
             @CurrentUserId String userId) {
-        List<DelegationRule> delegations = delegationComponent.getDelegationsForDelegate(userId);
-        return ApiResponse.success(delegations);
+        return ApiResponse.success(delegatedTaskQueryComponent.queryDelegatedTasks(userId));
     }
 
     @Operation(summary = "获取委托人ID列表")

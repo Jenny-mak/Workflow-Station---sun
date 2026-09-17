@@ -79,20 +79,7 @@ public class MineTaskScanner {
     }
 
     public List<TaskInfo> applyPortalPostEngineFilters(String userId, List<TaskInfo> allTasks) {
-        Set<String> processIds = allTasks.stream()
-                .map(TaskInfo::getProcessInstanceId)
-                .filter(id -> id != null && !id.isBlank())
-                .collect(Collectors.toSet());
-        Set<String> withdrawnProcessIds = WithdrawnProcessIds.of(processInstanceRepository, processIds);
-        List<TaskInfo> filtered = allTasks.stream()
-                .filter(t -> {
-                    String pid = t.getProcessInstanceId();
-                    return pid == null || pid.isBlank() || !withdrawnProcessIds.contains(pid);
-                })
-                .collect(Collectors.toCollection(ArrayList::new));
-        filtered = new ArrayList<>(filtered.stream()
-                .collect(Collectors.toMap(TaskInfo::getTaskId, t -> t, (t1, t2) -> t1, LinkedHashMap::new))
-                .values());
+        List<TaskInfo> filtered = dropWithdrawnAndDedupe(allTasks);
         String portalUsername = SecurityContextUtils.getCurrentUsername().orElse(null);
         if (taskProcessComponent != null) {
             filtered = filtered.stream()
@@ -105,5 +92,31 @@ public class MineTaskScanner {
         taskPermissionEvaluator.annotateClaimState(filtered, userId, portalUsername);
         claimForceUnclaimAnnotator.annotate(filtered, userId);
         return workspaceTaskFilter.filterFixedBuRoleTasksForActiveWorkspace(filtered, userId);
+    }
+
+    /**
+     * Standing/single-task delegated overlay is the delegator's held work, not the viewer's
+     * workspace To Do. Viewer FIXED_BU_ROLE filtering would drop a manager-pool task the
+     * delegatee can already complete on behalf of the assignee.
+     */
+    public List<TaskInfo> applyDelegatedOverlayPostFilters(List<TaskInfo> allTasks) {
+        return dropWithdrawnAndDedupe(allTasks);
+    }
+
+    private List<TaskInfo> dropWithdrawnAndDedupe(List<TaskInfo> allTasks) {
+        Set<String> processIds = allTasks.stream()
+                .map(TaskInfo::getProcessInstanceId)
+                .filter(id -> id != null && !id.isBlank())
+                .collect(Collectors.toSet());
+        Set<String> withdrawnProcessIds = WithdrawnProcessIds.of(processInstanceRepository, processIds);
+        List<TaskInfo> filtered = allTasks.stream()
+                .filter(t -> {
+                    String pid = t.getProcessInstanceId();
+                    return pid == null || pid.isBlank() || !withdrawnProcessIds.contains(pid);
+                })
+                .collect(Collectors.toCollection(ArrayList::new));
+        return new ArrayList<>(filtered.stream()
+                .collect(Collectors.toMap(TaskInfo::getTaskId, t -> t, (t1, t2) -> t1, LinkedHashMap::new))
+                .values());
     }
 }

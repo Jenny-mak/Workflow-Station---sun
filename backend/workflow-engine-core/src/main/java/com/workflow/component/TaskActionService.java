@@ -57,6 +57,9 @@ public class TaskActionService {
     @Autowired
     private TaskClaimSupport taskClaimSupport;
 
+    @Autowired
+    private UserTaskExtendedInfoWriter userTaskExtendedInfoWriter;
+
     // ==================== Public Action Methods ====================
 
     public TaskAssignmentResult assignTask(String taskId, TaskAssignmentRequest request) {
@@ -117,11 +120,7 @@ public class TaskActionService {
                                 "taskId", "Unclaimed pool tasks cannot be delegated", taskId)));
             }
 
-            ExtendedTaskInfo extendedTaskInfo = extendedTaskInfoRepository
-                .findByTaskIdAndIsDeletedFalse(taskId)
-                .orElseThrow(() -> new WorkflowValidationException(Collections.singletonList(
-                    new WorkflowValidationException.ValidationError(
-                        "taskId", "Task not found", taskId))));
+            ExtendedTaskInfo extendedTaskInfo = requireExtendedForDelegate(taskId, flowableTask);
 
             validateDelegationPermission(extendedTaskInfo, request.getDelegatedBy());
 
@@ -151,6 +150,22 @@ public class TaskActionService {
             throw new WorkflowBusinessException("TASK_DELEGATION_ERROR",
                 "Task delegation failed: " + e.getMessage(), e);
         }
+    }
+
+    private ExtendedTaskInfo requireExtendedForDelegate(String taskId, Task flowableTask) {
+        Optional<ExtendedTaskInfo> found = extendedTaskInfoRepository.findByTaskIdAndIsDeletedFalse(taskId);
+        if (found.isPresent()) {
+            return found.get();
+        }
+        ExtendedTaskInfo created = userTaskExtendedInfoWriter != null
+                ? userTaskExtendedInfoWriter.ensureFromFlowable(flowableTask)
+                : null;
+        if (created == null) {
+            throw new WorkflowValidationException(Collections.singletonList(
+                    new WorkflowValidationException.ValidationError(
+                            "taskId", "Task not found", taskId)));
+        }
+        return created;
     }
 
     private void applyDelegateTarget(ExtendedTaskInfo extendedTaskInfo, TaskDelegationRequest request) {

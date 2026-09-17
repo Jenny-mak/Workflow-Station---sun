@@ -107,6 +107,7 @@ class TaskManagerComponentMultiInstanceTest {
         TaskActionService taskActionService = new TaskActionService();
         ReflectionTestUtils.setField(taskActionService, "taskService", taskService);
         ReflectionTestUtils.setField(taskActionService, "userPermissionService", userPermissionService);
+        ReflectionTestUtils.setField(taskActionService, "taskClaimSupport", new TaskClaimSupport());
         ReflectionTestUtils.setField(taskCompletionService, "taskActionService", taskActionService);
 
         // 默认 mock 设置
