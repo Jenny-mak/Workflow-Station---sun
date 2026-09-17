@@ -2,6 +2,7 @@ package com.admin.audit;
 
 import com.admin.bi.repository.BiDashboardAssignmentRepository;
 import com.admin.bi.repository.BiDashboardRegistryRepository;
+import com.admin.bi.repository.BiDataViewAssignmentRepository;
 import com.admin.bi.repository.BiRbacMappingRepository;
 import com.admin.component.SecurityAuditComponent;
 import com.admin.enums.AuditAction;
@@ -18,6 +19,7 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -48,6 +50,8 @@ public class AdminAuditAspect {
     private final BiDashboardRegistryRepository biDashboardRegistryRepository;
     private final BiDashboardAssignmentRepository biDashboardAssignmentRepository;
     private final BiRbacMappingRepository biRbacMappingRepository;
+    @Autowired
+    private BiDataViewAssignmentRepository biDataViewAssignmentRepository;
     private final TransactionTemplate auditTxTemplate;
     private final ObjectMapper mapper;
 
@@ -172,6 +176,15 @@ public class AdminAuditAspect {
         return audit(pjp, "BI_ASSIGNMENT");
     }
 
+    @Around("within(com.admin.bi.controller.BiDataViewAssignmentController) "
+            + "&& (execution(* *.create(..)) "
+            + "|| execution(* *.createBatch(..)) "
+            + "|| execution(* *.update(..)) "
+            + "|| execution(* *.delete(..)))")
+    public Object auditBiDataViewAssignment(ProceedingJoinPoint pjp) throws Throwable {
+        return audit(pjp, "BI_DATA_VIEW_ASSIGNMENT");
+    }
+
     @Around("within(com.admin.bi.controller.BiRbacMappingController) "
             + "&& !execution(* *.listSupersetRoles(..)) "
             + "&& !execution(* *.listMappings(..)) "
@@ -269,6 +282,7 @@ public class AdminAuditAspect {
             case "BUSINESS_UNIT_ROLE"  -> resolveBusinessUnitRoleMeta(methodName, args);
             case "BI_DASHBOARD"        -> resolveBiDashboardMeta(methodName, args);
             case "BI_ASSIGNMENT"       -> resolveBiAssignmentMeta(methodName, args);
+            case "BI_DATA_VIEW_ASSIGNMENT" -> resolveBiDataViewAssignmentMeta(methodName, args);
             case "BI_RBAC"             -> resolveBiRbacMeta(methodName, args);
             case "AUTOMATION_FLOW"     -> resolveAutomationFlowMeta(methodName, args);
             case "AUTOMATION_PIECE"    -> resolveAutomationPieceMeta(methodName, args);
@@ -400,6 +414,16 @@ public class AdminAuditAspect {
         };
     }
 
+    private AuditMeta resolveBiDataViewAssignmentMeta(String method, Object[] args) {
+        String id = args.length > 0 && args[0] instanceof String s ? s : null;
+        return switch (method) {
+            case "create", "createBatch" -> new AuditMeta(AuditAction.CREATE, "BI_DATA_VIEW_ASSIGNMENT", null);
+            case "update" -> new AuditMeta(AuditAction.UPDATE, "BI_DATA_VIEW_ASSIGNMENT", id);
+            case "delete" -> new AuditMeta(AuditAction.DELETE, "BI_DATA_VIEW_ASSIGNMENT", id);
+            default       -> AuditMeta.skip();
+        };
+    }
+
     private AuditMeta resolveBiRbacMeta(String method, Object[] args) {
         String sysRoleId = args.length > 0 && args[0] instanceof String s ? s : null;
         return switch (method) {
@@ -506,6 +530,8 @@ public class AdminAuditAspect {
                             .orElse(null);
                     case "BI_DASHBOARD"   -> biDashboardRegistryRepository.findById(resourceId).orElse(null);
                     case "BI_ASSIGNMENT"  -> biDashboardAssignmentRepository.findById(resourceId).orElse(null);
+                    case "BI_DATA_VIEW_ASSIGNMENT" -> biDataViewAssignmentRepository != null
+                            ? biDataViewAssignmentRepository.findById(resourceId).orElse(null) : null;
                     case "BI_RBAC"        -> biRbacMappingRepository.findById(resourceId).orElse(null);
                     // RELATION_TABLE_ROW uses a composite id (tableId:rowId) and row data is
                     // schema-less — skip DB lookup and rely on response body / request args.

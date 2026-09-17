@@ -76,23 +76,29 @@ public class AiStudioProposalJobServiceImpl implements AiStudioProposalJobServic
     }
 
     @Override
-    public AiStudioProposalJobResponse submit(Long functionUnitId, String phase, String userId,
+    public AiStudioProposalJobResponse submit(Long functionUnitId, String phase, String userId, String requestKey,
                                               Supplier<StudioChatResult> work) {
         sweep();
         Job existing = jobs.values().stream()
                 .filter(j -> j.functionUnitId.equals(functionUnitId) && j.userId.equals(userId) && !j.isTerminal())
                 .findFirst().orElse(null);
         if (existing != null) {
-            log.info("AI Studio proposal job reused: jobId={}, functionUnitId={}, userId={}",
+            if (java.util.Objects.equals(existing.requestKey, requestKey)) {
+                log.info("AI Studio proposal job reused: jobId={}, functionUnitId={}, userId={}",
+                        existing.jobId, functionUnitId, userId);
+                return existing.snapshot();
+            }
+            // 同一个人带着不同的请求再来：旧作业的结果已经没人要了，别让它占着"每人每 FU 一个"的名额
+            log.info("AI Studio proposal job superseded by a new request: oldJobId={}, functionUnitId={}, userId={}",
                     existing.jobId, functionUnitId, userId);
-            return existing.snapshot();
+            cancelJob(existing, "AI_STUDIO_PROPOSAL_SUPERSEDED", "Superseded by a newer proposal request");
         }
         if (jobs.size() >= maxJobs) {
             throw new AiGenerationException("AI_STUDIO_PROPOSAL_QUEUE_FULL",
                     "Too many proposal jobs are registered; retry later");
         }
 
-        Job job = new Job(UUID.randomUUID().toString(), functionUnitId, phase, userId);
+        Job job = new Job(UUID.randomUUID().toString(), functionUnitId, phase, userId, requestKey);
         jobs.put(job.jobId, job);
         try {
             job.future = executor.submit(() -> run(job, work));
@@ -145,12 +151,40 @@ public class AiStudioProposalJobServiceImpl implements AiStudioProposalJobServic
     @Override
     public AiStudioProposalJobResponse get(String jobId, String userId) {
         sweep();
+        return requireOwnJob(jobId, userId).snapshot();
+    }
+
+    @Override
+    public AiStudioProposalJobResponse cancel(String jobId, String userId) {
+        sweep();
+        Job job = requireOwnJob(jobId, userId);
+        if (cancelJob(job, "AI_STUDIO_PROPOSAL_CANCELLED", "Cancelled by the user")) {
+            log.info("AI Studio proposal job cancelled: jobId={}, functionUnitId={}, userId={}",
+                    job.jobId, job.functionUnitId, userId);
+        }
+        return job.snapshot();
+    }
+
+    private Job requireOwnJob(String jobId, String userId) {
         Job job = jobId == null ? null : jobs.get(jobId);
         if (job == null || !job.userId.equals(userId)) {
             throw new AiGenerationException("AI_STUDIO_PROPOSAL_NOT_FOUND",
                     "Proposal job not found or no longer available: " + jobId);
         }
-        return job.snapshot();
+        return job;
+    }
+
+    /** 置 CANCELLED 并中断后台线程；已终态返回 false（幂等）。run() 里的 isTerminal 守卫会丢掉迟到的结果。 */
+    private static boolean cancelJob(Job job, String code, String message) {
+        synchronized (job) {
+            if (job.isTerminal()) return false;
+            job.status = Status.CANCELLED;
+            job.errorCode = code;
+            job.errorMessage = message;
+            job.finishedAt = Instant.now();
+            if (job.future != null) job.future.cancel(true);
+            return true;
+        }
     }
 
     /** 清理过期终态作业；把跑超时的作业判失败并中断。每次 submit/get 顺手做，不另起线程。 */
@@ -188,6 +222,8 @@ public class AiStudioProposalJobServiceImpl implements AiStudioProposalJobServic
         final Long functionUnitId;
         final String phase;
         final String userId;
+        /** 请求内容指纹：同人同 FU 重复提交同一请求时复用作业，不同请求时替换 */
+        final String requestKey;
         final Instant submittedAt = Instant.now();
         volatile Status status = Status.PENDING;
         Instant startedAt;
@@ -197,15 +233,16 @@ public class AiStudioProposalJobServiceImpl implements AiStudioProposalJobServic
         String errorMessage;
         Future<?> future;
 
-        Job(String jobId, Long functionUnitId, String phase, String userId) {
+        Job(String jobId, Long functionUnitId, String phase, String userId, String requestKey) {
             this.jobId = jobId;
             this.functionUnitId = functionUnitId;
             this.phase = phase;
             this.userId = userId;
+            this.requestKey = requestKey;
         }
 
         boolean isTerminal() {
-            return status == Status.SUCCEEDED || status == Status.FAILED;
+            return status == Status.SUCCEEDED || status == Status.FAILED || status == Status.CANCELLED;
         }
 
         synchronized AiStudioProposalJobResponse snapshot() {

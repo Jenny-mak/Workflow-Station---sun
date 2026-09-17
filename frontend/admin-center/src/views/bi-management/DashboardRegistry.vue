@@ -145,6 +145,12 @@
                 <span v-else-if="col.field === 'lastSyncedAt'">
                   {{ row.lastSyncedAt ? formatDateTime(row.lastSyncedAt) : '-' }}
                 </span>
+                <span
+                  v-else-if="col.field === 'supersetRoleNames'"
+                  :title="row.supersetRoleNames?.length ? undefined : t('bi.dashboard.supersetRolesUnrestricted')"
+                >
+                  {{ row.supersetRoleNames?.length ? row.supersetRoleNames.join(', ') : '-' }}
+                </span>
                 <template v-else>
                   {{ row[col.field] || '-' }}
                 </template>

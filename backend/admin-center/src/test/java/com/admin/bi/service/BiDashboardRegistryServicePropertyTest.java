@@ -1,5 +1,6 @@
 package com.admin.bi.service;
 
+import com.admin.bi.component.BiDashboardRegistryResponseAssembler;
 import com.admin.bi.component.DashboardSyncComponent;
 import com.admin.bi.dto.request.DashboardRegistryUpdateRequest;
 import com.admin.bi.dto.response.DashboardRegistryResponse;
@@ -7,6 +8,8 @@ import com.admin.bi.entity.BiDashboardRegistry;
 import com.admin.bi.enums.DashboardStatus;
 import com.admin.bi.repository.BiDashboardAssignmentRepository;
 import com.admin.bi.repository.BiDashboardRegistryRepository;
+import com.admin.bi.repository.BiDataViewAssignmentRepository;
+import com.admin.bi.repository.BiSupersetRoleRepository;
 import com.admin.bi.service.impl.BiDashboardRegistryServiceImpl;
 import com.admin.exception.DashboardHasAssignmentsException;
 import net.jqwik.api.*;
@@ -39,6 +42,7 @@ class BiDashboardRegistryServicePropertyTest {
 
     private BiDashboardRegistryRepository registryRepository;
     private BiDashboardAssignmentRepository assignmentRepository;
+    private BiDataViewAssignmentRepository dataViewAssignmentRepository;
     private DashboardSyncComponent dashboardSyncComponent;
     private BiDashboardRegistryServiceImpl service;
 
@@ -46,8 +50,12 @@ class BiDashboardRegistryServicePropertyTest {
     void setUp() {
         registryRepository = mock(BiDashboardRegistryRepository.class);
         assignmentRepository = mock(BiDashboardAssignmentRepository.class);
+        dataViewAssignmentRepository = mock(BiDataViewAssignmentRepository.class);
         dashboardSyncComponent = mock(DashboardSyncComponent.class);
-        service = new BiDashboardRegistryServiceImpl(registryRepository, assignmentRepository, dashboardSyncComponent);
+        service = new BiDashboardRegistryServiceImpl(registryRepository, assignmentRepository, dashboardSyncComponent,
+                new BiDashboardRegistryResponseAssembler(mock(BiSupersetRoleRepository.class)));
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                service, "dataViewAssignmentRepository", dataViewAssignmentRepository);
     }
 
     // ========== Arbitraries ==========
@@ -314,6 +322,23 @@ class BiDashboardRegistryServicePropertyTest {
     }
 
     // ========== Property 7: Dashboard 删除与分配关联守卫 ==========
+
+    @Example
+    void dataViewAssignmentAlsoPreventsDashboardDeletion() {
+        BiDashboardRegistry dashboard = BiDashboardRegistry.builder()
+                .id("dashboard-bound-to-table")
+                .dashboardTitle("Bound dashboard")
+                .embedId(UUID.randomUUID())
+                .status(DashboardStatus.ACTIVE)
+                .build();
+        when(registryRepository.findById(dashboard.getId())).thenReturn(Optional.of(dashboard));
+        when(assignmentRepository.countByDashboardId(dashboard.getId())).thenReturn(0L);
+        when(dataViewAssignmentRepository.countByDashboardId(dashboard.getId())).thenReturn(1L);
+
+        assertThatThrownBy(() -> service.deleteDashboard(dashboard.getId()))
+                .isInstanceOf(DashboardHasAssignmentsException.class);
+        verify(registryRepository, never()).delete(any(BiDashboardRegistry.class));
+    }
 
     /**
      * Property 7: Dashboard 删除与分配关联守卫

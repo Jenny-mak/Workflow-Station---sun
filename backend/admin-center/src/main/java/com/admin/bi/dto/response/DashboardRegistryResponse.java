@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -26,6 +27,10 @@ public class DashboardRegistryResponse {
     private Integer supersetDashboardId;
     private String tags;
     private Boolean isDefaultLanding;
+    /** Superset role IDs granted on the dashboard (synced from dashboard_roles); empty = unrestricted. */
+    private List<Integer> supersetRoleIds;
+    /** Names of {@link #supersetRoleIds} as known by the local Superset role registry. */
+    private List<String> supersetRoleNames;
     private DashboardStatus status;
     private LocalDateTime lastSyncedAt;
     private LocalDateTime createdAt;

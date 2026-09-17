@@ -200,13 +200,26 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
-        path: "bi-management/dashboard-assignment",
+        path: "bi-management/audience-assignment",
+        alias: "/bi-management/dashboard-assignment",
         name: "BiDashboardAssignment",
         component: () =>
           import("@/views/bi-management/DashboardAssignment.vue"),
         meta: {
-          titleKey: "menu.biDashboardAssignment",
+          titleKey: "menu.biAudienceAssignment",
           icon: "Share",
+          requiresAuth: true,
+          permissions: [],
+        },
+      },
+      {
+        path: "bi-management/data-view-assignment",
+        name: "BiDataViewAssignment",
+        component: () =>
+          import("@/views/bi-management/DataViewAssignment.vue"),
+        meta: {
+          titleKey: "menu.biDataViewAssignment",
+          icon: "View",
           requiresAuth: true,
           permissions: [],
         },
@@ -322,7 +335,7 @@ router.beforeEach(async (to, _from, next) => {
 
     try {
       await getCurrentUser();
-    } catch (e) {
+    } catch {
       clearAuth();
       setSsoReturnPath(to.fullPath);
       redirectToUnifiedLogin('admin', { autoSso: true });

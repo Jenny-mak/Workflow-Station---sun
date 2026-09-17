@@ -27,7 +27,13 @@ import java.util.UUID;
 public class AiStudioChatServiceImpl implements AiStudioChatService {
 
     /** 对话转写的字符预算：超出时从最旧的历史开始丢，永远保住最新一条用户消息。 */
-    private static final int TRANSCRIPT_CHAR_BUDGET = 8000;
+    private static final int TRANSCRIPT_CHAR_BUDGET = 16000;
+
+    /** 历史里单条提案 JSON 进转写的上限：够模型看清上一轮提了什么，又不至于把设计上下文挤出窗口。 */
+    static final int HISTORY_PROPOSAL_CHAR_CAP = 6000;
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper HISTORY_JSON =
+            new com.fasterxml.jackson.databind.ObjectMapper();
 
     private static final String SYSTEM_PROMPT = """
             You are AI Copilot inside AI Studio of Workflow Station, a low-code workflow platform \
@@ -250,19 +256,43 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
         // 从最新的历史往回收，收满预算为止，再按时间序拼出
         int start = history.size();
         int used = 0;
+        String[] rendered = new String[history.size()];
         while (start > 0) {
             AiStudioChatRequest.HistoryMessage m = history.get(start - 1);
-            int cost = m.getContent().length() + 16;
+            rendered[start - 1] = renderHistoryEntry(m);
+            int cost = rendered[start - 1].length() + 1;
             if (used + cost > budget) break;
             used += cost;
             start--;
         }
         transcript.append("Conversation so far:\n");
         for (int i = start; i < history.size(); i++) {
-            AiStudioChatRequest.HistoryMessage m = history.get(i);
-            transcript.append("USER".equals(m.getRole()) ? "User: " : "Assistant: ")
-                    .append(m.getContent()).append('\n');
+            transcript.append(rendered[i]).append('\n');
         }
         return transcript.append(tail).toString();
+    }
+
+    /**
+     * 单条历史 → 转写行。ASSISTANT 条目若附带上一轮的结构化提案，把提案 JSON（裁到
+     * {@link #HISTORY_PROPOSAL_CHAR_CAP}）也写进去——否则"把刚才那个模板改一下"这类二次修改，
+     * 模型只看得到自己说过"Here is the proposed change"，不知道提了什么。
+     */
+    private static String renderHistoryEntry(AiStudioChatRequest.HistoryMessage m) {
+        StringBuilder sb = new StringBuilder("USER".equals(m.getRole()) ? "User: " : "Assistant: ")
+                .append(m.getContent());
+        if (!"USER".equals(m.getRole()) && m.getProposal() != null && !m.getProposal().isEmpty()) {
+            String json;
+            try {
+                json = HISTORY_JSON.writeValueAsString(m.getProposal());
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                json = String.valueOf(m.getProposal());
+            }
+            if (json.length() > HISTORY_PROPOSAL_CHAR_CAP) {
+                json = json.substring(0, HISTORY_PROPOSAL_CHAR_CAP) + " …(truncated)";
+            }
+            sb.append("\n[Proposed change").append(m.getProposalScope() != null ? ", scope=" + m.getProposalScope() : "")
+                    .append("; not yet applied unless the current data already reflects it] ").append(json);
+        }
+        return sb.toString();
     }
 }

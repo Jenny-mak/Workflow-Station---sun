@@ -446,6 +446,49 @@ class OwnerFieldComponentTest {
         }
 
         @Test
+        @DisplayName("engine currentItem rowId/rowKey writes Case Handler onto the matching MI row")
+        void snapshotWritesMatchedSubHandlerFromEngineCurrentItem() {
+            when(jdbcTemplate.queryForList(anyString(), eq(String.class),
+                    org.mockito.ArgumentMatchers.<Object>any()))
+                    .thenReturn(List.of("id"));
+            String matchedId = "fe6fab4f-0007-4495-938c-7eece802225f";
+            Map<String, Object> matched = new HashMap<>();
+            matched.put("id", matchedId);
+            matched.put("note", "CC-lina");
+            Map<String, Object> sibling = new HashMap<>();
+            sibling.put("id", "469ea990-d15c-4b83-8285-56a4feff2a9b");
+            sibling.put("note", "CC-wangfang");
+            Map<String, Object> variables = variablesWithSubRows(matched, sibling);
+            Map<String, Object> currentItem = new LinkedHashMap<>();
+            currentItem.put("rowId", matchedId);
+            currentItem.put("rowKey", Map.of("id", matchedId));
+            currentItem.put("assignee_user_id", ASSIGNEE);
+            variables.put("_currentItem", currentItem);
+
+            component.applyAssigneeSnapshot(FU, variables, ASSIGNEE, null);
+
+            assertThat(subRows(variables).get(0).get("row_handler")).isEqualTo("user:" + ASSIGNEE);
+            assertThat(subRows(variables).get(1).get("row_handler")).isNull();
+        }
+
+        @Test
+        @DisplayName("engine currentItem with only rowId still matches a single designer PK")
+        void snapshotWritesMatchedSubHandlerFromEngineRowIdOnly() {
+            when(jdbcTemplate.queryForList(anyString(), eq(String.class),
+                    org.mockito.ArgumentMatchers.<Object>any()))
+                    .thenReturn(List.of("id"));
+            String matchedId = "fe6fab4f-0007-4495-938c-7eece802225f";
+            Map<String, Object> matched = new HashMap<>();
+            matched.put("id", matchedId);
+            Map<String, Object> variables = variablesWithSubRows(matched);
+            variables.put("_currentItem", Map.of("rowId", matchedId, "assignee_user_id", ASSIGNEE));
+
+            component.applyOnComplete(FU, variables, ACTOR);
+
+            assertThat(subRows(variables).get(0).get("row_handler")).isEqualTo("user:" + ACTOR);
+        }
+
+        @Test
         @DisplayName("MI Complete keeps step: on MAIN and writes the actor on the matched row")
         void miCompleteKeepsStepOnMain() {
             Map<String, Object> row = new HashMap<>();

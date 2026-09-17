@@ -38,6 +38,12 @@ public class BiProperties {
         private String adminPassword;
         /** Guest token timeout in seconds */
         private int guestTokenTimeoutSeconds = 30;
+        /**
+         * Name of Superset's built-in administrator role (Superset config {@code AUTH_ROLE_ADMIN}).
+         * Users whose RBAC mapping includes this role bypass the dashboard-role filter on the embed path,
+         * mirroring Superset's own rule that Admin sees every dashboard.
+         */
+        private String adminRoleName = "Admin";
 
         /**
          * Schema name used for building native SQL; invalid identifiers fall back to {@code public} to prevent config injection.

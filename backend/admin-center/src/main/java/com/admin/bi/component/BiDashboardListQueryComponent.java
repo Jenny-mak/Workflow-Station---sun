@@ -35,6 +35,7 @@ public class BiDashboardListQueryComponent {
 
     private final JdbcTemplate jdbcTemplate;
     private final BiDashboardRegistryRepository registryRepository;
+    private final BiDashboardRegistryResponseAssembler responseAssembler;
 
     public AdminListPage<DashboardRegistryResponse> query(BiDashboardListQueryRequest request) {
         long started = System.nanoTime();
@@ -82,33 +83,17 @@ public class BiDashboardListQueryComponent {
         }
         Map<String, BiDashboardRegistry> byId = registryRepository.findAllById(ids).stream()
                 .collect(Collectors.toMap(BiDashboardRegistry::getId, Function.identity()));
-        List<DashboardRegistryResponse> ordered = new ArrayList<>(ids.size());
+        List<BiDashboardRegistry> ordered = new ArrayList<>(ids.size());
         for (String id : ids) {
             BiDashboardRegistry entity = byId.get(id);
             if (entity == null) {
                 throw new IllegalStateException("bi-dashboard page referenced missing dashboard " + id);
             }
-            ordered.add(toResponse(entity));
+            ordered.add(entity);
         }
-        return ordered;
+        return responseAssembler.toResponses(ordered);
     }
 
-    private static DashboardRegistryResponse toResponse(BiDashboardRegistry entity) {
-        return DashboardRegistryResponse.builder()
-                .id(entity.getId())
-                .dashboardTitle(entity.getDashboardTitle())
-                .description(entity.getDescription())
-                .embedId(entity.getEmbedId())
-                .supersetDashboardUuid(entity.getSupersetDashboardUuid())
-                .supersetDashboardId(entity.getSupersetDashboardId())
-                .tags(entity.getTags())
-                .isDefaultLanding(entity.getIsDefaultLanding())
-                .status(entity.getStatus())
-                .lastSyncedAt(entity.getLastSyncedAt())
-                .createdAt(entity.getCreatedAt())
-                .updatedAt(entity.getUpdatedAt())
-                .build();
-    }
 
 
     private static void appendTitle(StringBuilder where, List<Object> params, String title) {

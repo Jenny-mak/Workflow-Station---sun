@@ -59,13 +59,14 @@ export const aiGenerationApi = {
    * 后端以 AI_GATEWAY_TOKEN_MISSING 显式失败（dev 配静态 key 时无需 token）。
    * propose=true 走 GENERATION 管线产出结构化提案，耗时分钟级，超时放宽到 6 分钟。
    */
-  studioChat: (data: AiStudioChatPayload) => {
+  studioChat: (data: AiStudioChatPayload, signal?: AbortSignal) => {
     const amToken = readAmToken()
     return api.post<any, { data: AiStudioChatResult }>(
       '/ai-generation/studio-chat',
       data,
       {
         timeout: data.propose ? 360000 : 120000,
+        signal,
         ...(amToken ? { headers: { 'X-AM-Token': amToken } } : {})
       }
     )
@@ -94,6 +95,14 @@ export const aiGenerationApi = {
       { timeout: 30000 }
     ),
 
+  /** 取消进行中的提案作业（幂等）；后端中断后台线程并丢弃迟到结果。 */
+  studioCancelProposal: (jobId: string) =>
+    api.post<any, { data: AiStudioProposalJob }>(
+      `/ai-generation/studio-chat/proposals/${encodeURIComponent(jobId)}/cancel`,
+      null,
+      { timeout: 30000 }
+    ),
+
   /** 应用 Copilot 改动提案（后端：抢 AI 锁 → 校验 → 按 scope 写入）。 */
   studioApplyProposal: (data: AiStudioApplyPayload) =>
     api.post('/ai-generation/studio-chat/apply', data, { timeout: 120000 }),
@@ -103,7 +112,13 @@ export interface AiStudioChatPayload {
   functionUnitId: number
   phase: string
   message: string
-  history: { role: 'USER' | 'ASSISTANT'; content: string }[]
+  /** 近期对话；ASSISTANT 条目可附带上一轮提案（scope + data），让二次修改有落点 */
+  history: {
+    role: 'USER' | 'ASSISTANT'
+    content: string
+    proposal?: Record<string, unknown>
+    proposalScope?: string
+  }[]
   propose?: boolean
 }
 
@@ -113,7 +128,7 @@ export interface AiStudioChatResult {
   proposalScope: string | null
 }
 
-export type AiStudioProposalJobStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+export type AiStudioProposalJobStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'
 
 export interface AiStudioProposalJob extends AiStudioChatResult {
   jobId: string

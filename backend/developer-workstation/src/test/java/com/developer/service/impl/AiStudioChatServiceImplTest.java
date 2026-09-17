@@ -88,6 +88,28 @@ class AiStudioChatServiceImplTest {
     }
 
     @Test
+    void historyEntryWithProposalIsRenderedIntoTranscriptAndCapped() {
+        AiStudioChatRequest.HistoryMessage proposed = historyMessage("ASSISTANT", "Here is the proposed change.");
+        proposed.setProposalScope("EMAIL_TEMPLATES");
+        proposed.setProposal(Map.of("emailTemplates", List.of(Map.of("name", "Order Shipped", "subject", "x".repeat(7000)))));
+        when(aiGatewayClient.chat(any(), any())).thenReturn(Map.of("ok", true));
+        when(aiResponseParser.parse(any())).thenReturn(Map.of("reply", "sure"));
+
+        service.chat(request("EMAIL_TEMPLATES", "change its subject",
+                List.of(historyMessage("USER", "add a template"), proposed)), "t");
+
+        ArgumentCaptor<AiPromptBuilder.RenderedPrompt> prompt = ArgumentCaptor.forClass(AiPromptBuilder.RenderedPrompt.class);
+        verify(aiGatewayClient).chat(prompt.capture(), any());
+        String user = prompt.getValue().user();
+        assertTrue(user.contains("[Proposed change, scope=EMAIL_TEMPLATES"));
+        assertTrue(user.contains("\"name\":\"Order Shipped\""));
+        assertTrue(user.contains("…(truncated)"));
+        assertTrue(user.length() < AiStudioChatServiceImpl.HISTORY_PROPOSAL_CHAR_CAP + 1500,
+                "proposal JSON is capped, not dumped in full");
+        assertTrue(user.endsWith("User: change its subject"));
+    }
+
+    @Test
     void chatWithoutHistorySendsBareMessage() {
         when(aiGatewayClient.chat(any(), any())).thenReturn(Map.of());
         when(aiResponseParser.parse(any())).thenReturn(Map.of("reply", "ok"));

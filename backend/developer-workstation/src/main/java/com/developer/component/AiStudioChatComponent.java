@@ -29,6 +29,9 @@ public interface AiStudioChatComponent {
     /** 查询提案作业；仅作业发起者可见，其他情况一律 {@code AI_STUDIO_PROPOSAL_NOT_FOUND}。 */
     AiStudioProposalJobResponse getProposal(String jobId, String userId);
 
+    /** 取消进行中的提案作业（幂等；不存在/非本人 → AI_STUDIO_PROPOSAL_NOT_FOUND）。 */
+    AiStudioProposalJobResponse cancelProposal(String jobId, String userId);
+
     /**
      * 应用改动提案：工作区访问校验 → 抢 AI 锁（与 AI Generate 同一把，冲突 409）→
      * 归一化 + 平台校验（失败 422，不落库）→ 按 scope 写入 → 释放锁。

@@ -139,14 +139,17 @@ public class SupersetApiClient {
      * @throws SupersetApiException API 调用失败或超时
      */
     /**
-     * 调用 Superset /api/v1/security/guest_token/ 获取 Guest Token
+     * 调用 Superset /api/v1/security/guest_token/ 获取 Guest Token。
+     * <p>
+     * 该接口不接受角色参数：guest 身份固定为 Superset 配置的 GUEST_ROLE_NAME，仅被授权访问
+     * {@code resources} 中列出的这一个 dashboard。用户级的角色控制在 admin-center 侧完成
+     * （BiDashboardAssignmentService 按 RBAC 映射过滤可见 dashboard）。
      *
      * @param dashboardEmbedId Dashboard 的 Embed ID (UUID)
-     * @param supersetRoleIds  用户对应的 Superset Role ID 列表
      * @return Guest Token 字符串
      * @throws SupersetApiException API 调用失败或超时
      */
-    public String getGuestToken(String dashboardEmbedId, List<Integer> supersetRoleIds) {
+    public String getGuestToken(String dashboardEmbedId) {
         String accessToken = login();
         CsrfResult csrf = getCsrfTokenAndCookie(accessToken);
 

@@ -10,12 +10,15 @@ import net.jqwik.api.*;
 import net.jqwik.api.lifecycle.BeforeTry;
 import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
@@ -396,6 +399,7 @@ class DashboardSyncComponentPropertyTest {
                 .supersetDashboardId(source.getSupersetDashboardId())
                 .tags(source.getTags())
                 .isDefaultLanding(source.getIsDefaultLanding())
+                .supersetRoleIds(source.getSupersetRoleIds())
                 .status(source.getStatus())
                 .lastSyncedAt(source.getLastSyncedAt())
                 .createdAt(source.getCreatedAt())
@@ -403,5 +407,87 @@ class DashboardSyncComponentPropertyTest {
                 .updatedAt(source.getUpdatedAt())
                 .updatedBy(source.getUpdatedBy())
                 .build();
+    }
+
+    // ========== Property 19: Dashboard 角色同步 ==========
+
+    /**
+     * Property 19: Dashboard 角色同步
+     *
+     * For any Superset dashboard_roles rows, after sync every saved registry record carries exactly
+     * the sorted, de-duplicated role IDs granted on that dashboard (null when none), and a role
+     * change on an otherwise unchanged ACTIVE record counts as an update.
+     *
+     * Feature: bi-management, Property 19: Dashboard role sync
+     * Validates: Requirements 1.4, 7.14
+     */
+    @Property(tries = 100)
+    @Tag("Feature: bi-management, Property 19: Dashboard role sync")
+    @SuppressWarnings("unchecked")
+    void dashboardRoleSync(
+            @ForAll("supersetDashboardData") List<Map<String, Object>> supersetData,
+            @ForAll("dashboardRolePairs") List<int[]> rolePairs
+    ) {
+        // Only pairs for dashboards that exist in the Superset result matter; scatter them over those.
+        List<Integer> dashboardIds = supersetData.stream()
+                .map(m -> (Integer) m.get("superset_dashboard_id")).collect(Collectors.toList());
+        List<int[]> pairs = new ArrayList<>();
+        Map<Integer, Set<Integer>> expectedRoles = new HashMap<>();
+        if (!dashboardIds.isEmpty()) {
+            for (int i = 0; i < rolePairs.size(); i++) {
+                int dashboardId = dashboardIds.get(i % dashboardIds.size());
+                int roleId = rolePairs.get(i)[1];
+                pairs.add(new int[]{dashboardId, roleId});
+                expectedRoles.computeIfAbsent(dashboardId, k -> new TreeSet<>()).add(roleId);
+            }
+        }
+
+        // Existing ACTIVE copies of every Superset dashboard with identical source fields but no roles:
+        // the only thing sync can change on them is superset_role_ids.
+        List<BiDashboardRegistry> existing = new ArrayList<>();
+        for (Map<String, Object> row : supersetData) {
+            existing.add(BiDashboardRegistry.builder()
+                    .id(UUID.randomUUID().toString())
+                    .supersetDashboardId((Integer) row.get("superset_dashboard_id"))
+                    .dashboardTitle((String) row.get("dashboard_title"))
+                    .description((String) row.get("description"))
+                    .supersetDashboardUuid((UUID) row.get("superset_dashboard_uuid"))
+                    .embedId((UUID) row.get("embed_id"))
+                    .supersetRoleIds(null)
+                    .status(DashboardStatus.ACTIVE)
+                    .isDefaultLanding(false)
+                    .lastSyncedAt(LocalDateTime.now().minusDays(1))
+                    .build());
+        }
+
+        when(jdbcTemplate.queryForList(anyString())).thenReturn(supersetData);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class))).thenReturn(pairs);
+        when(registryRepository.findAll()).thenReturn(new ArrayList<>(existing));
+
+        savedEntities.clear();
+        SyncResultResponse result = syncComponent.executeSyncOperation();
+
+        Map<Integer, BiDashboardRegistry> savedBySuperId = new LinkedHashMap<>();
+        for (BiDashboardRegistry saved : savedEntities) {
+            savedBySuperId.put(saved.getSupersetDashboardId(), saved);
+        }
+        for (Integer dashboardId : dashboardIds) {
+            Set<Integer> roles = expectedRoles.getOrDefault(dashboardId, Set.of());
+            String expectedCsv = roles.isEmpty() ? null
+                    : roles.stream().map(String::valueOf).collect(Collectors.joining(","));
+            assertThat(savedBySuperId.get(dashboardId).getSupersetRoleIds())
+                    .as("roles synced for dashboard %d", dashboardId)
+                    .isEqualTo(expectedCsv);
+        }
+        assertThat(result.getCreated()).isZero();
+        assertThat(result.getUpdated()).isEqualTo(expectedRoles.size());
+    }
+
+    @Provide
+    Arbitrary<List<int[]>> dashboardRolePairs() {
+        return Combinators.combine(
+                Arbitraries.integers().between(1, 500),
+                Arbitraries.integers().between(1, 6)
+        ).as((d, r) -> new int[]{d, r}).list().ofMinSize(0).ofMaxSize(10);
     }
 }

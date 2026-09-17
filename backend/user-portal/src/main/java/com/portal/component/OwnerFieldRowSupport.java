@@ -1,8 +1,10 @@
 package com.portal.component;
 
 import com.platform.common.jdbc.SubTableRowIdentity;
+import com.platform.common.jdbc.SubTableRowKeySupport;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -113,10 +115,24 @@ final class OwnerFieldRowSupport {
         if (identities.isEmpty()) {
             return false;
         }
-        Set<String> itemIds = SubTableRowIdentity.identityValuesOf(
+        Set<String> itemIds = currentItemIdentityValues(
                 (Map<String, Object>) itemMap, designerPrimaryKeyFields);
         itemIds.retainAll(identities);
         return !itemIds.isEmpty();
+    }
+
+    /**
+     * Flowable MI {@code currentItem} stores identity as {@code rowId} / nested {@code rowKey},
+     * not as the designer PK field on the map root. Reuse the same parser as the rest of MI.
+     */
+    private static Set<String> currentItemIdentityValues(Map<String, Object> item, List<String> designerPrimaryKeyFields) {
+        Set<String> values = new LinkedHashSet<>(
+                SubTableRowIdentity.identityValuesOf(item, designerPrimaryKeyFields));
+        Map<String, Object> engineKey = SubTableRowKeySupport.rowKeyFromCurrentItem(item, designerPrimaryKeyFields);
+        if (engineKey != null) {
+            values.addAll(SubTableRowIdentity.identityValuesOf(engineKey, designerPrimaryKeyFields));
+        }
+        return values;
     }
 
     static Map<String, Object> matchPreviousRow(List<Map<String, Object>> previousRows,

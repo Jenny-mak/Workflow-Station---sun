@@ -9,10 +9,8 @@ import com.admin.bi.entity.BiDashboardRegistry;
 import com.admin.bi.enums.DashboardStatus;
 import com.admin.bi.repository.BiDashboardRegistryRepository;
 import com.admin.bi.service.impl.BiGuestTokenServiceImpl;
-import com.admin.repository.UserRoleRepository;
 import net.jqwik.api.*;
 import net.jqwik.api.lifecycle.BeforeTry;
-import org.mockito.ArgumentCaptor;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDateTime;
@@ -27,17 +25,16 @@ import static org.mockito.Mockito.*;
  * BiGuestTokenService 属性测试
  *
  * Feature: bi-management
- * Property 11: Guest Token 授权守卫
+ * Property 11: Guest Token 授权守卫（含 RBAC 角色过滤后的分配结果）
  *
- * Validates: Requirements 4.2
+ * Validates: Requirements 4.2, 7.14
  */
 class BiGuestTokenServicePropertyTest {
 
     private BiDashboardRegistryRepository dashboardRegistryRepository;
     private BiDashboardAssignmentService assignmentService;
-    private BiRbacMappingService rbacMappingService;
+    private BiDataViewAssignmentService dataViewAssignmentService;
     private SupersetApiClient supersetApiClient;
-    private UserRoleRepository userRoleRepository;
     private BiProperties biProperties;
     private BiGuestTokenServiceImpl service;
 
@@ -45,21 +42,72 @@ class BiGuestTokenServicePropertyTest {
     void setUp() {
         dashboardRegistryRepository = mock(BiDashboardRegistryRepository.class);
         assignmentService = mock(BiDashboardAssignmentService.class);
-        rbacMappingService = mock(BiRbacMappingService.class);
+        dataViewAssignmentService = mock(BiDataViewAssignmentService.class);
         supersetApiClient = mock(SupersetApiClient.class);
-        userRoleRepository = mock(UserRoleRepository.class);
         biProperties = new BiProperties();
         service = new BiGuestTokenServiceImpl(
                 dashboardRegistryRepository,
                 assignmentService,
-                rbacMappingService,
                 supersetApiClient,
-                userRoleRepository,
                 biProperties
         );
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                service, "dataViewAssignmentService", dataViewAssignmentService);
     }
 
     // ========== Arbitraries ==========
+
+    @Example
+    void dataViewGuestTokenUsesTheConcreteViewAssignment() {
+        String dashboardId = "dashboard-data-view";
+        String userId = "portal-user";
+        long viewId = 42L;
+        BiDashboardRegistry dashboard = BiDashboardRegistry.builder()
+                .id(dashboardId)
+                .dashboardTitle("Data View Dashboard")
+                .embedId(UUID.randomUUID())
+                .status(DashboardStatus.ACTIVE)
+                .build();
+        when(dashboardRegistryRepository.findById(dashboardId)).thenReturn(Optional.of(dashboard));
+        when(dataViewAssignmentService.canAccessDashboardForView(userId, dashboardId, viewId))
+                .thenReturn(true);
+        when(supersetApiClient.getGuestToken(dashboard.getEmbedId().toString()))
+                .thenReturn("data-view-token");
+
+        GuestTokenRequest request = new GuestTokenRequest();
+        request.setDashboardId(dashboardId);
+        request.setDataViewId(viewId);
+
+        GuestTokenResponse response = service.getGuestToken(userId, request);
+
+        assertThat(response.getToken()).isEqualTo("data-view-token");
+        verify(dataViewAssignmentService).canAccessDashboardForView(userId, dashboardId, viewId);
+        verifyNoInteractions(assignmentService);
+    }
+
+    @Example
+    void dataViewGuestTokenRejectsAnUnassignedDashboard() {
+        String dashboardId = "dashboard-unassigned";
+        String userId = "portal-user";
+        long viewId = 43L;
+        BiDashboardRegistry dashboard = BiDashboardRegistry.builder()
+                .id(dashboardId)
+                .dashboardTitle("Unassigned")
+                .embedId(UUID.randomUUID())
+                .status(DashboardStatus.ACTIVE)
+                .build();
+        when(dashboardRegistryRepository.findById(dashboardId)).thenReturn(Optional.of(dashboard));
+        when(dataViewAssignmentService.canAccessDashboardForView(userId, dashboardId, viewId))
+                .thenReturn(false);
+
+        GuestTokenRequest request = new GuestTokenRequest();
+        request.setDashboardId(dashboardId);
+        request.setDataViewId(viewId);
+
+        assertThatThrownBy(() -> service.getGuestToken(userId, request))
+                .isInstanceOf(AccessDeniedException.class);
+        verifyNoInteractions(assignmentService, supersetApiClient);
+    }
 
     @Provide
     Arbitrary<String> dashboardIds() {
@@ -171,117 +219,20 @@ class BiGuestTokenServicePropertyTest {
         when(assignmentService.getUserDashboards(userId, null)).thenReturn(assignedList);
 
         // Mock remaining dependencies for the success path
-        List<String> roleIds = List.of("role-1", "role-2");
-        when(userRoleRepository.findAllRoleIdsByUserId(userId)).thenReturn(roleIds);
-        when(rbacMappingService.getEffectiveSupersetRoleIds(roleIds)).thenReturn(List.of(1, 2));
-        when(supersetApiClient.getGuestToken(anyString(), anyList())).thenReturn("mock-guest-token");
+        when(supersetApiClient.getGuestToken(anyString())).thenReturn("mock-guest-token");
 
         GuestTokenResponse response = service.getGuestToken(userId, request);
 
         assertThat(response).isNotNull();
         assertThat(response.getToken()).isEqualTo("mock-guest-token");
         assertThat(response.getDashboardEmbedId()).isEqualTo(dashboard.getEmbedId().toString());
+        // The guest token is scoped to the dashboard resource only; Superset's guest_token API
+        // takes no role list, so the service must not try to pass one.
+        verify(supersetApiClient).getGuestToken(dashboard.getEmbedId().toString());
     }
 
-    // ========== Arbitraries for Property 17 ==========
-
-    /**
-     * Generate a non-empty set of sys role IDs (1-5 roles).
-     */
-    @Provide
-    Arbitrary<List<String>> sysRoleIdSets() {
-        return Arbitraries.strings().alpha().ofMinLength(4).ofMaxLength(12)
-                .map(s -> "role-" + s)
-                .set().ofMinSize(1).ofMaxSize(5)
-                .map(ArrayList::new);
-    }
-
-    /**
-     * Generate a non-empty list of deduplicated superset role IDs (1-8 roles),
-     * simulating the merged result from BiRbacMappingService.getEffectiveSupersetRoleIds.
-     */
-    @Provide
-    Arbitrary<List<Integer>> effectiveSupersetRoleIds() {
-        return Arbitraries.integers().between(1, 100)
-                .set().ofMinSize(1).ofMaxSize(8)
-                .map(ArrayList::new);
-    }
-
-    // ========== Property 17: Guest Token 角色合并 ==========
-
-    /**
-     * Property 17: Guest Token 角色合并
-     *
-     * For any user with multiple Sys_Roles, when requesting a Guest Token,
-     * the Superset_Role list passed to SupersetApiClient should be the
-     * deduplicated union of all ACTIVE Superset_Role mappings for all of
-     * the user's Sys_Roles.
-     *
-     * This test verifies that BiGuestTokenServiceImpl correctly passes through
-     * the role IDs returned by BiRbacMappingService.getEffectiveSupersetRoleIds
-     * to SupersetApiClient.getGuestToken.
-     *
-     * Validates: Requirements 7.14, 7.15
-     */
-    @Property(tries = 100)
-    @Tag("Feature: bi-management")
-    @Tag("Property 17: Guest Token role merge")
-    @SuppressWarnings("unchecked")
-    void guestTokenRoleMerge(
-            @ForAll("dashboardArbitrary") BiDashboardRegistry dashboard,
-            @ForAll("userIds") String userId,
-            @ForAll("sysRoleIdSets") List<String> sysRoleIds,
-            @ForAll("effectiveSupersetRoleIds") List<Integer> expectedSupersetRoleIds
-    ) {
-        String dashboardId = dashboard.getId();
-
-        // Mock: dashboard exists in registry
-        when(dashboardRegistryRepository.findById(dashboardId))
-                .thenReturn(Optional.of(dashboard));
-
-        // Mock: user is assigned the dashboard
-        List<UserDashboardResponse> assignedDashboards = List.of(
-                UserDashboardResponse.builder()
-                        .dashboardId(dashboardId)
-                        .dashboardTitle(dashboard.getDashboardTitle())
-                        .embedId(dashboard.getEmbedId())
-                        .displayOrder(0)
-                        .isDefault(false)
-                        .build()
-        );
-        when(assignmentService.getUserDashboards(userId, null)).thenReturn(assignedDashboards);
-
-        // Mock: user has the generated sys role IDs
-        when(userRoleRepository.findAllRoleIdsByUserId(userId)).thenReturn(sysRoleIds);
-
-        // Mock: BiRbacMappingService returns the expected deduplicated union
-        when(rbacMappingService.getEffectiveSupersetRoleIds(sysRoleIds))
-                .thenReturn(expectedSupersetRoleIds);
-
-        // Mock: SupersetApiClient returns a token
-        when(supersetApiClient.getGuestToken(anyString(), anyList()))
-                .thenReturn("mock-guest-token");
-
-        // Execute
-        GuestTokenRequest request = new GuestTokenRequest();
-        request.setDashboardId(dashboardId);
-        service.getGuestToken(userId, request);
-
-        // Capture the actual supersetRoleIds passed to SupersetApiClient.getGuestToken
-        ArgumentCaptor<List<Integer>> roleIdsCaptor = ArgumentCaptor.forClass(List.class);
-        verify(supersetApiClient).getGuestToken(eq(dashboard.getEmbedId().toString()), roleIdsCaptor.capture());
-
-        List<Integer> capturedRoleIds = roleIdsCaptor.getValue();
-
-        // Verify: the captured role IDs exactly match the expected deduplicated set
-        assertThat(new HashSet<>(capturedRoleIds))
-                .as("Superset role IDs passed to API should be the deduplicated union from getEffectiveSupersetRoleIds")
-                .isEqualTo(new HashSet<>(expectedSupersetRoleIds));
-
-        // Verify: no duplicates in the captured list (same size as set)
-        assertThat(capturedRoleIds).hasSize(new HashSet<>(capturedRoleIds).size());
-
-        // Verify: getEffectiveSupersetRoleIds was called with the correct sys role IDs
-        verify(rbacMappingService).getEffectiveSupersetRoleIds(sysRoleIds);
-    }
+    // Property 17 (Guest Token role merge) was retired: Superset's guest_token API accepts no role
+    // list, so the mapped roles were never sent. Role-based visibility is now enforced by
+    // BiDashboardAssignmentService (Property 18, BiDashboardAssignmentServicePropertyTest) and
+    // reaches this service through getUserDashboards(), which Property 11 above covers.
 }

@@ -35,7 +35,8 @@ class AiStudioProposalJobServiceImplTest {
     private AiStudioProposalJobResponse awaitTerminal(String jobId, String userId) throws InterruptedException {
         for (int i = 0; i < 200; i++) {
             AiStudioProposalJobResponse snap = service.get(jobId, userId);
-            if (snap.getStatus() == Status.SUCCEEDED || snap.getStatus() == Status.FAILED) return snap;
+            if (snap.getStatus() == Status.SUCCEEDED || snap.getStatus() == Status.FAILED
+                    || snap.getStatus() == Status.CANCELLED) return snap;
             Thread.sleep(10);
         }
         throw new AssertionError("job did not finish: " + jobId);
@@ -44,7 +45,7 @@ class AiStudioProposalJobServiceImplTest {
     @Test
     void submitReturnsImmediatelyAndResultIsVisibleAfterCompletion() throws Exception {
         CountDownLatch release = new CountDownLatch(1);
-        AiStudioProposalJobResponse submitted = service.submit(1L, "TABLE_DESIGN", "u1", () -> {
+        AiStudioProposalJobResponse submitted = service.submit(1L, "TABLE_DESIGN", "u1", "k", () -> {
             try {
                 release.await(5, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
@@ -67,7 +68,7 @@ class AiStudioProposalJobServiceImplTest {
 
     @Test
     void failureKeepsErrorCodeFromAiGenerationException() throws Exception {
-        AiStudioProposalJobResponse submitted = service.submit(1L, "PROCESS_DESIGN", "u1", () -> {
+        AiStudioProposalJobResponse submitted = service.submit(1L, "PROCESS_DESIGN", "u1", "k", () -> {
             throw new AiGenerationException("AI_STUDIO_PROPOSAL_EMPTY", "nothing came back");
         });
         AiStudioProposalJobResponse done = awaitTerminal(submitted.getJobId(), "u1");
@@ -78,7 +79,7 @@ class AiStudioProposalJobServiceImplTest {
 
     @Test
     void unexpectedExceptionIsReportedAsGenericFailure() throws Exception {
-        AiStudioProposalJobResponse submitted = service.submit(1L, "PROCESS_DESIGN", "u1", () -> {
+        AiStudioProposalJobResponse submitted = service.submit(1L, "PROCESS_DESIGN", "u1", "k", () -> {
             throw new IllegalStateException("boom");
         });
         AiStudioProposalJobResponse done = awaitTerminal(submitted.getJobId(), "u1");
@@ -99,13 +100,13 @@ class AiStudioProposalJobServiceImplTest {
             }
             return new StudioChatResult("r", null, null);
         };
-        AiStudioProposalJobResponse first = service.submit(1L, "TABLE_DESIGN", "u1", work);
-        AiStudioProposalJobResponse again = service.submit(1L, "TABLE_DESIGN", "u1", work);
+        AiStudioProposalJobResponse first = service.submit(1L, "TABLE_DESIGN", "u1", "k", work);
+        AiStudioProposalJobResponse again = service.submit(1L, "TABLE_DESIGN", "u1", "k", work);
         assertEquals(first.getJobId(), again.getJobId());
 
         // 另一个用户或另一个功能单元不共享作业
-        AiStudioProposalJobResponse otherUser = service.submit(1L, "TABLE_DESIGN", "u2", work);
-        AiStudioProposalJobResponse otherUnit = service.submit(2L, "TABLE_DESIGN", "u1", work);
+        AiStudioProposalJobResponse otherUser = service.submit(1L, "TABLE_DESIGN", "u2", "k", work);
+        AiStudioProposalJobResponse otherUnit = service.submit(2L, "TABLE_DESIGN", "u1", "k", work);
         assertNotEquals(first.getJobId(), otherUser.getJobId());
         assertNotEquals(first.getJobId(), otherUnit.getJobId());
 
@@ -116,13 +117,76 @@ class AiStudioProposalJobServiceImplTest {
         assertEquals(3, calls.get());
 
         // 终态之后再提交才是新作业
-        AiStudioProposalJobResponse fresh = service.submit(1L, "TABLE_DESIGN", "u1", work);
+        AiStudioProposalJobResponse fresh = service.submit(1L, "TABLE_DESIGN", "u1", "k", work);
         assertNotEquals(first.getJobId(), fresh.getJobId());
     }
 
     @Test
+    void differentRequestWhileRunningSupersedesTheOldJob() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
+        java.util.function.Supplier<StudioChatResult> work = () -> {
+            calls.incrementAndGet();
+            try {
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return new StudioChatResult("r", null, null);
+        };
+        AiStudioProposalJobResponse first = service.submit(1L, "TABLE_DESIGN", "u1", "add table A", work);
+        AiStudioProposalJobResponse changed = service.submit(1L, "TABLE_DESIGN", "u1", "add table B instead", work);
+
+        assertNotEquals(first.getJobId(), changed.getJobId());
+        AiStudioProposalJobResponse old = service.get(first.getJobId(), "u1");
+        assertEquals(Status.CANCELLED, old.getStatus());
+        assertEquals("AI_STUDIO_PROPOSAL_SUPERSEDED", old.getErrorCode());
+        // 旧作业的迟到结果被丢弃，不会把 CANCELLED 改回 SUCCEEDED
+        release.countDown();
+        awaitTerminal(changed.getJobId(), "u1");
+        Thread.sleep(50);
+        assertEquals(Status.CANCELLED, service.get(first.getJobId(), "u1").getStatus());
+        assertEquals(Status.SUCCEEDED, service.get(changed.getJobId(), "u1").getStatus());
+    }
+
+    @Test
+    void cancelStopsARunningJobAndIsIdempotent() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger interrupted = new AtomicInteger();
+        AiStudioProposalJobResponse submitted = service.submit(1L, "TABLE_DESIGN", "u1", "k", () -> {
+            started.countDown();
+            try {
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                interrupted.incrementAndGet();
+                Thread.currentThread().interrupt();
+            }
+            return new StudioChatResult("late", null, null);
+        });
+        assertTrue(started.await(2, TimeUnit.SECONDS));
+
+        AiStudioProposalJobResponse cancelled = service.cancel(submitted.getJobId(), "u1");
+        assertEquals(Status.CANCELLED, cancelled.getStatus());
+        assertEquals("AI_STUDIO_PROPOSAL_CANCELLED", cancelled.getErrorCode());
+        Thread.sleep(50);
+        assertEquals(1, interrupted.get(), "background thread is interrupted");
+        assertNull(service.get(submitted.getJobId(), "u1").getReply(), "late result is discarded");
+
+        // 幂等：再取消返回同一快照；他人/未知作业 404 语义
+        assertEquals(Status.CANCELLED, service.cancel(submitted.getJobId(), "u1").getStatus());
+        assertThrows(AiGenerationException.class, () -> service.cancel(submitted.getJobId(), "u2"));
+        assertThrows(AiGenerationException.class, () -> service.cancel("nope", "u1"));
+
+        // 取消后同一个人再提交是新作业（取消的不再被复用）
+        AiStudioProposalJobResponse fresh = service.submit(1L, "TABLE_DESIGN", "u1", "k", () -> new StudioChatResult("r", null, null));
+        assertNotEquals(submitted.getJobId(), fresh.getJobId());
+        awaitTerminal(fresh.getJobId(), "u1");
+    }
+
+    @Test
     void getRejectsUnknownJobsAndOtherUsersJobs() throws Exception {
-        AiStudioProposalJobResponse submitted = service.submit(1L, "TABLE_DESIGN", "u1",
+        AiStudioProposalJobResponse submitted = service.submit(1L, "TABLE_DESIGN", "u1", "k",
                 () -> new StudioChatResult("r", null, null));
         awaitTerminal(submitted.getJobId(), "u1");
 
@@ -138,7 +202,7 @@ class AiStudioProposalJobServiceImplTest {
     void terminalJobsExpireAfterRetention() throws Exception {
         AiStudioProposalJobServiceImpl shortLived =
                 new AiStudioProposalJobServiceImpl(executor, Duration.ZERO, Duration.ofMinutes(30), 200);
-        AiStudioProposalJobResponse submitted = shortLived.submit(1L, "TABLE_DESIGN", "u1",
+        AiStudioProposalJobResponse submitted = shortLived.submit(1L, "TABLE_DESIGN", "u1", "k",
                 () -> new StudioChatResult("r", null, null));
         // 第一次 get 可能仍在跑；等到终态后，下一次 sweep 就会把它清掉
         for (int i = 0; i < 200; i++) {
@@ -163,7 +227,7 @@ class AiStudioProposalJobServiceImplTest {
                 new AiStudioProposalJobServiceImpl(executor, Duration.ofMinutes(30), Duration.ZERO, 200);
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch interrupted = new CountDownLatch(1);
-        AiStudioProposalJobResponse submitted = strict.submit(1L, "TABLE_DESIGN", "u1", () -> {
+        AiStudioProposalJobResponse submitted = strict.submit(1L, "TABLE_DESIGN", "u1", "k", () -> {
             started.countDown();
             try {
                 Thread.sleep(10_000);

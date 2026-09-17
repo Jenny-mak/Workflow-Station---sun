@@ -1,6 +1,7 @@
 package com.admin.bi.component;
 
 import com.admin.bi.repository.BiDashboardRegistryRepository;
+import com.admin.bi.repository.BiSupersetRoleRepository;
 import com.admin.dto.request.BiDashboardListQueryRequest;
 import com.platform.common.list.ListColumnFilter;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,7 +40,8 @@ class BiDashboardListQuerySqlTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        component = new BiDashboardListQueryComponent(jdbcTemplate, registryRepository);
+        component = new BiDashboardListQueryComponent(jdbcTemplate, registryRepository,
+                new BiDashboardRegistryResponseAssembler(mock(BiSupersetRoleRepository.class)));
         Connection connection = mock(Connection.class);
         PreparedStatement statement = mock(PreparedStatement.class);
         when(connection.prepareStatement(anyString())).thenAnswer(call -> {
@@ -76,6 +78,17 @@ class BiDashboardListQuerySqlTest {
         assertThatThrownBy(() -> component.query(request(null,
                 List.of(new ListColumnFilter("secret", "contains", "x", null)))))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void supersetRoleNamesFilterResolvesIdsThroughTheRoleRegistry() {
+        component.query(request(null,
+                List.of(new ListColumnFilter("supersetRoleNames", "contains", "Admin", null))));
+
+        assertThat(pageSql())
+                .contains("FROM bi_superset_role r")
+                .contains("string_to_array(d.superset_role_ids, ',')::int[]")
+                .contains("ILIKE ?");
     }
 
     private static BiDashboardListQueryRequest request(String title,

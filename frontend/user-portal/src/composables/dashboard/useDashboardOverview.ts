@@ -1,19 +1,11 @@
 import { ref } from 'vue'
-import { getDashboardOverview, TaskOverview, ProcessOverview } from '@/api/dashboard'
+import {
+  getDashboardOverview,
+  type ProcessOverview,
+  type RecentTask,
+  type TaskOverview
+} from '@/api/dashboard'
 import { usePendingTaskStore } from '@/stores/pendingTask'
-
-/** 后端 recentTasks 字段有 taskId/taskName 与 id/name 两种形态，页面按需兼容。 */
-export interface RecentTaskRow {
-  taskId?: string
-  id?: string
-  taskName?: string
-  name?: string
-  processDefinitionName?: string
-  processName?: string
-  priority?: string | number
-  dueDate?: string
-  isOverdue?: boolean
-}
 
 // 仪表盘概览数据加载：任务 / 流程 / 个人绩效 / 最近任务
 export function useDashboardOverview() {
@@ -31,6 +23,8 @@ export function useDashboardOverview() {
 
   const taskOverview = ref<TaskOverview>({
     pendingCount: 0,
+    claimableCount: 0,
+    todoCount: 0,
     overdueCount: 0,
     completedTodayCount: 0,
     avgProcessingHours: 0,
@@ -50,7 +44,7 @@ export function useDashboardOverview() {
     typeDistribution: {}
   })
 
-  const recentTasks = ref<RecentTaskRow[]>([])
+  const recentTasks = ref<RecentTask[]>([])
 
   const loadDashboardData = async () => {
     loading.value = true
