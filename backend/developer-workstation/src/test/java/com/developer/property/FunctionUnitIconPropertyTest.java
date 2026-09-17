@@ -99,7 +99,9 @@ public class FunctionUnitIconPropertyTest {
                 workspaceAccessService, devGroupAssignmentRepository, mock(com.developer.component.VersionComponent.class), mock(com.developer.util.DeveloperWorkstationSequenceSynchronizer.class), mock(com.developer.service.MainTableViewService.class), mock(com.developer.repository.ForeignKeyRepository.class), mock(com.developer.component.impl.FunctionUnitExporter.class), mock(com.developer.component.TableDesignComponent.class),
                 mock(com.developer.repository.EmailConnectionRepository.class),
                 mock(com.developer.repository.EmailMonitorRuleRepository.class),
-                mock(com.developer.repository.EmailTemplateRepository.class));
+                mock(com.developer.repository.EmailTemplateRepository.class),
+                new com.developer.service.impl.FunctionUnitDocumentService(
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
         
         // Create function unit with icon
         FunctionUnitRequest request = new FunctionUnitRequest();
@@ -164,7 +166,9 @@ public class FunctionUnitIconPropertyTest {
                 workspaceAccessService, devGroupAssignmentRepository, mock(com.developer.component.VersionComponent.class), mock(com.developer.util.DeveloperWorkstationSequenceSynchronizer.class), mock(com.developer.service.MainTableViewService.class), mock(com.developer.repository.ForeignKeyRepository.class), mock(com.developer.component.impl.FunctionUnitExporter.class), mock(com.developer.component.TableDesignComponent.class),
                 mock(com.developer.repository.EmailConnectionRepository.class),
                 mock(com.developer.repository.EmailMonitorRuleRepository.class),
-                mock(com.developer.repository.EmailTemplateRepository.class));
+                mock(com.developer.repository.EmailTemplateRepository.class),
+                new com.developer.service.impl.FunctionUnitDocumentService(
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
         
         // Create function unit without icon
         FunctionUnitRequest request = new FunctionUnitRequest();

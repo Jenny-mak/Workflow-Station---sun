@@ -288,6 +288,23 @@ class AiStudioThreadServiceTest {
     }
 
     @Test
+    void docSyncResultIsExposedSeparatelyAndCannotBeMarkedApplied() {
+        Map<String, Object> docSync = new LinkedHashMap<>();
+        docSync.put("status", "UPDATED");
+        docSync.put("phases", List.of("TABLE_DESIGN"));
+        AiStudioMessage row = service.appendDocSyncMessage(1L, "TABLE_DESIGN", "Documents check (UPDATED): x",
+                docSync, ALICE);
+
+        AiStudioThreadMessageDTO dto = service.messages(1L, "TABLE_DESIGN", BOB.userId()).get(0);
+        assertEquals("ASSISTANT", dto.getRole());
+        assertNull(dto.getProposal(), "a document check is not an applicable proposal");
+        assertEquals("UPDATED", dto.getDocSync().get("status"));
+        assertEquals("AI_STUDIO_MESSAGE_NOT_PROPOSAL", assertThrows(DeveloperBusinessException.class,
+                () -> service.markApplied(1L, row.getId(), true, ALICE)).getErrorCode());
+        assertNull(service.recentHistory(1L, "TABLE_DESIGN").get(0).getProposal());
+    }
+
+    @Test
     void unknownPhaseIsRejected() {
         assertThrows(DeveloperBusinessException.class, () -> service.appendUserMessage(1L, "REVIEW", "x", ALICE));
         assertThrows(DeveloperBusinessException.class, () -> service.messages(1L, "nope", "u"));

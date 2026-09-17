@@ -1,6 +1,7 @@
 package com.developer.service.impl;
 
 import com.developer.dto.FunctionUnitContextDTO;
+import com.developer.enums.AiStudioPhase;
 import com.developer.util.BpmnNodeSummary;
 import org.springframework.stereotype.Component;
 
@@ -78,52 +79,45 @@ public class AiStudioContextDigest {
     }
 
     private List<Section> sectionsFor(String phase, FunctionUnitContextDTO c) {
-        List<Section> out = new ArrayList<>();
-        switch (phase == null ? "" : phase) {
-            case "PROCESS_DESIGN" -> {
-                out.add(new Section("Process nodes", processNodes(c)));
-                out.add(new Section("Forms bound to nodes", formStageBindings(c)));
-                out.add(new Section("Tables", tableNames(c)));
-            }
-            case "TABLE_DESIGN" -> {
-                out.add(new Section("Tables and fields", tablesWithFields(c)));
-                out.add(new Section("Table relations", tableRelations(c)));
-            }
-            case "FORM_DESIGN" -> {
-                out.add(new Section("Forms", forms(c)));
-                out.add(new Section("Tables and fields", tablesWithFields(c)));
-            }
-            case "VIEW_DESIGN" -> {
-                out.add(new Section("Main table views", views(c)));
-                out.add(new Section("Tables and fields", tablesWithFields(c)));
-                out.add(new Section("Business units and roles", orgCatalog(c)));
-            }
-            case "ACTION_DESIGN" -> {
-                out.add(new Section("Actions", actions(c)));
-                out.add(new Section("Process nodes", processNodes(c)));
-            }
-            case "AUTOMATION" -> {
-                out.add(new Section("Service tasks", serviceTasks(c)));
-                out.add(new Section("Available automation flows", automationFlows(c)));
-            }
-            case "CONNECTIONS" -> out.add(new Section("Email connections", connections(c)));
-            case "EMAIL_TEMPLATES" -> {
-                out.add(new Section("Email templates", emailTemplates(c)));
-                out.add(new Section("Main table fields (usable as ${field} variables)", mainTableFields(c)));
-            }
-            case "EMAIL_MONITORS" -> {
-                out.add(new Section("Email monitor templates", emailMonitors(c)));
-                out.add(new Section("Email connections", connections(c)));
-                out.add(new Section("Main table fields (extraction targets)", mainTableFields(c)));
-            }
-            case "DECISION_DESIGN" -> {
-                out.add(new Section("Decision tables", decisions(c)));
-                out.add(new Section("Tables", tableNames(c)));
-            }
-            case "VALIDATION" -> out.add(new Section("Design overview", overview(c)));
-            default -> out.add(new Section("Design overview", overview(c)));
+        AiStudioPhase known = AiStudioPhase.fromKey(phase).orElse(null);
+        if (known == null) {
+            return List.of(new Section("Design overview", overview(c)));
         }
-        return out;
+        // switch 表达式对枚举要求穷举：新增阶段不补 case 会编译失败
+        return switch (known) {
+            case PROCESS_DESIGN -> List.of(
+                    new Section("Process nodes", processNodes(c)),
+                    new Section("Forms bound to nodes", formStageBindings(c)),
+                    new Section("Tables", tableNames(c)));
+            case TABLE_DESIGN -> List.of(
+                    new Section("Tables and fields", tablesWithFields(c)),
+                    new Section("Table relations", tableRelations(c)));
+            case FORM_DESIGN -> List.of(
+                    new Section("Forms", forms(c)),
+                    new Section("Tables and fields", tablesWithFields(c)));
+            case VIEW_DESIGN -> List.of(
+                    new Section("Main table views", views(c)),
+                    new Section("Tables and fields", tablesWithFields(c)),
+                    new Section("Business units and roles", orgCatalog(c)));
+            case ACTION_DESIGN -> List.of(
+                    new Section("Actions", actions(c)),
+                    new Section("Process nodes", processNodes(c)));
+            case AUTOMATION -> List.of(
+                    new Section("Service tasks", serviceTasks(c)),
+                    new Section("Available automation flows", automationFlows(c)));
+            case CONNECTIONS -> List.of(new Section("Email connections", connections(c)));
+            case EMAIL_TEMPLATES -> List.of(
+                    new Section("Email templates", emailTemplates(c)),
+                    new Section("Main table fields (usable as ${field} variables)", mainTableFields(c)));
+            case EMAIL_MONITORS -> List.of(
+                    new Section("Email monitor templates", emailMonitors(c)),
+                    new Section("Email connections", connections(c)),
+                    new Section("Main table fields (extraction targets)", mainTableFields(c)));
+            case DECISION_DESIGN -> List.of(
+                    new Section("Decision tables", decisions(c)),
+                    new Section("Tables", tableNames(c)));
+            case VALIDATION -> List.of(new Section("Design overview", overview(c)));
+        };
     }
 
     // ---- 各切片的行渲染 ----

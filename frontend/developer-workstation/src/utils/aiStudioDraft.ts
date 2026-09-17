@@ -133,6 +133,8 @@ export interface AiStudioChatMessage {
     /** Apply 后的撤销令牌与截止时间；撤销过或不可撤销的 scope 没有这个字段 */
     undo?: { token: string; until: string | null } | null
   }
+  /** 文档同步结果（确认阶段 / 立即检查后由后端写入） */
+  docSync?: import('@/api/aiStudioThread').AiStudioDocSync
 }
 
 export type AiStudioChatThreads = Partial<Record<AiStudioPhase, AiStudioChatMessage[]>>

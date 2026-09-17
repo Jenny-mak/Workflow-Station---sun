@@ -1,5 +1,7 @@
 import api from './index'
 import type { AiStudioProposalPreview } from './aiGeneration'
+import type { FunctionUnitDocumentType } from './functionUnitDocument'
+import { amTokenHeaders } from '@/utils/amToken'
 
 /**
  * AI Studio 共享线程与进度（按功能单元共享给同组成员）。
@@ -15,6 +17,27 @@ export interface AiStudioThreadState {
   updatedAt: string | null
   messageCounts: Record<string, number>
   canModify: boolean
+  /** 文档同步作业正在跑 */
+  documentSyncRunning: boolean
+}
+
+/** 一份文档在一次同步里的结果；toVersion > fromVersion 表示写入了新版本 */
+export interface AiStudioDocSyncDocument {
+  fromVersion: number
+  toVersion: number
+  /** 同步期间有人手动保存过，AI 结果被放弃 */
+  blockedBy?: string
+}
+
+/** 确认阶段 / 立即检查后的文档同步结果（共享线程里的一条助手消息） */
+export interface AiStudioDocSync {
+  status: 'UPDATED' | 'UNCHANGED' | 'SKIPPED' | 'FAILED'
+  /** 触发的阶段；空数组表示全量核对 */
+  phases: string[]
+  documents?: Partial<Record<FunctionUnitDocumentType, AiStudioDocSyncDocument>>
+  changeSummary?: string
+  errorCode?: string
+  errorMessage?: string
 }
 
 export interface AiStudioThreadMessage {
@@ -34,6 +57,8 @@ export interface AiStudioThreadMessage {
     appliedByMe: boolean
     appliedAt: string | null
   } | null
+  /** 老数据 / 测试夹具可缺省 */
+  docSync?: AiStudioDocSync | null
 }
 
 export interface AiStudioThreadImportMessage {
@@ -50,6 +75,7 @@ export const AI_STUDIO_THREAD_EVENTS_URL = (functionUnitId: number) =>
 
 export type AiStudioThreadEventType =
   | 'READY' | 'MESSAGE_ADDED' | 'MESSAGE_UPDATED' | 'PROGRESS_UPDATED' | 'PROPOSAL_STARTED' | 'PROPOSAL_FINISHED'
+  | 'DOC_SYNC_STARTED' | 'DOC_SYNC_FINISHED'
 
 /** 推送事件负载：只有 id 与展示信息，内容按 id 另拉 */
 export interface AiStudioThreadEventData {
@@ -73,9 +99,15 @@ export const aiStudioThreadApi = {
     api.get<unknown, { data: AiStudioThreadMessage }>(`${base(functionUnitId)}/messages/${messageId}`,
       { silentError: true }),
 
+  /** 新确认的阶段会在后端触发文档同步，模型凭证随请求透传（读不到就不带，后端显式失败） */
   saveCompletedPhases: (functionUnitId: number, completedPhases: string[]) =>
     api.put<unknown, { data: string[] }>(`${base(functionUnitId)}/completed-phases`,
-      { completedPhases }, { silentError: true }),
+      { completedPhases }, { silentError: true, headers: amTokenHeaders() }),
+
+  /** 立即对两份文档做一次全量核对（后台），结果写进 phase 的线程 */
+  checkDocuments: (functionUnitId: number, phase: string) =>
+    api.post<unknown, { data: null }>(`${base(functionUnitId)}/documents/check`,
+      { phase }, { headers: amTokenHeaders() }),
 
   markApplied: (functionUnitId: number, messageId: number, applied: boolean) =>
     api.patch<unknown, { data: AiStudioThreadMessage }>(`${base(functionUnitId)}/messages/${messageId}/applied`,

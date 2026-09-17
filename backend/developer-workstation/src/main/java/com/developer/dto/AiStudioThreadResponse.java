@@ -30,4 +30,7 @@ public class AiStudioThreadResponse {
 
     /** 当前用户能否在线程里发言、确认阶段、标记 Apply（MODIFY 权限） */
     private boolean canModify;
+
+    /** 文档同步作业正在跑（页面刷新后恢复"更新中"状态） */
+    private boolean documentSyncRunning;
 }

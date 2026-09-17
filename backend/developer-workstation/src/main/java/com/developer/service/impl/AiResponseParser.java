@@ -150,6 +150,14 @@ public class AiResponseParser {
 
     // ==================== 响应信封 ====================
 
+    /**
+     * 只取助手回复原文（不解析文档/数据块）。给自带输出格式的调用方用——例如 AI Studio 文档同步
+     * 一次输出两份文档，而 {@link #parse} 只保留最后一个文档块，并按旧设计文档格式校验。
+     */
+    public String assistantText(Map<String, Object> httpResult) {
+        return extractAssistantText(httpResult);
+    }
+
     @SuppressWarnings("unchecked")
     private String extractAssistantText(Map<String, Object> httpResult) {
         int status = httpResult.get("status") instanceof Number n ? n.intValue() : 0;

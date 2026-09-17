@@ -4,11 +4,16 @@ import com.developer.component.AiStudioThreadComponent;
 import com.developer.dto.AiStudioThreadImportRequest;
 import com.developer.dto.AiStudioThreadMessageDTO;
 import com.developer.dto.AiStudioThreadResponse;
+import com.developer.enums.AiStudioPhase;
+import com.developer.security.AmTokenResolver;
 import com.developer.security.RequireDeveloperPermission;
 import com.platform.common.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -41,9 +46,11 @@ import java.util.List;
 public class AiStudioThreadController extends BaseController {
 
     private final AiStudioThreadComponent threadComponent;
+    private final AmTokenResolver amTokenResolver;
 
-    public AiStudioThreadController(AiStudioThreadComponent threadComponent) {
+    public AiStudioThreadController(AiStudioThreadComponent threadComponent, AmTokenResolver amTokenResolver) {
         this.threadComponent = threadComponent;
+        this.amTokenResolver = amTokenResolver;
     }
 
     @GetMapping
@@ -82,11 +89,27 @@ public class AiStudioThreadController extends BaseController {
     }
 
     @PutMapping("/completed-phases")
-    @Operation(summary = "Replace the confirmed phases of this function unit")
+    @Operation(summary = "Replace the confirmed phases; newly confirmed phases start a background document update")
     @RequireDeveloperPermission("FUNCTION_UNIT_UPDATE")
     public ResponseEntity<ApiResponse<List<String>>> saveCompletedPhases(
-            @PathVariable Long functionUnitId, @Valid @RequestBody CompletedPhasesRequest request) {
-        return handleRequest(() -> threadComponent.saveCompletedPhases(functionUnitId, request.getCompletedPhases()));
+            @PathVariable Long functionUnitId, @Valid @RequestBody CompletedPhasesRequest request,
+            HttpServletRequest httpRequest) {
+        String amToken = amTokenResolver.resolve(httpRequest);
+        return handleRequest(() ->
+                threadComponent.saveCompletedPhases(functionUnitId, request.getCompletedPhases(), amToken));
+    }
+
+    @PostMapping("/documents/check")
+    @Operation(summary = "Check both documents against the whole design now (background)")
+    @RequireDeveloperPermission("FUNCTION_UNIT_UPDATE")
+    public ResponseEntity<ApiResponse<Void>> checkDocuments(
+            @PathVariable Long functionUnitId, @Valid @RequestBody CheckDocumentsRequest request,
+            HttpServletRequest httpRequest) {
+        String amToken = amTokenResolver.resolve(httpRequest);
+        return handleRequest(() -> {
+            threadComponent.checkDocuments(functionUnitId, request.getPhase(), amToken);
+            return null;
+        });
     }
 
     @PatchMapping("/messages/{messageId}/applied")
@@ -111,6 +134,14 @@ public class AiStudioThreadController extends BaseController {
         @NotNull
         @Size(max = 11)
         private List<String> completedPhases;
+    }
+
+    @Data
+    public static class CheckDocumentsRequest {
+        /** 结果消息写到哪个阶段的线程（发起人当前所在阶段） */
+        @NotBlank
+        @Pattern(regexp = AiStudioPhase.KEY_PATTERN)
+        private String phase;
     }
 
     @Data

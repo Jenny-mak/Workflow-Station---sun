@@ -52,10 +52,7 @@
             <el-icon><MagicStick /></el-icon>
             {{ t('ai.panel.generateButton') }}
           </el-button>
-          <el-button
-            v-if="!isReadOnly"
-            @click="openEditDialog"
-          >
+          <el-button @click="openEditDialog">
             <el-icon><Setting /></el-icon>
             {{ t('functionUnit.settings') }}
           </el-button>
@@ -208,67 +205,92 @@
       </div>
     </div>
 
-    <!-- Edit Function Unit Dialog -->
+    <!-- Function Unit Settings: basic info + Requirements / Design documents -->
     <el-dialog
-      v-model="showEditDialog"
+      :model-value="showEditDialog"
       :title="t('functionUnit.settings')"
-      width="500px"
+      width="960px"
+      :before-close="closeSettings"
     >
-      <el-form
-        :model="editForm"
-        label-width="auto"
-        label-position="left"
-      >
-        <el-form-item :label="t('functionUnit.icon')">
-          <IconUploadField
-            v-model="editForm.iconId"
-            size="large"
-          />
-        </el-form-item>
-        <el-form-item
-          :label="t('functionUnit.name')"
-          required
+      <el-tabs v-model="settingsTab">
+        <el-tab-pane
+          :label="t('functionUnit.documents.tabBasic')"
+          name="basic"
         >
-          <el-input
-            v-model="editForm.name"
-            :placeholder="t('functionUnit.namePlaceholder')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('functionUnit.description')">
-          <el-input
-            v-model="editForm.description"
-            type="textarea"
-            :rows="3"
-            :placeholder="t('functionUnit.descriptionPlaceholder')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('functionUnit.tags')">
-          <el-select
-            v-model="editForm.tags"
-            multiple
-            filterable
-            allow-create
-            default-first-option
-            :placeholder="t('functionUnit.selectTags')"
-            style="width: 100%;"
+          <el-form
+            :model="editForm"
+            :disabled="isReadOnly"
+            label-width="auto"
+            label-position="left"
           >
-            <el-option
-              v-for="tag in availableTags"
-              :key="tag"
-              :label="tag"
-              :value="tag"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
+            <el-form-item :label="t('functionUnit.icon')">
+              <IconUploadField
+                v-model="editForm.iconId"
+                size="large"
+              />
+            </el-form-item>
+            <el-form-item
+              :label="t('functionUnit.name')"
+              required
+            >
+              <el-input
+                v-model="editForm.name"
+                :placeholder="t('functionUnit.namePlaceholder')"
+              />
+            </el-form-item>
+            <el-form-item :label="t('functionUnit.description')">
+              <el-input
+                v-model="editForm.description"
+                type="textarea"
+                :rows="3"
+                :placeholder="t('functionUnit.descriptionPlaceholder')"
+              />
+            </el-form-item>
+            <el-form-item :label="t('functionUnit.tags')">
+              <el-select
+                v-model="editForm.tags"
+                multiple
+                filterable
+                allow-create
+                default-first-option
+                :placeholder="t('functionUnit.selectTags')"
+                style="width: 100%;"
+              >
+                <el-option
+                  v-for="tag in availableTags"
+                  :key="tag"
+                  :label="tag"
+                  :value="tag"
+                />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+        <el-tab-pane
+          v-for="docType in FUNCTION_UNIT_DOCUMENT_TYPES"
+          :key="docType"
+          :label="t(`functionUnit.documents.type.${docType}`)"
+          :name="docType"
+          lazy
+        >
+          <FunctionUnitDocumentEditor
+            v-if="showEditDialog"
+            :ref="(el) => setDocumentEditor(docType, el)"
+            :function-unit-id="functionUnitId"
+            :type="docType"
+            :readonly="isReadOnly"
+          />
+        </el-tab-pane>
+      </el-tabs>
       <template #footer>
-        <el-button @click="showEditDialog = false">
-          {{ t('common.cancel') }}
+        <el-button @click="closeSettings()">
+          {{ isReadOnly ? t('common.close') : t('common.cancel') }}
         </el-button>
         <el-button
+          v-if="settingsTab === 'basic' && !isReadOnly"
           type="primary"
           :loading="saving"
-          @click="handleSaveEdit"
+          @click="saveBasicInfo"
         >
           {{ t('common.save') }}
         </el-button>
@@ -501,6 +523,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { ElMessageBox } from 'element-plus'
 import { ArrowLeft, Setting, Download, Upload, CircleCheck, CircleClose, Loading, Clock, MagicStick, Guide } from '@element-plus/icons-vue'
 import { useFunctionUnitStore } from '@/stores/functionUnit'
 import ProcessDesigner from '@/components/designer/ProcessDesigner.vue'
@@ -517,6 +540,8 @@ import VersionManager from '@/components/version/VersionManager.vue'
 import IconPreview from '@/components/icon/IconPreview.vue'
 import IconUploadField from '@/components/icon/IconUploadField.vue'
 import AiPanel from '@/components/ai/AiPanel.vue'
+import FunctionUnitDocumentEditor from '@/components/function-unit/FunctionUnitDocumentEditor.vue'
+import { FUNCTION_UNIT_DOCUMENT_TYPES, type FunctionUnitDocumentType } from '@/api/functionUnitDocument'
 import AiStudioEntryDialog from '@/components/ai/AiStudioEntryDialog.vue'
 import { AI_GENERATION_ENABLED, AI_STUDIO_ENABLED } from '@/utils/featureFlags'
 import { blockReadOnlyDesignerInteraction } from '@/utils/readOnlyDesignerInteraction'
@@ -572,11 +597,41 @@ const { statusTagType, statusLabel } = useFunctionUnitStatus()
 const {
   saving,
   showEditDialog,
+  settingsTab,
   editForm,
   availableTags,
   openEditDialog,
   handleSaveEdit
 } = useFunctionUnitSettings({ functionUnitId, store })
+
+type DocumentEditorHandle = InstanceType<typeof FunctionUnitDocumentEditor>
+const documentEditors = new Map<FunctionUnitDocumentType, DocumentEditorHandle>()
+
+function setDocumentEditor(type: FunctionUnitDocumentType, el: unknown) {
+  if (el) documentEditors.set(type, el as DocumentEditorHandle)
+  else documentEditors.delete(type)
+}
+
+/** Closing the settings dialog discards unsaved document edits only after the user agrees. */
+async function closeSettings() {
+  const dirty = [...documentEditors.values()].some(editor => editor.isDirty)
+  if (dirty) {
+    try {
+      await ElMessageBox.confirm(
+        t('functionUnit.documents.unsavedConfirm'),
+        t('functionUnit.documents.unsavedTitle'),
+        { type: 'warning', confirmButtonText: t('functionUnit.documents.discard') }
+      )
+    } catch {
+      return // keep editing
+    }
+  }
+  showEditDialog.value = false
+}
+
+async function saveBasicInfo() {
+  if (await handleSaveEdit()) await closeSettings()
+}
 
 const {
   validating,
@@ -617,9 +672,19 @@ async function handleAiDataApplied() {
   processDesignerReloadKey.value++
 }
 
-onMounted(() => {
-  store.fetchById(functionUnitId.value)
+/** AI Studio's "Edit in Settings" lands here with ?settings=REQUIREMENTS|DESIGN. */
+function openSettingsFromQuery() {
+  const tab = route.query.settings
+  if (!FUNCTION_UNIT_DOCUMENT_TYPES.includes(tab as FunctionUnitDocumentType)) return
+  openEditDialog()
+  settingsTab.value = tab as FunctionUnitDocumentType
+  void router.replace({ query: { ...route.query, settings: undefined } })
+}
+
+onMounted(async () => {
   store.fetchAllTags()
+  await store.fetchById(functionUnitId.value)
+  openSettingsFromQuery()
 })
 
 onUnmounted(() => {

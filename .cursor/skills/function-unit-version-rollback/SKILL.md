@@ -55,6 +55,9 @@ Rollback 只保证 **Developer Workstation 设计态** 与目标版本一致；*
    - legacy（pre-v2）：内存还原 tableDefinitions/formDefinitions/… + fixStaleIds
    - **收尾：** FormTableBindingRestorer.repairFunctionUnitForms（见 §回归缺陷 #1472）
 7. 写 rollback 版本记录；currentVersion 递增；status ← snapshot.status（legacy 缺省 DRAFT）
+   - **版本号必须避让已占用号**：backup / rollback 号均用 `nextFreeVersion`（`uk_version_fu`）。
+     Import 前 snapshot 取「current+1」但**不推进** currentVersion，直接 `calculateNextVersion` 会撞号；
+     Publish（`FunctionUnitComponentImpl.doPublish`）与 `createVersion` 同理跳过已占用号，禁止「号已存在就跳过写快照」。
 8. 若 status=PUBLISHED → mainTableViewService.publishViewsForFunctionUnit
 ```
 

@@ -33,6 +33,12 @@ public final class ExportImportTestComponents {
     private ExportImportTestComponents() {
     }
 
+    /** 没有任何文档的文档服务（仓库全部返回空）。 */
+    static com.developer.service.impl.FunctionUnitDocumentService documentService() {
+        return new com.developer.service.impl.FunctionUnitDocumentService(
+                Mockito.mock(com.developer.repository.AiDocumentRepository.class));
+    }
+
     public static FunctionUnitExporter exporter(
             FunctionUnitRepository functionUnitRepository,
             TableDefinitionRepository tableDefinitionRepository,
@@ -43,6 +49,22 @@ public final class ExportImportTestComponents {
             TableRelationRepository tableRelationRepository,
             FunctionUnitWorkspaceAccessService functionUnitWorkspaceAccessService,
             ObjectMapper objectMapper) {
+        return exporter(functionUnitRepository, tableDefinitionRepository, formDefinitionRepository,
+                actionDefinitionRepository, decisionDefinitionRepository, formStageBindingRepository,
+                tableRelationRepository, functionUnitWorkspaceAccessService, objectMapper, documentService());
+    }
+
+    public static FunctionUnitExporter exporter(
+            FunctionUnitRepository functionUnitRepository,
+            TableDefinitionRepository tableDefinitionRepository,
+            FormDefinitionRepository formDefinitionRepository,
+            ActionDefinitionRepository actionDefinitionRepository,
+            DecisionDefinitionRepository decisionDefinitionRepository,
+            FormStageBindingRepository formStageBindingRepository,
+            TableRelationRepository tableRelationRepository,
+            FunctionUnitWorkspaceAccessService functionUnitWorkspaceAccessService,
+            ObjectMapper objectMapper,
+            com.developer.service.impl.FunctionUnitDocumentService documentService) {
         EmailConnectionRepository emailConnectionRepository = Mockito.mock(EmailConnectionRepository.class);
         Mockito.lenient().when(emailConnectionRepository.findByFunctionUnitIdOrderByNameAsc(Mockito.anyLong()))
                 .thenReturn(java.util.List.of());
@@ -78,6 +100,7 @@ public final class ExportImportTestComponents {
                 relationTablePortability,
                 mainTableViewPortability,
                 functionUnitWorkspaceAccessService,
+                documentService,
                 objectMapper);
         ReflectionTestUtils.setField(exporter, "platformVersion", "1.0.0");
         return exporter;
@@ -173,7 +196,8 @@ public final class ExportImportTestComponents {
                 Mockito.mock(RelationTableStructurePortability.class),
                 Mockito.mock(MainTableViewPortability.class),
                 Mockito.mock(com.developer.service.MainTableViewService.class),
-                automationFlowClient);
+                automationFlowClient,
+                documentService());
 
         return new ExportImportComponentImpl(
                 functionUnitRepository,

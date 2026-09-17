@@ -12,13 +12,17 @@ interface UseFunctionUnitSettingsOptions {
   store: FunctionUnitStore
 }
 
-/** Edit/settings dialog: name/description/icon/tags form and persistence. */
+/**
+ * Settings dialog: name/description/icon/tags form and persistence. The dialog also hosts the
+ * Requirements / Design document tabs, so closing goes through the view's dirty-check instead of here.
+ */
 export function useFunctionUnitSettings(options: UseFunctionUnitSettingsOptions) {
   const { functionUnitId, store } = options
   const { t } = useI18n()
 
   const saving = ref(false)
   const showEditDialog = ref(false)
+  const settingsTab = ref<'basic' | 'REQUIREMENTS' | 'DESIGN'>('basic')
 
   const editForm = reactive({
     name: '',
@@ -39,13 +43,15 @@ export function useFunctionUnitSettings(options: UseFunctionUnitSettingsOptions)
     editForm.description = store.current?.description || ''
     editForm.iconId = store.current?.icon?.id ?? undefined
     editForm.tags = [...normalizeTags(store.current?.tags)]
+    settingsTab.value = 'basic'
     showEditDialog.value = true
   }
 
-  async function handleSaveEdit() {
+  /** @returns whether the basic info was saved */
+  async function handleSaveEdit(): Promise<boolean> {
     if (!editForm.name.trim()) {
       ElMessage.warning(t('functionUnit.enterName'))
-      return
+      return false
     }
     saving.value = true
     try {
@@ -57,16 +63,17 @@ export function useFunctionUnitSettings(options: UseFunctionUnitSettingsOptions)
         tags: normalizeTags(editForm.tags),
       })
       ElMessage.success(t('functionUnit.saveSuccess'))
-      showEditDialog.value = false
       await store.fetchById(functionUnitId.value)
       store.fetchAllTags()
+      return true
     } catch (e: unknown) {
       const message = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
       ElMessage.error(message || t('functionUnit.saveFailed'))
+      return false
     } finally {
       saving.value = false
     }
   }
 
-  return { saving, showEditDialog, editForm, availableTags, openEditDialog, handleSaveEdit }
+  return { saving, showEditDialog, settingsTab, editForm, availableTags, openEditDialog, handleSaveEdit }
 }

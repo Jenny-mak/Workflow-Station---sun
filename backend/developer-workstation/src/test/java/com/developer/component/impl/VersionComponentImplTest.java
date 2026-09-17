@@ -25,6 +25,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
@@ -82,6 +83,9 @@ class VersionComponentImplTest {
 
     @Mock
     private EntityManager entityManager;
+
+    @Mock
+    private com.developer.service.impl.FunctionUnitDocumentService documentService;
 
     @InjectMocks
     private VersionComponentImpl versionComponent;
@@ -219,6 +223,96 @@ class VersionComponentImplTest {
         verify(functionUnitRepository).save(functionUnit);
     }
     
+    @Test
+    void testRollback_RestoresSnapshotDocumentsAsNewVersions() throws Exception {
+        FunctionUnit functionUnit = FunctionUnit.builder()
+                .id(1L).name("Test Function").currentVersion("1.0.2").status(FunctionUnitStatus.DRAFT).build();
+        Version targetVersion = Version.builder()
+                .id(2L).functionUnit(functionUnit).versionNumber("1.0.1").snapshotData(new byte[0]).build();
+        when(functionUnitRepository.findById(1L)).thenReturn(Optional.of(functionUnit));
+        when(versionRepository.findById(2L)).thenReturn(Optional.of(targetVersion));
+        when(functionUnitRepository.save(any(FunctionUnit.class))).thenReturn(functionUnit);
+        when(functionUnitExporter.buildVersionSnapshotPayload(anyLong())).thenReturn(Collections.emptyMap());
+        when(objectMapper.writeValueAsBytes(any())).thenReturn(new byte[0]);
+        when(objectMapper.readValue(any(byte[].class), eq(java.util.Map.class)))
+                .thenReturn(java.util.Map.of("documents", java.util.Map.of("DESIGN", "design at 1.0.1")));
+
+        versionComponent.rollback(1L, 2L);
+
+        verify(documentService).appendFromPackage(1L,
+                java.util.Map.of(com.developer.enums.AiDocumentType.DESIGN, "design at 1.0.1"),
+                "ROLLBACK:1.0.1", "system");
+    }
+
+    /**
+     * Re-import snapshots take "current + 1" without advancing currentVersion, so after a re-import the
+     * rollback backup/rollback numbers must skip versions that already exist (uk_version_fu).
+     */
+    @Test
+    void testRollback_AfterReimportSnapshot_SkipsTakenVersionNumbers() throws Exception {
+        FunctionUnit functionUnit = FunctionUnit.builder()
+                .id(1L).name("Test Function").status(FunctionUnitStatus.DRAFT).build();
+        Version reimportSnapshot = Version.builder()
+                .id(2L).functionUnit(functionUnit).versionNumber("1.0.0").snapshotData(new byte[0]).build();
+        java.util.Set<String> taken = new java.util.HashSet<>(java.util.Set.of("1.0.0", "1.0.2"));
+        when(functionUnitRepository.findById(1L)).thenReturn(Optional.of(functionUnit));
+        when(versionRepository.findById(2L)).thenReturn(Optional.of(reimportSnapshot));
+        when(versionRepository.findByFunctionUnitIdAndVersionNumber(eq(1L), anyString()))
+                .thenAnswer(inv -> taken.contains(inv.<String>getArgument(1))
+                        ? Optional.of(Version.builder().build()) : Optional.empty());
+        when(versionRepository.saveAndFlush(any(Version.class))).thenAnswer(inv -> {
+            taken.add(inv.<Version>getArgument(0).getVersionNumber());
+            return inv.getArgument(0);
+        });
+        when(functionUnitRepository.save(any(FunctionUnit.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(functionUnitExporter.buildVersionSnapshotPayload(anyLong())).thenReturn(Collections.emptyMap());
+        when(objectMapper.writeValueAsBytes(any())).thenReturn(new byte[0]);
+        when(objectMapper.readValue(any(byte[].class), eq(java.util.Map.class))).thenReturn(Collections.emptyMap());
+
+        FunctionUnit result = versionComponent.rollback(1L, 2L);
+
+        org.mockito.ArgumentCaptor<Version> saved = org.mockito.ArgumentCaptor.forClass(Version.class);
+        verify(versionRepository, times(2)).saveAndFlush(saved.capture());
+        assertEquals("Auto backup before rollback", saved.getAllValues().get(0).getChangeLog());
+        assertEquals("1.0.1", saved.getAllValues().get(0).getVersionNumber());
+        assertEquals("1.0.3", saved.getAllValues().get(1).getVersionNumber());
+        assertEquals("1.0.3", result.getCurrentVersion());
+    }
+
+    @Test
+    void testCreateVersion_SkipsTakenVersionNumber() throws Exception {
+        FunctionUnit functionUnit = FunctionUnit.builder().id(1L).name("Test Function").build();
+        when(functionUnitRepository.findById(1L)).thenReturn(Optional.of(functionUnit));
+        when(versionRepository.findByFunctionUnitIdAndVersionNumber(1L, "1.0.0"))
+                .thenReturn(Optional.of(Version.builder().build()));
+        when(versionRepository.save(any(Version.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(functionUnitExporter.buildVersionSnapshotPayload(anyLong())).thenReturn(Collections.emptyMap());
+        when(objectMapper.writeValueAsBytes(any())).thenReturn(new byte[0]);
+
+        Version result = versionComponent.createVersion(1L, "manual");
+
+        assertEquals("1.0.1", result.getVersionNumber());
+        assertEquals("1.0.1", functionUnit.getCurrentVersion());
+    }
+
+    @Test
+    void testRollback_LegacySnapshotLeavesDocumentsUntouched() throws Exception {
+        FunctionUnit functionUnit = FunctionUnit.builder()
+                .id(1L).name("Test Function").currentVersion("1.0.2").status(FunctionUnitStatus.DRAFT).build();
+        Version targetVersion = Version.builder()
+                .id(2L).functionUnit(functionUnit).versionNumber("1.0.1").snapshotData(new byte[0]).build();
+        when(functionUnitRepository.findById(1L)).thenReturn(Optional.of(functionUnit));
+        when(versionRepository.findById(2L)).thenReturn(Optional.of(targetVersion));
+        when(functionUnitRepository.save(any(FunctionUnit.class))).thenReturn(functionUnit);
+        when(functionUnitExporter.buildVersionSnapshotPayload(anyLong())).thenReturn(Collections.emptyMap());
+        when(objectMapper.writeValueAsBytes(any())).thenReturn(new byte[0]);
+        when(objectMapper.readValue(any(byte[].class), eq(java.util.Map.class))).thenReturn(Collections.emptyMap());
+
+        versionComponent.rollback(1L, 2L);
+
+        verify(documentService).appendFromPackage(eq(1L), eq(java.util.Map.of()), any(), any());
+    }
+
     /**
      * 测试用例 4: 认证对象为 null
      * 验证当认证对象为 null 时，getCurrentOperator() 返回 "system"

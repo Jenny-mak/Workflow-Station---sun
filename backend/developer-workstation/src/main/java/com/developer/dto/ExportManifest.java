@@ -88,6 +88,8 @@ public class ExportManifest {
         private List<String> emailTemplates;
         /** {@code views/main_table_views.json} when present */
         private String mainTableViews;
+        /** {@code documents/requirements.md} / {@code documents/design.md} — the documents that exist */
+        private List<String> documents;
     }
     
     @Data

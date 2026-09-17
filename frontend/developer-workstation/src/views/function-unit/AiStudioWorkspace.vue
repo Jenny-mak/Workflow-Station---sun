@@ -60,12 +60,24 @@
     <!-- 中：当前阶段设计区（复用既有设计器组件） -->
     <main class="stage">
       <div class="stage__header">
-        <h2 class="stage__title">
-          {{ aiStudioPhaseLabel(t, currentPhase) }}
-        </h2>
-        <p class="stage__desc">
-          {{ phaseDesc(currentPhase) }}
-        </p>
+        <div class="stage__heading">
+          <h2 class="stage__title">
+            {{ aiStudioPhaseLabel(t, currentPhase) }}
+          </h2>
+          <p class="stage__desc">
+            {{ phaseDesc(currentPhase) }}
+          </p>
+        </div>
+        <el-button
+          v-if="sharedThreads"
+          class="stage__docs"
+          @click="docsDrawerOpen = true"
+        >
+          <el-icon :class="{ 'is-loading': docSyncRunning }">
+            <component :is="docSyncRunning ? Loading : Document" />
+          </el-icon>
+          {{ docSyncRunning ? t('ai.studio.docSync.syncing') : t('ai.studio.docSync.documentsButton') }}
+        </el-button>
       </div>
 
       <el-alert
@@ -316,7 +328,10 @@
             </el-icon>
             {{ t('ai.studio.workspace.copilotTitle') }}
           </div>
-          <div class="copilot-msg__bubble">
+          <div
+            v-if="!msg.docSync"
+            class="copilot-msg__bubble"
+          >
             <!-- 模型回复按 markdown 渲染（MarkdownRenderer 内置 DOMPurify 消毒）；
                  用户消息与错误气泡保持纯文本 -->
             <MarkdownRenderer
@@ -339,6 +354,17 @@
             <el-icon><MagicStick /></el-icon>
             {{ t('ai.studio.workspace.proposalRetry') }}
           </el-button>
+          <!-- 文档同步结果：确认阶段 / 立即检查后由后端写入 -->
+          <AiStudioDocSyncCard
+            v-if="msg.docSync"
+            :doc-sync="msg.docSync"
+            :function-unit-id="fuId"
+            :can-modify="canModifyThread"
+            :syncing="docSyncRunning"
+            @retry="checkDocumentsNow"
+            @open-documents="docsDrawerOpen = true"
+            @restored="docsRefreshKey++"
+          />
           <!-- 结构化改动提案卡：摘要 + Apply -->
           <div
             v-if="msg.proposal"
@@ -603,6 +629,15 @@
       </span>
       <span class="statusbar__saved">{{ t('ai.studio.workspace.draftSavedAt', { time: lastSavedAt || '—' }) }}</span>
     </footer>
+
+    <AiStudioDocumentsDrawer
+      v-model="docsDrawerOpen"
+      :function-unit-id="fuId"
+      :can-modify="canModifyThread"
+      :syncing="docSyncRunning"
+      :refresh-key="docsRefreshKey"
+      @check="checkDocumentsNow"
+    />
   </div>
 </template>
 
@@ -611,7 +646,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, markRaw, ty
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, MagicStick, Check, Close, Promotion, UploadFilled, Loading, CircleClose, Warning } from '@element-plus/icons-vue'
+import { ArrowLeft, MagicStick, Check, Close, Promotion, UploadFilled, Loading, CircleClose, Warning, Document } from '@element-plus/icons-vue'
 import { useFunctionUnitStore } from '@/stores/functionUnit'
 import { functionUnitApi, type ValidationResult } from '@/api/functionUnit'
 import { aiGenerationApi, type AiStudioProposalJob } from '@/api/aiGeneration'
@@ -639,6 +674,8 @@ import EmailMonitorDesigner from '@/components/designer/EmailMonitorDesigner.vue
 import DecisionList from '@/components/designer/DecisionList.vue'
 import MarkdownRenderer from '@/components/ai/MarkdownRenderer.vue'
 import ServiceTaskBindingsPanel from '@/components/ai/ServiceTaskBindingsPanel.vue'
+import AiStudioDocSyncCard from '@/components/ai/AiStudioDocSyncCard.vue'
+import AiStudioDocumentsDrawer from '@/components/ai/AiStudioDocumentsDrawer.vue'
 import {
   AI_STUDIO_PHASES,
   aiStudioPhaseLabel,
@@ -813,6 +850,23 @@ type CopilotMessage = AiStudioChatMessage
 const sharedThreads = ref(false)
 /** 当前用户能否在共享线程里发言（MODIFY）；只读成员只能看 */
 const canModifyThread = ref(true)
+
+// ---- 文档（Requirements / Function Unit Design）：确认阶段后后台同步 ----
+const docsDrawerOpen = ref(false)
+/** 该功能单元有文档同步作业在跑（共享状态 + 推送） */
+const docSyncRunning = ref(false)
+/** 同步结束 / 恢复版本后让文档抽屉重新拉取 */
+const docsRefreshKey = ref(0)
+
+async function checkDocumentsNow() {
+  docSyncRunning.value = true
+  try {
+    await aiStudioThreadApi.checkDocuments(fuId.value, currentPhase.value)
+  } catch (e) {
+    docSyncRunning.value = false
+    console.warn('[ai-studio] document check could not be started', e)
+  }
+}
 /** 中间设计区与阶段页脚是否只读（线程 canModify，线程不可用时回落到功能单元 canModify） */
 const isStageReadOnly = computed(() =>
   isStudioStageReadOnly(sharedThreads.value, canModifyThread.value, store.current)
@@ -911,6 +965,7 @@ async function initSharedThreads(localCompleted: AiStudioPhase[]): Promise<AiStu
     const { data: state } = await aiStudioThreadApi.getState(fuId.value)
     sharedThreads.value = true
     canModifyThread.value = state.canModify
+    docSyncRunning.value = state.documentSyncRunning
     const counts = state.messageCounts ?? {}
     const toImport: Record<string, ReturnType<typeof toImportMessages>> = {}
     for (const phase of AI_STUDIO_PHASES) {
@@ -972,6 +1027,7 @@ async function refreshSharedProgress(): Promise<boolean> {
   try {
     const { data: state } = await aiStudioThreadApi.getState(fuId.value)
     canModifyThread.value = state.canModify
+    docSyncRunning.value = state.documentSyncRunning
     if (state.completedPhases) completedPhases.value = state.completedPhases as AiStudioPhase[]
     return true
   } catch (e) {
@@ -1035,6 +1091,19 @@ function onThreadEvent(type: AiStudioThreadEventType, data: AiStudioThreadEventD
         && (AI_STUDIO_PHASES as readonly string[]).includes(data.phase)) {
         // 自己在别的浏览器/标签页发起的作业：这里也接着等结果
         void resumePendingProposal({ jobId: data.jobId, phase: data.phase as AiStudioPhase, submittedAt: Date.now() })
+      }
+      break
+    case 'DOC_SYNC_STARTED':
+      docSyncRunning.value = true
+      break
+    case 'DOC_SYNC_FINISHED':
+      docSyncRunning.value = false
+      docsRefreshKey.value++
+      // 结果卡写在触发同步的阶段里；确认后通常已经切到下一阶段，提示一下去哪儿看
+      if (data.mine && data.phase && data.phase !== currentPhase.value) {
+        ElMessage.info(t('ai.studio.docSync.finishedElsewhere', {
+          phase: aiStudioPhaseLabel(t, data.phase as AiStudioPhase)
+        }))
       }
       break
     case 'PROPOSAL_FINISHED':
@@ -1104,11 +1173,8 @@ function copilotHistory(phase: AiStudioPhase) {
   return toHistoryEntries(copilotThread(phase), t('ai.studio.workspace.proposalReady'))
 }
 
-/** 结构化提案仅在有 generatedData 切片的阶段可用（与后端 PROPOSAL_SCOPE_BY_PHASE 一致）。 */
-const PROPOSAL_PHASES: readonly AiStudioPhase[] = [
-  'PROCESS_DESIGN', 'TABLE_DESIGN', 'FORM_DESIGN', 'VIEW_DESIGN', 'ACTION_DESIGN', 'AUTOMATION',
-  'DECISION_DESIGN', 'EMAIL_TEMPLATES', 'CONNECTIONS', 'EMAIL_MONITORS'
-]
+/** 结构化提案仅在有 generatedData 切片的阶段可用：除 Validation 外全部（与后端 AiStudioPhase.proposalScope 一致）。 */
+const PROPOSAL_PHASES: readonly AiStudioPhase[] = AI_STUDIO_PHASES.filter(p => p !== 'VALIDATION')
 const proposalSupported = computed(() => PROPOSAL_PHASES.includes(currentPhase.value))
 
 /**
@@ -1791,8 +1857,20 @@ onMounted(async () => {
   overflow: hidden;
 
   &__header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
     padding: 16px 20px 12px;
     border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+
+  &__heading {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__docs {
+    flex-shrink: 0;
   }
 
   &__title {

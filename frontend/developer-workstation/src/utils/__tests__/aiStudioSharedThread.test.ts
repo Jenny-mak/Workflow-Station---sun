@@ -48,6 +48,16 @@ describe('aiStudioSharedThread', () => {
     expect(next[1].serverId).toBe(2)
   })
 
+  it('carries document check results separately from proposals', () => {
+    const docSync = { status: 'UPDATED' as const, phases: ['TABLE_DESIGN'], documents: {} }
+    const [msg] = mergeThread([], [server(9, 'ASSISTANT', 'Documents check (UPDATED): x', { docSync })])
+    expect(msg.docSync).toEqual(docSync)
+    expect(msg.proposal).toBeUndefined()
+
+    const [plain] = mergeThread([msg], [server(9, 'ASSISTANT', 'edited', { docSync: null })])
+    expect(plain.docSync).toBeUndefined()
+  })
+
   it('keeps the undo token only while the server says I applied it', () => {
     const [msg] = mergeThread([], [server(5, 'ASSISTANT', 'p', { proposal: card(false, false) })])
     msg.proposal!.applied = true

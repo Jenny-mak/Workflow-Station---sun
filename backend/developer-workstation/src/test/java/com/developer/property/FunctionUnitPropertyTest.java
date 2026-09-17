@@ -61,7 +61,9 @@ public class FunctionUnitPropertyTest {
                 workspaceAccessService, devGroupAssignmentRepository,                 mock(com.developer.component.VersionComponent.class), mock(com.developer.util.DeveloperWorkstationSequenceSynchronizer.class), mock(com.developer.service.MainTableViewService.class), mock(com.developer.repository.ForeignKeyRepository.class), mock(com.developer.component.impl.FunctionUnitExporter.class), mock(com.developer.component.TableDesignComponent.class),
                 mock(com.developer.repository.EmailConnectionRepository.class),
                 mock(com.developer.repository.EmailMonitorRuleRepository.class),
-                mock(com.developer.repository.EmailTemplateRepository.class));
+                mock(com.developer.repository.EmailTemplateRepository.class),
+                new com.developer.service.impl.FunctionUnitDocumentService(
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
     }
     
     /**
@@ -200,7 +202,9 @@ public class FunctionUnitPropertyTest {
                 mock(com.developer.component.VersionComponent.class), mock(com.developer.util.DeveloperWorkstationSequenceSynchronizer.class), mock(com.developer.service.MainTableViewService.class), mock(com.developer.repository.ForeignKeyRepository.class), mock(com.developer.component.impl.FunctionUnitExporter.class), mock(com.developer.component.TableDesignComponent.class),
                 mock(com.developer.repository.EmailConnectionRepository.class),
                 mock(com.developer.repository.EmailMonitorRuleRepository.class),
-                mock(com.developer.repository.EmailTemplateRepository.class));
+                mock(com.developer.repository.EmailTemplateRepository.class),
+                new com.developer.service.impl.FunctionUnitDocumentService(
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
 
         // ?????? + ????
         FunctionUnit original = new FunctionUnit();
@@ -289,7 +293,9 @@ public class FunctionUnitPropertyTest {
                 mock(com.developer.component.VersionComponent.class), mock(com.developer.util.DeveloperWorkstationSequenceSynchronizer.class), mock(com.developer.service.MainTableViewService.class), mock(com.developer.repository.ForeignKeyRepository.class), mock(com.developer.component.impl.FunctionUnitExporter.class), tableDesignComponent,
                 mock(com.developer.repository.EmailConnectionRepository.class),
                 mock(com.developer.repository.EmailMonitorRuleRepository.class),
-                mock(com.developer.repository.EmailTemplateRepository.class));
+                mock(com.developer.repository.EmailTemplateRepository.class),
+                new com.developer.service.impl.FunctionUnitDocumentService(
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
 
         // ????????1 sub ??id=13??? ???id=11??? ???id=12??
         // BPMN ??subTableId=13 / formId=11 / actionIds=[12]

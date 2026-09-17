@@ -7,6 +7,7 @@ import com.developer.dto.AiStudioThreadResponse;
 import com.developer.entity.AiStudioThreadState;
 import com.developer.security.FunctionUnitWorkspaceAccessService;
 import com.developer.security.WorkspaceAccessAction;
+import com.developer.service.impl.AiStudioDocumentSyncService;
 import com.developer.service.impl.AiStudioThreadEventHub;
 import com.developer.service.impl.AiStudioThreadService;
 import com.platform.common.dto.UserPrincipal;
@@ -23,13 +24,16 @@ public class AiStudioThreadComponentImpl implements AiStudioThreadComponent {
     private final AiStudioThreadService threadService;
     private final FunctionUnitWorkspaceAccessService accessService;
     private final AiStudioThreadEventHub eventHub;
+    private final AiStudioDocumentSyncService documentSyncService;
 
     public AiStudioThreadComponentImpl(AiStudioThreadService threadService,
                                        FunctionUnitWorkspaceAccessService accessService,
-                                       AiStudioThreadEventHub eventHub) {
+                                       AiStudioThreadEventHub eventHub,
+                                       AiStudioDocumentSyncService documentSyncService) {
         this.threadService = threadService;
         this.accessService = accessService;
         this.eventHub = eventHub;
+        this.documentSyncService = documentSyncService;
     }
 
     /** 当前请求者：展示名优先用 displayName，其次登录名，最后用户 id。必须在请求线程上取。 */
@@ -58,6 +62,7 @@ public class AiStudioThreadComponentImpl implements AiStudioThreadComponent {
                 .updatedAt(state.map(AiStudioThreadState::getUpdatedAt).orElse(null))
                 .messageCounts(threadService.messageCounts(functionUnitId))
                 .canModify(accessService.canAccess(functionUnitId, WorkspaceAccessAction.MODIFY))
+                .documentSyncRunning(documentSyncService.isRunning(functionUnitId))
                 .build();
     }
 
@@ -83,9 +88,25 @@ public class AiStudioThreadComponentImpl implements AiStudioThreadComponent {
     }
 
     @Override
-    public List<String> saveCompletedPhases(Long functionUnitId, List<String> completedPhases) {
+    public List<String> saveCompletedPhases(Long functionUnitId, List<String> completedPhases, String amToken) {
         accessService.assertCanAccess(functionUnitId, WorkspaceAccessAction.MODIFY);
-        return threadService.saveCompletedPhases(functionUnitId, completedPhases, currentAuthor(null).userId());
+        AiStudioThreadService.Author author = currentAuthor(null);
+        List<String> before = threadService.state(functionUnitId)
+                .map(AiStudioThreadState::getCompletedPhases)
+                .orElse(List.of());
+        List<String> saved = threadService.saveCompletedPhases(functionUnitId, completedPhases, author.userId());
+        // 只有新确认的阶段才触发；进度被重置/减少不触发。importThreads 不走这里，批量导入旧进度也不触发。
+        List<String> added = saved.stream().filter(phase -> !before.contains(phase)).toList();
+        if (!added.isEmpty()) {
+            documentSyncService.submit(functionUnitId, added, added.get(added.size() - 1), amToken, author);
+        }
+        return saved;
+    }
+
+    @Override
+    public void checkDocuments(Long functionUnitId, String phase, String amToken) {
+        accessService.assertCanAccess(functionUnitId, WorkspaceAccessAction.MODIFY);
+        documentSyncService.submit(functionUnitId, List.of(), phase, amToken, currentAuthor(null));
     }
 
     @Override

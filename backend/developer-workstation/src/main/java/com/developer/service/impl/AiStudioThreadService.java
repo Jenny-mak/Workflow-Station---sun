@@ -7,6 +7,7 @@ import com.developer.dto.AiStudioThreadImportRequest;
 import com.developer.dto.AiStudioThreadMessageDTO;
 import com.developer.entity.AiStudioMessage;
 import com.developer.entity.AiStudioThreadState;
+import com.developer.enums.AiStudioPhase;
 import com.developer.exception.DeveloperBusinessException;
 import com.developer.exception.ResourceNotFoundException;
 import com.developer.repository.AiStudioMessageRepository;
@@ -27,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * AI Studio 按功能单元共享的线程与进度。
@@ -47,10 +47,8 @@ public class AiStudioThreadService {
     /** 送给模型的共享历史窗口 */
     static final int HISTORY_WINDOW = 10;
 
-    /** 与 {@link AiStudioChatRequest#getPhase()} 的 @Pattern 同一份阶段表 */
-    static final Set<String> PHASES = Set.of(
-            "PROCESS_DESIGN", "TABLE_DESIGN", "FORM_DESIGN", "VIEW_DESIGN", "ACTION_DESIGN", "AUTOMATION",
-            "CONNECTIONS", "EMAIL_TEMPLATES", "EMAIL_MONITORS", "DECISION_DESIGN", "VALIDATION");
+    /** proposal 列里文档同步结果的键 */
+    static final String DOC_SYNC_KEY = "docSync";
 
     private final AiStudioMessageRepository messageRepository;
     private final AiStudioThreadStateRepository stateRepository;
@@ -182,6 +180,18 @@ public class AiStudioThreadService {
                 stored, author);
     }
 
+    /**
+     * 追加一条文档同步结果（助手消息）。库里的角色约束只有 USER / ASSISTANT，结构化结果放在 proposal
+     * 列的 {@value #DOC_SYNC_KEY} 键下（没有 scope，不是可 Apply 的提案）；content 是给旧页面看的可读摘要。
+     */
+    @Transactional
+    public AiStudioMessage appendDocSyncMessage(Long functionUnitId, String phase, String content,
+                                                Map<String, Object> docSync, Author author) {
+        requirePhase(phase);
+        return append(functionUnitId, phase, AiStudioMessage.ROLE_ASSISTANT, content,
+                Map.of(DOC_SYNC_KEY, docSync), author);
+    }
+
     private AiStudioMessage append(Long functionUnitId, String phase, String role, String content,
                                    Map<String, Object> proposal, Author author) {
         AiStudioMessage saved = messageRepository.save(AiStudioMessage.builder()
@@ -208,7 +218,7 @@ public class AiStudioThreadService {
     public AiStudioThreadMessageDTO markApplied(Long functionUnitId, Long messageId, boolean applied, Author author) {
         AiStudioMessage message = messageRepository.findByIdAndFunctionUnitId(messageId, functionUnitId)
                 .orElseThrow(() -> new ResourceNotFoundException("AiStudioMessage", messageId));
-        if (message.getProposal() == null) {
+        if (message.getProposal() == null || !(message.getProposal().get("scope") instanceof String)) {
             throw new DeveloperBusinessException("AI_STUDIO_MESSAGE_NOT_PROPOSAL",
                     "Message " + messageId + " carries no proposal");
         }
@@ -255,7 +265,7 @@ public class AiStudioThreadService {
         Map<String, Long> counts = messageCounts(functionUnitId);
         List<String> imported = new ArrayList<>();
         request.getThreads().forEach((phase, messages) -> {
-            if (!PHASES.contains(phase) || messages == null || messages.isEmpty()
+            if (!AiStudioPhase.isValid(phase) || messages == null || messages.isEmpty()
                     || counts.getOrDefault(phase, 0L) > 0) {
                 return;
             }
@@ -319,7 +329,10 @@ public class AiStudioThreadService {
     @SuppressWarnings("unchecked")
     private AiStudioThreadMessageDTO toDto(AiStudioMessage m, String viewerUserId) {
         AiStudioThreadMessageDTO.Proposal proposal = null;
-        if (m.getProposal() != null) {
+        Map<String, Object> docSync = null;
+        if (m.getProposal() != null && m.getProposal().get(DOC_SYNC_KEY) instanceof Map<?, ?> sync) {
+            docSync = (Map<String, Object>) sync;
+        } else if (m.getProposal() != null) {
             Map<String, Object> p = m.getProposal();
             proposal = AiStudioThreadMessageDTO.Proposal.builder()
                     .scope(p.get("scope") instanceof String s ? s : null)
@@ -340,16 +353,17 @@ public class AiStudioThreadService {
                 .mine(m.getAuthorUserId() != null && m.getAuthorUserId().equals(viewerUserId))
                 .createdAt(m.getCreatedAt())
                 .proposal(proposal)
+                .docSync(docSync)
                 .build();
     }
 
     static List<String> cleanPhases(List<String> phases) {
         if (phases == null) return new ArrayList<>();
-        return new ArrayList<>(phases.stream().filter(PHASES::contains).distinct().toList());
+        return new ArrayList<>(phases.stream().filter(AiStudioPhase::isValid).distinct().toList());
     }
 
     private static void requirePhase(String phase) {
-        if (!PHASES.contains(phase)) {
+        if (!AiStudioPhase.isValid(phase)) {
             throw new DeveloperBusinessException("AI_STUDIO_UNKNOWN_PHASE", "Unknown AI Studio phase: " + phase);
         }
     }

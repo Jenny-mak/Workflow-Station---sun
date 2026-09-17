@@ -20,6 +20,7 @@ import com.developer.util.MinimalBpmnTemplate;
 import com.developer.util.FunctionUnitTagUtils;
 import com.developer.util.XmlEncodingUtil;
 import com.developer.service.MainTableViewService;
+import com.developer.service.impl.FunctionUnitDocumentService;
 import com.developer.service.UserDisplayNameService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.criteria.Expression;
@@ -95,7 +96,8 @@ public class FunctionUnitComponentImpl implements FunctionUnitComponent {
             com.developer.component.TableDesignComponent tableDesignComponent,
             EmailConnectionRepository emailConnectionRepository,
             EmailMonitorRuleRepository emailMonitorRuleRepository,
-            EmailTemplateRepository emailTemplateRepository) {
+            EmailTemplateRepository emailTemplateRepository,
+            FunctionUnitDocumentService documentService) {
         this.functionUnitRepository = functionUnitRepository;
         this.processDefinitionRepository = processDefinitionRepository;
         this.versionRepository = versionRepository;
@@ -132,7 +134,8 @@ public class FunctionUnitComponentImpl implements FunctionUnitComponent {
                 sequenceSynchronizer,
                 this.codeGenerator,
                 mainTableViewService,
-                tableDesignComponent);
+                tableDesignComponent,
+                documentService);
         this.responseAssembler = new FunctionUnitResponseAssembler(functionUnitDevGroupAssignmentRepository);
     }
 
@@ -455,32 +458,27 @@ public class FunctionUnitComponentImpl implements FunctionUnitComponent {
                     "Please fix validation errors before retrying");
         }
 
-        // Compute new version number
+        // Compute new version number; skip numbers already taken (re-import snapshots do not advance currentVersion)
         String newVersion = snapshotFactory.calculateNextVersion(functionUnit.getCurrentVersion());
+        while (versionRepository.findByFunctionUnitIdAndVersionNumber(id, newVersion).isPresent()) {
+            newVersion = snapshotFactory.calculateNextVersion(newVersion);
+        }
 
-        // Check version exists to avoid unique constraint conflict
-        boolean versionAlreadyExists = versionRepository.findByFunctionUnitIdAndVersionNumber(id, newVersion).isPresent();
-        if (versionAlreadyExists) {
-            // Version snapshot exists but currentVersion not updated (failed deploy); allow completing status update
-            log.warn("Version snapshot {} already exists but function unit status not updated, continuing publish flow, functionUnitId={}", newVersion, id);
-        } else {
-            // Create version snapshot
-            try {
-                byte[] snapshotData = createSnapshot(functionUnit);
-                Version version = Version.builder()
-                        .functionUnit(functionUnit)
-                        .versionNumber(newVersion)
-                        .changeLog(changeLog)
-                        .snapshotData(snapshotData)
-                        .publishedBy(getCurrentOperator())
-                        .build();
-                versionRepository.save(version);
-            } catch (DeveloperBusinessException e) {
-                throw e;
-            } catch (Exception e) {
-                log.error("Failed to create version snapshot, functionUnitId={}, version={}: {}", id, newVersion, e.getMessage(), e);
-                throw new DeveloperBusinessException("SYS_SNAPSHOT_ERROR", "Failed to create version snapshot: " + e.getMessage());
-            }
+        try {
+            byte[] snapshotData = createSnapshot(functionUnit);
+            Version version = Version.builder()
+                    .functionUnit(functionUnit)
+                    .versionNumber(newVersion)
+                    .changeLog(changeLog)
+                    .snapshotData(snapshotData)
+                    .publishedBy(getCurrentOperator())
+                    .build();
+            versionRepository.save(version);
+        } catch (DeveloperBusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to create version snapshot, functionUnitId={}, version={}: {}", id, newVersion, e.getMessage(), e);
+            throw new DeveloperBusinessException("SYS_SNAPSHOT_ERROR", "Failed to create version snapshot: " + e.getMessage());
         }
 
         // Update function unit status

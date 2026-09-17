@@ -1,5 +1,6 @@
 package com.developer.dto;
 
+import com.developer.enums.AiStudioPhase;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -22,10 +23,9 @@ public class AiStudioChatRequest {
     @NotNull
     private Long functionUnitId;
 
-    /** AI Studio 阶段 key，见前端 utils/aiStudioDraft.ts 的 AI_STUDIO_PHASES。 */
+    /** AI Studio 阶段 key，见 {@link AiStudioPhase}。 */
     @NotBlank
-    @Pattern(regexp = "PROCESS_DESIGN|TABLE_DESIGN|FORM_DESIGN|VIEW_DESIGN|ACTION_DESIGN|AUTOMATION"
-            + "|CONNECTIONS|EMAIL_TEMPLATES|EMAIL_MONITORS|DECISION_DESIGN|VALIDATION")
+    @Pattern(regexp = AiStudioPhase.KEY_PATTERN)
     private String phase;
 
     @NotBlank

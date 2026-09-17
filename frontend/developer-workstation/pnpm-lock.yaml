@@ -61,6 +61,9 @@ importers:
       dayjs:
         specifier: ^1.11.10
         version: 1.11.19
+      diff:
+        specifier: ^8.0.4
+        version: 8.0.4
       dmn-js:
         specifier: ^17.7.0
         version: 17.7.0
@@ -1471,6 +1474,10 @@ packages:
   diff-sequences@29.6.3:
     resolution: {integrity: sha512-EjePK1srD3P08o2j4f0ExnylqRs5B9tJjcp9t1krH2qRi8CCdsYfwe9JgSLurFBWwq4uOlipzfk5fHNvwFKr8Q==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
+
+  diff@8.0.4:
+    resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
+    engines: {node: '>=0.3.1'}
 
   dmn-js-boxed-expression@17.7.0:
     resolution: {integrity: sha512-wt5jq4mSWvv2D6KeIleK8nOHWOIQqMXOyZMMTUAgmLXLtBW+SsgDPAV2//uLxBNGjX9gLs/ot3nsrOjJ9j0bBw==}
@@ -4231,6 +4238,8 @@ snapshots:
   didi@11.0.0: {}
 
   diff-sequences@29.6.3: {}
+
+  diff@8.0.4: {}
 
   dmn-js-boxed-expression@17.7.0:
     dependencies:

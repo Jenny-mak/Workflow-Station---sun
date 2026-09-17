@@ -14,6 +14,7 @@ import com.developer.repository.FormDefinitionRepository;
 import com.developer.repository.FunctionUnitRepository;
 import com.developer.repository.ProcessDefinitionRepository;
 import com.developer.service.MainTableViewService;
+import com.developer.service.impl.FunctionUnitDocumentService;
 import com.developer.util.BpmnIdRewriter;
 import com.developer.util.BpmnLastTaskAssigneeTopologyValidator;
 import com.developer.util.BpmnProcessIdRewriter;
@@ -61,6 +62,7 @@ public class FunctionUnitImporter {
     private final MainTableViewPortability mainTableViewPortability;
     private final MainTableViewService mainTableViewService;
     private final AdminCenterAutomationFlowClient automationFlowClient;
+    private final FunctionUnitDocumentService documentService;
 
     /**
      * 导入功能单元。无冲突策略选项：
@@ -286,6 +288,12 @@ public class FunctionUnitImporter {
                     EmailMonitorRulePortability.MonitorImportMaps.of(
                             formIdMapping, bindingIdMapping, connectionUidMapping));
         }
+
+        // Requirements / Design documents: appended as new versions (re-import keeps the history).
+        // Packages without documents leave the existing ones untouched.
+        documentService.appendFromPackage(functionUnit.getId(),
+                FunctionUnitDocumentService.fromPackage(packageData.get(FunctionUnitDocumentService.PACKAGE_KEY)),
+                FunctionUnitDocumentService.SUMMARY_IMPORTED, currentOperator());
 
         // Write process after tables/forms/actions/email import; rewrite old BPMN IDs (same as clone)
         if (packageData.containsKey("process")) {

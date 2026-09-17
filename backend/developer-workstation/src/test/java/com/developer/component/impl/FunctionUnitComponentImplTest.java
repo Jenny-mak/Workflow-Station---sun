@@ -203,6 +203,30 @@ class FunctionUnitComponentImplTest {
     }
     
     /**
+     * After a re-import snapshot took 1.0.0 without advancing currentVersion, publish must write a new
+     * snapshot under the next free number instead of treating 1.0.0 as "already published".
+     */
+    @Test
+    void testPublish_AfterReimportSnapshot_CreatesSnapshotUnderNextFreeVersion() throws Exception {
+        FunctionUnit functionUnit = FunctionUnit.builder()
+                .id(1L).name("Test Function").status(FunctionUnitStatus.DRAFT).build();
+        when(functionUnitRepository.findById(1L)).thenReturn(Optional.of(functionUnit));
+        when(versionRepository.findByFunctionUnitIdAndVersionNumber(1L, "1.0.0"))
+                .thenReturn(Optional.of(Version.builder().versionNumber("1.0.0").build()));
+        when(versionRepository.save(any(Version.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(functionUnitRepository.save(any(FunctionUnit.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(objectMapper.writeValueAsBytes(any())).thenReturn(new byte[0]);
+
+        FunctionUnit result = functionUnitComponent.publish(1L, "Test publish");
+
+        ArgumentCaptor<Version> saved = ArgumentCaptor.forClass(Version.class);
+        verify(versionRepository).save(saved.capture());
+        assertEquals("1.0.1", saved.getValue().getVersionNumber());
+        assertEquals("1.0.1", result.getCurrentVersion());
+        assertEquals(FunctionUnitStatus.PUBLISHED, result.getStatus());
+    }
+
+    /**
      * 测试用例 2: publish 时无认证信息
      * 验证当没有认证信息时，getCurrentOperator() 返回 "system"
      */

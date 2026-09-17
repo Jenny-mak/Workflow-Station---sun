@@ -32,3 +32,9 @@ function readCookieAmToken(): string {
 export function readAmToken(): string {
   return readQueryAmToken() || readCookieAmToken()
 }
+
+/** 透传 AMToken 的请求头；读不到就不带（后端以 AI_GATEWAY_TOKEN_MISSING 显式失败，不做匿名调用）。 */
+export function amTokenHeaders(): Record<string, string> {
+  const amToken = readAmToken()
+  return amToken ? { 'X-AM-Token': amToken } : {}
+}

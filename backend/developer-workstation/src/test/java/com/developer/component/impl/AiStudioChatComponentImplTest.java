@@ -157,7 +157,7 @@ class AiStudioChatComponentImplTest {
         AiStudioChatRequest req = request("add orders");
         when(threadService.recentHistory(7L, "TABLE_DESIGN")).thenReturn(List.of());
         AiStudioChatService.ProposalDraft draft = new AiStudioChatService.ProposalDraft(
-                7L, "TABLE_DESIGN", "TABLES", "msg", null, null);
+                7L, "TABLE_DESIGN", "TABLES", "msg", null, null, List.of());
         when(chatService.prepareProposal(req)).thenReturn(draft);
         AiStudioProposalJobResponse snapshot = AiStudioProposalJobResponse.builder().jobId("j1").build();
         ArgumentCaptor<Consumer<StudioChatResult>> hook = ArgumentCaptor.forClass(Consumer.class);

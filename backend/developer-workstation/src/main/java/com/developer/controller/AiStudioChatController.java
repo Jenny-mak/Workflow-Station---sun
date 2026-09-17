@@ -6,19 +6,18 @@ import com.developer.dto.AiStudioApplyResponse;
 import com.developer.dto.AiStudioChatRequest;
 import com.developer.dto.AiStudioChatResponse;
 import com.developer.dto.AiStudioProposalJobResponse;
+import com.developer.security.AmTokenResolver;
 import com.developer.security.RequireDeveloperPermission;
 import com.platform.common.dto.ApiResponse;
 import com.platform.common.i18n.I18nService;
 import com.platform.security.util.SecurityContextUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,19 +43,15 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "AI Studio Copilot", description = "AI Studio phase copilot chat API")
 public class AiStudioChatController extends BaseController {
 
-    /** 与 AiGenerationController 的同名常量保持一致（前端 useAiChat / aiGeneration api 透传用）。 */
-    private static final String AM_TOKEN_HEADER = "X-AM-Token";
-
     private final AiStudioChatComponent aiStudioChatComponent;
     private final I18nService i18nService;
+    private final AmTokenResolver amTokenResolver;
 
-    /** AMToken 的 cookie 名，与 {@code ai-generation.gateway.am-token-name} 对齐。 */
-    @Value("${ai-generation.gateway.am-token-name:AMToken}")
-    private String amTokenCookieName = "AMToken";
-
-    public AiStudioChatController(AiStudioChatComponent aiStudioChatComponent, I18nService i18nService) {
+    public AiStudioChatController(AiStudioChatComponent aiStudioChatComponent, I18nService i18nService,
+                                  AmTokenResolver amTokenResolver) {
         this.aiStudioChatComponent = aiStudioChatComponent;
         this.i18nService = i18nService;
+        this.amTokenResolver = amTokenResolver;
     }
 
     @PostMapping
@@ -66,7 +61,7 @@ public class AiStudioChatController extends BaseController {
             @Valid @RequestBody AiStudioChatRequest request, HttpServletRequest httpRequest) {
         String userId = SecurityContextUtils.getCurrentUserId()
                 .orElseThrow(() -> new RuntimeException(i18nService.getMessage("auth.unauthenticated_user")));
-        String amToken = resolveAmToken(httpRequest);
+        String amToken = amTokenResolver.resolve(httpRequest);
         return handleRequest(() -> aiStudioChatComponent.chat(request, userId, amToken));
     }
 
@@ -77,7 +72,7 @@ public class AiStudioChatController extends BaseController {
             @Valid @RequestBody AiStudioChatRequest request, HttpServletRequest httpRequest) {
         String userId = SecurityContextUtils.getCurrentUserId()
                 .orElseThrow(() -> new RuntimeException(i18nService.getMessage("auth.unauthenticated_user")));
-        String amToken = resolveAmToken(httpRequest);
+        String amToken = amTokenResolver.resolve(httpRequest);
         request.setPropose(true);
         return handleRequest(() -> aiStudioChatComponent.startProposal(request, userId, amToken));
     }
@@ -126,26 +121,5 @@ public class AiStudioChatController extends BaseController {
         String userId = SecurityContextUtils.getCurrentUserId()
                 .orElseThrow(() -> new RuntimeException(i18nService.getMessage("auth.unauthenticated_user")));
         return handleRequest(() -> aiStudioChatComponent.undoApply(body.get("undoToken"), userId));
-    }
-
-    /**
-     * 取该用户的 DSP AMToken：{@code X-AM-Token} 头 → AMToken cookie → null。
-     * 与 AiGenerationController#resolveAmToken 逐字同语义；token 只在内存流转，不落库、不进日志。
-     */
-    private String resolveAmToken(HttpServletRequest httpRequest) {
-        String header = httpRequest.getHeader(AM_TOKEN_HEADER);
-        if (header != null && !header.isBlank()) {
-            return header.trim();
-        }
-        Cookie[] cookies = httpRequest.getCookies();
-        if (cookies != null) {
-            for (Cookie cookie : cookies) {
-                if (amTokenCookieName.equalsIgnoreCase(cookie.getName())
-                        && cookie.getValue() != null && !cookie.getValue().isBlank()) {
-                    return cookie.getValue().trim();
-                }
-            }
-        }
-        return null;
     }
 }

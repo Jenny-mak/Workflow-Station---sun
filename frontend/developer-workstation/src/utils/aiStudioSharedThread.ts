@@ -57,6 +57,8 @@ function applyServerFields(target: AiStudioChatMessage, s: AiStudioThreadMessage
   } else {
     delete target.proposal
   }
+  if (s.docSync) target.docSync = s.docSync
+  else delete target.docSync
   return target
 }
 

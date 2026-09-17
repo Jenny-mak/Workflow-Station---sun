@@ -1,6 +1,7 @@
 package com.developer.component.impl;
 
 import com.developer.exception.DeveloperBusinessException;
+import com.developer.service.impl.FunctionUnitDocumentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
@@ -174,6 +176,17 @@ public class ExportImportPackageParser {
                 }
             }
             result.put("emailTemplates", emailTemplates);
+
+            // Parse Requirements / Design documents (absent in packages exported before they existed)
+            Map<String, String> documents = new LinkedHashMap<>();
+            FunctionUnitDocumentService.PACKAGE_FILES.forEach((type, fileName) -> {
+                if (rawFiles.containsKey(fileName)) {
+                    documents.put(type.name(), new String(rawFiles.get(fileName), StandardCharsets.UTF_8));
+                }
+            });
+            if (!documents.isEmpty()) {
+                result.put(FunctionUnitDocumentService.PACKAGE_KEY, documents);
+            }
 
             // Store checksum for verification
             if (rawFiles.containsKey("checksum.sha256")) {

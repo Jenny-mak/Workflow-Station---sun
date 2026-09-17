@@ -19,6 +19,8 @@ public record AiStudioThreadEvent(String type, Long functionUnitId, String phase
     public static final String PROGRESS_UPDATED = "PROGRESS_UPDATED";
     public static final String PROPOSAL_STARTED = "PROPOSAL_STARTED";
     public static final String PROPOSAL_FINISHED = "PROPOSAL_FINISHED";
+    public static final String DOC_SYNC_STARTED = "DOC_SYNC_STARTED";
+    public static final String DOC_SYNC_FINISHED = "DOC_SYNC_FINISHED";
 
     public static AiStudioThreadEvent message(String type, Long functionUnitId, String phase, Long messageId,
                                               String userId) {
@@ -27,6 +29,11 @@ public record AiStudioThreadEvent(String type, Long functionUnitId, String phase
 
     public static AiStudioThreadEvent progress(Long functionUnitId, String userId) {
         return new AiStudioThreadEvent(PROGRESS_UPDATED, functionUnitId, null, null, null, userId, null);
+    }
+
+    public static AiStudioThreadEvent docSync(String type, Long functionUnitId, String phase, String userId,
+                                              String authorName) {
+        return new AiStudioThreadEvent(type, functionUnitId, phase, null, null, userId, authorName);
     }
 
     public static AiStudioThreadEvent proposal(String type, Long functionUnitId, String phase, String jobId,

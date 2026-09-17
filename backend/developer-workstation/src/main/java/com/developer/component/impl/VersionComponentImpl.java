@@ -18,6 +18,7 @@ import com.developer.repository.SubTableViewConfigRepository;
 import com.developer.repository.TableRelationRepository;
 import com.developer.repository.VersionRepository;
 import com.developer.service.MainTableViewService;
+import com.developer.service.impl.FunctionUnitDocumentService;
 import com.developer.util.DeveloperWorkstationSequenceSynchronizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.security.util.SecurityContextUtils;
@@ -53,6 +54,7 @@ public class VersionComponentImpl implements VersionComponent {
     private final TableRelationRepository tableRelationRepository;
     private final ProcessDefinitionRepository processDefinitionRepository;
     private final EntityManager entityManager;
+    private final FunctionUnitDocumentService documentService;
     
     /**
      * Resolves current operator username.
@@ -73,7 +75,7 @@ public class VersionComponentImpl implements VersionComponent {
         FunctionUnit functionUnit = functionUnitRepository.findById(functionUnitId)
                 .orElseThrow(() -> new ResourceNotFoundException("FunctionUnit", functionUnitId));
         
-        String newVersion = calculateNextVersion(functionUnit.getCurrentVersion());
+        String newVersion = nextFreeVersion(functionUnitId, functionUnit.getCurrentVersion());
         
         try {
             byte[] snapshotData = createSnapshot(functionUnit);
@@ -106,7 +108,7 @@ public class VersionComponentImpl implements VersionComponent {
         try {
             sequenceSynchronizer.synchronizeAll();
 
-            String snapshotVersion = nextFreeSnapshotVersion(functionUnit);
+            String snapshotVersion = nextFreeVersion(functionUnit.getId(), functionUnit.getCurrentVersion());
             Version snapshot = Version.builder()
                     .functionUnit(functionUnit)
                     .versionNumber(snapshotVersion)
@@ -199,7 +201,7 @@ public class VersionComponentImpl implements VersionComponent {
         try {
             sequenceSynchronizer.synchronizeAll();
 
-            String backupVersion = calculateNextVersion(functionUnit.getCurrentVersion());
+            String backupVersion = nextFreeVersion(functionUnitId, functionUnit.getCurrentVersion());
             Version backup = Version.builder()
                     .functionUnit(functionUnit)
                     .versionNumber(backupVersion)
@@ -215,6 +217,11 @@ public class VersionComponentImpl implements VersionComponent {
             
             Map<String, Object> snapshot = objectMapper.readValue(targetVersion.getSnapshotData(), Map.class);
             snapshotRestorer.restore(functionUnit, snapshot);
+            // Documents are appended (history kept); snapshots taken before they existed leave them untouched
+            documentService.appendFromPackage(functionUnitId,
+                    FunctionUnitDocumentService.fromPackage(snapshot.get(FunctionUnitDocumentService.PACKAGE_KEY)),
+                    FunctionUnitDocumentService.SUMMARY_ROLLBACK_PREFIX + targetVersion.getVersionNumber(),
+                    getCurrentOperator());
 
             functionUnitRepository.saveAndFlush(functionUnit);
             sequenceSynchronizer.synchronizeVersions();
@@ -225,7 +232,7 @@ public class VersionComponentImpl implements VersionComponent {
                 mainTableViewService.publishViewsForFunctionUnit(functionUnitId);
             }
             
-            String newVersion = calculateNextVersion(backupVersion);
+            String newVersion = nextFreeVersion(functionUnitId, backupVersion);
             Version rollbackVersion = Version.builder()
                     .functionUnit(functionUnit)
                     .versionNumber(newVersion)
@@ -360,9 +367,12 @@ public class VersionComponentImpl implements VersionComponent {
         }
     }
 
-    private String nextFreeSnapshotVersion(FunctionUnit functionUnit) {
-        String candidate = calculateNextVersion(functionUnit.getCurrentVersion());
-        Long fuId = functionUnit.getId();
+    /**
+     * First version number after {@code after} not yet used by this FU. Re-import snapshots do not
+     * advance currentVersion, so the plain "current + 1" can already exist (uk_version_fu).
+     */
+    private String nextFreeVersion(Long fuId, String after) {
+        String candidate = calculateNextVersion(after);
         while (versionRepository.findByFunctionUnitIdAndVersionNumber(fuId, candidate).isPresent()) {
             candidate = calculateNextVersion(candidate);
         }

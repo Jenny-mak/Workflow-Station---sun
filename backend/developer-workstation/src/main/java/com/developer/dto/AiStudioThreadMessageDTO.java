@@ -30,6 +30,12 @@ public class AiStudioThreadMessageDTO {
     private Instant createdAt;
     /** 结构化提案；普通回复为 null */
     private Proposal proposal;
+    /**
+     * 文档同步结果（确认阶段 / 立即检查后写入）；其它消息为 null。
+     * 结构：status(UPDATED/UNCHANGED/SKIPPED/FAILED)、phases、documents.{REQUIREMENTS,DESIGN}.
+     * {fromVersion,toVersion,changeSummary,blockedBy}、errorCode、errorMessage。
+     */
+    private Map<String, Object> docSync;
 
     @Data
     @Builder
