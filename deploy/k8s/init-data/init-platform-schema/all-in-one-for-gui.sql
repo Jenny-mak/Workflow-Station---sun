@@ -4373,3 +4373,99 @@ ALTER TABLE bi_dashboard_registry ADD COLUMN IF NOT EXISTS superset_role_ids TEX
 
 COMMENT ON COLUMN bi_dashboard_registry.superset_role_ids IS
     'Sorted CSV of Superset role IDs from superset.dashboard_roles; NULL = unrestricted';
+
+-- =============================================================================
+-- 83-dw-ai-studio-shared-thread.sql
+-- Source file: deploy/init-scripts/00-schema/83-dw-ai-studio-shared-thread.sql
+-- =============================================================================
+-- AI Studio shared state per function unit: confirmed phases + copilot thread messages.
+-- Threads are shared by everyone who can open the function unit (same dev group); the phase a
+-- user currently sits on stays in that user's browser. Undo tokens are never stored here.
+-- Not reusing dw_ai_sessions / dw_ai_messages: their phase CHECK is the 3-phase AI Generate enum.
+-- Idempotent: safe to re-run.
+-- NOTE for existing environments: init-scripts only run on FIRST container start.
+-- Apply manually:
+--   docker exec -i platform-postgres-dev psql -U <user> -d <db> \
+--     -f /docker-entrypoint-initdb.d/00-schema/83-dw-ai-studio-shared-thread.sql
+
+CREATE TABLE IF NOT EXISTS dw_ai_studio_thread_states (
+    function_unit_id BIGINT PRIMARY KEY,
+    completed_phases JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_by VARCHAR(64),
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_ai_studio_state_function_unit FOREIGN KEY (function_unit_id)
+        REFERENCES dw_function_units(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS dw_ai_studio_messages (
+    id BIGSERIAL PRIMARY KEY,
+    function_unit_id BIGINT NOT NULL,
+    phase VARCHAR(30) NOT NULL,
+    role VARCHAR(10) NOT NULL,
+    content TEXT NOT NULL,
+    proposal JSONB,
+    applied_by VARCHAR(64),
+    applied_by_name VARCHAR(100),
+    applied_at TIMESTAMP,
+    author_user_id VARCHAR(64),
+    author_name VARCHAR(100),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_ai_studio_message_function_unit FOREIGN KEY (function_unit_id)
+        REFERENCES dw_function_units(id) ON DELETE CASCADE,
+    CONSTRAINT chk_ai_studio_message_role CHECK (role IN ('USER', 'ASSISTANT'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dw_ai_studio_messages_thread
+    ON dw_ai_studio_messages(function_unit_id, phase, id);
+
+COMMENT ON TABLE dw_ai_studio_thread_states IS
+    'AI Studio progress shared per function unit (confirmed phases)';
+COMMENT ON TABLE dw_ai_studio_messages IS
+    'AI Studio copilot thread messages shared per function unit and phase (latest 50 kept per phase)';
+COMMENT ON COLUMN dw_ai_studio_messages.proposal IS
+    'Structured change proposal {scope, data, preview}; applied state lives in applied_* columns';
+
+-- =============================================================================
+-- 84-dw-ai-studio-proposal-jobs.sql
+-- Source file: deploy/init-scripts/00-schema/84-dw-ai-studio-proposal-jobs.sql
+-- =============================================================================
+-- AI Studio copilot proposal jobs: status and result survive a DW restart.
+-- Jobs still PENDING/RUNNING when DW starts are marked FAILED / AI_STUDIO_PROPOSAL_INTERRUPTED:
+-- the model call cannot be resumed because the user's gateway token is never stored.
+-- Terminal rows are purged after ai-generation.studio.proposal-db-retention-hours (default 24).
+-- Idempotent: safe to re-run.
+-- NOTE for existing environments: init-scripts only run on FIRST container start.
+-- Apply manually:
+--   docker exec -i platform-postgres-dev psql -U <user> -d <db> \
+--     -f /docker-entrypoint-initdb.d/00-schema/84-dw-ai-studio-proposal-jobs.sql
+
+CREATE TABLE IF NOT EXISTS dw_ai_studio_proposal_jobs (
+    job_id VARCHAR(36) PRIMARY KEY,
+    function_unit_id BIGINT NOT NULL,
+    phase VARCHAR(30) NOT NULL,
+    user_id VARCHAR(64) NOT NULL,
+    author_name VARCHAR(100),
+    request_key TEXT,
+    message TEXT,
+    status VARCHAR(20) NOT NULL,
+    error_code VARCHAR(100),
+    error_message TEXT,
+    reply TEXT,
+    proposal JSONB,
+    proposal_scope VARCHAR(40),
+    preview JSONB,
+    submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP,
+    CONSTRAINT fk_ai_studio_job_function_unit FOREIGN KEY (function_unit_id)
+        REFERENCES dw_function_units(id) ON DELETE CASCADE,
+    CONSTRAINT chk_ai_studio_job_status CHECK (status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dw_ai_studio_jobs_owner
+    ON dw_ai_studio_proposal_jobs(function_unit_id, user_id, submitted_at);
+CREATE INDEX IF NOT EXISTS idx_dw_ai_studio_jobs_status
+    ON dw_ai_studio_proposal_jobs(status, finished_at);
+
+COMMENT ON TABLE dw_ai_studio_proposal_jobs IS
+    'AI Studio copilot proposal jobs (status + result); no credentials are stored';

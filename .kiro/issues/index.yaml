@@ -4039,3 +4039,20 @@
     Rebased onto origin/common_0731_SELF_AP; issue retargeted from #1633
     which origin already used for To Do Current Assignee.
 
+
+- id: "1636"
+  status: fixed
+  fixed_at: "2026-09-17"
+  severity: major
+  category: security
+  summary: "DW login gave role-less users a default DEVELOPER role, so plain team members could MODIFY team function units"
+  file: "backend/developer-workstation/src/main/java/com/developer/security/LegacyVirtualGroupRoleLookup.java"
+  note: |
+    AuthController 与 DeveloperSsoExchangeService 的 getRolesForUserLegacy 在无角色或查询异常时返回 DEVELOPER；
+    FunctionUnitWorkspaceAccessService.hasRole 先信 JWT 角色 → 无能力角色的组员拿到 MODIFY（dev 上 e2e_zhangwei 通过 AI Studio 聊天 MODIFY 校验）。
+    修复：两处重复查询合并为 LegacyVirtualGroupRoleLookup，无角色/异常返回空列表；JWT 信任保留（用户决定），
+    旧令牌在刷新/重新登录后失效。前端 AI Studio 路由去掉已删除的 FU_VIEWER，并加入团队只读兜底（workspaceFallbackApplies）。
+    验证：LegacyVirtualGroupRoleLookupTest 3/3、FunctionUnitWorkspaceAccessServiceTest 16/16；dev 重建 DW 前后端后
+    _dw-no-default-role-check.mjs 8/8（登录与 /auth/me 无 DEVELOPER、chat/proposals 403 WORKSPACE_FORBIDDEN、
+    thread canModify=false、AI Studio 只读打开）；developer（SYS_ADMIN）对照 canModify=true。
+    截图 2026-09-17_dw-no-default-role.png。

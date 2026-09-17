@@ -38,6 +38,12 @@ public class DeveloperPermissionInterceptor implements HandlerInterceptor {
             log.info("Handler is not HandlerMethod, skipping");
             return true;
         }
+
+        // SSE 等异步请求结束（含客户端断开）时 Spring 会再分派一次：首次分派已鉴过权，
+        // 而此时安全上下文不再建立，若照常检查会往已不可用的响应里写 401，抛 AsyncRequestNotUsableException
+        if (request.getDispatcherType() == jakarta.servlet.DispatcherType.ASYNC) {
+            return true;
+        }
         
         HandlerMethod handlerMethod = (HandlerMethod) handler;
         log.debug("Handler method: {}.{}", handlerMethod.getBeanType().getSimpleName(), handlerMethod.getMethod().getName());

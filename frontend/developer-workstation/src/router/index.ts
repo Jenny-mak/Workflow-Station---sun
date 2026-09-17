@@ -28,7 +28,7 @@ const routes: RouteRecordRaw[] = [
     path: '/function-units/:id/ai-studio',
     name: 'AiStudioWorkspace',
     component: () => import('@/views/function-unit/AiStudioWorkspace.vue'),
-    meta: { titleKey: 'ai.studio.entryButton', requiresAuth: true, requiredRoles: ['SYS_ADMIN', 'TECH_LEAD', 'TEAM_LEAD', 'DEVELOPER', 'FU_VIEWER'] }
+    meta: { titleKey: 'ai.studio.entryButton', requiresAuth: true, requiredRoles: ['SYS_ADMIN', 'TECH_LEAD', 'TEAM_LEAD', 'DEVELOPER'] }
   },
   {
     path: '/',
@@ -165,8 +165,10 @@ router.beforeEach(async (to, _from, next) => {
       // flows. Flows are workspace-scoped now, and the bridge signs a Viewer session for
       // members without a capability role, so entering read-only shows their own team's
       // flows only and AP itself refuses every write.
+      // AI Studio joins too (FU_VIEWER was removed); its copilot is read-only when the thread
+      // state reports canModify=false.
       const workspaceFallbackApplies =
-        to.name === 'FunctionUnits' || to.name === 'FunctionUnitEdit'
+        to.name === 'FunctionUnits' || to.name === 'FunctionUnitEdit' || to.name === 'AiStudioWorkspace'
         || to.name === 'Automation' || to.name === 'AutomationFlowEdit'
       const canView = workspaceFallbackApplies && (await resolveWorkspaceAccess())
       if (!canView) {

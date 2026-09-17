@@ -68,6 +68,15 @@
         </p>
       </div>
 
+      <el-alert
+        v-if="isStageReadOnly"
+        type="info"
+        :closable="false"
+        show-icon
+        :title="t('functionUnit.readOnlyHint')"
+        class="stage__readonly"
+      />
+
       <div class="stage__body">
         <!-- Validation：收尾门禁。英雄区是放大的 BPMN 结束事件（粗环），与入口弹窗流程链同语言 -->
         <div
@@ -215,20 +224,34 @@
           :function-unit-id="fuId"
           @open-automation="openAutomationPage"
         />
-        <component
-          :is="PHASE_COMPONENT[currentPhase]"
+        <!-- 只读成员：与 FunctionUnitEdit 同一套捕获阶段拦截，查看类控件（data-read-only-allowed）仍可用 -->
+        <div
           v-else
-          :key="`${currentPhase}-${stageReloadKey}`"
-          :function-unit-id="fuId"
-        />
+          class="stage__designer"
+          @click.capture="onReadOnlyInteraction"
+          @pointerdown.capture="onReadOnlyInteraction"
+          @keydown.capture="onReadOnlyInteraction"
+          @dragstart.capture="onReadOnlyInteraction"
+          @drop.capture="onReadOnlyInteraction"
+        >
+          <component
+            :is="PHASE_COMPONENT[currentPhase]"
+            :key="`${currentPhase}-${stageReloadKey}`"
+            :function-unit-id="fuId"
+          />
+        </div>
       </div>
 
       <div class="stage__footer">
-        <el-button @click="saveDraftNow">
+        <el-button
+          :disabled="isStageReadOnly"
+          @click="saveDraftNow"
+        >
           {{ t('ai.studio.workspace.saveDraft') }}
         </el-button>
         <el-button
           type="primary"
+          :disabled="isStageReadOnly"
           @click="confirmPhase"
         >
           {{
@@ -272,8 +295,18 @@
           v-for="(msg, i) in copilotMessages"
           :key="i"
           class="copilot-msg"
-          :class="[`copilot-msg--${msg.role}`, { 'copilot-msg--error': msg.isError }]"
+          :class="[`copilot-msg--${msg.role}`, {
+            'copilot-msg--error': msg.isError,
+            'copilot-msg--teammate': msg.role === 'user' && msg.mine === false
+          }]"
         >
+          <!-- 共享线程：队友的提问标出是谁问的；自己的提问不标 -->
+          <div
+            v-if="msg.role === 'user' && msg.mine === false"
+            class="copilot-msg__who copilot-msg__who--teammate"
+          >
+            {{ t('ai.studio.workspace.askedBy', { name: msg.authorName || '?' }) }}
+          </div>
           <div
             v-if="msg.role === 'assistant'"
             class="copilot-msg__who"
@@ -288,12 +321,24 @@
                  用户消息与错误气泡保持纯文本 -->
             <MarkdownRenderer
               v-if="msg.role === 'assistant' && !msg.isError"
-              :content="msg.text"
+              :content="msg.text || (msg.proposal ? t('ai.studio.workspace.proposalReady') : '')"
             />
             <template v-else>
               {{ msg.text }}
             </template>
           </div>
+          <!-- DW 重启打断的提案：用原消息一键重新发起 -->
+          <el-button
+            v-if="msg.retryMessage"
+            size="small"
+            plain
+            class="copilot-msg__retry"
+            :disabled="copilotReplying || !canModifyThread"
+            @click="retryInterruptedProposal(msg)"
+          >
+            <el-icon><MagicStick /></el-icon>
+            {{ t('ai.studio.workspace.proposalRetry') }}
+          </el-button>
           <!-- 结构化改动提案卡：摘要 + Apply -->
           <div
             v-if="msg.proposal"
@@ -303,33 +348,161 @@
               {{ t('ai.studio.workspace.proposalTitle') }}
             </div>
             <div
-              v-for="item in proposalItems(msg.proposal.data)"
-              :key="item.label"
-              class="proposal-card__item"
+              v-for="group in proposalGroups(msg.proposal)"
+              :key="group.slice"
+              class="proposal-card__group"
             >
-              <span class="proposal-card__plus">+</span>
-              {{ item.label }}<template v-if="item.count !== null">
-                × {{ item.count }}
-              </template>
+              <div class="proposal-card__group-head">
+                <span class="proposal-card__plus">+</span>
+                <span class="proposal-card__group-label">{{ group.label }}</span>
+                <span
+                  v-if="group.newCount"
+                  class="proposal-card__badge proposal-card__badge--new"
+                >{{ t('ai.studio.workspace.proposalNew', { n: group.newCount }) }}</span>
+                <span
+                  v-if="group.updateCount"
+                  class="proposal-card__badge proposal-card__badge--update"
+                >{{ t('ai.studio.workspace.proposalUpdate', { n: group.updateCount }) }}</span>
+                <span
+                  v-if="group.bindCount"
+                  class="proposal-card__badge proposal-card__badge--new"
+                >{{ t('ai.studio.workspace.proposalBind', { n: group.bindCount }) }}</span>
+                <span
+                  v-if="group.rebindCount"
+                  class="proposal-card__badge proposal-card__badge--update"
+                >{{ t('ai.studio.workspace.proposalRebind', { n: group.rebindCount }) }}</span>
+                <span
+                  v-if="group.replaceCount && group.replacesExisting === null"
+                  class="proposal-card__badge"
+                >× {{ group.replaceCount }}</span>
+                <span
+                  v-if="group.replacesExisting !== null && group.replacesExisting > 0"
+                  class="proposal-card__badge proposal-card__badge--replace"
+                >{{ t('ai.studio.workspace.proposalReplacesExisting', { n: group.replacesExisting }) }}</span>
+                <span
+                  v-else-if="group.replacesExisting === 0"
+                  class="proposal-card__badge proposal-card__badge--new"
+                >{{ t('ai.studio.workspace.proposalNew', { n: group.replaceCount }) }}</span>
+              </div>
+              <ul
+                v-if="group.items.length"
+                class="proposal-card__list"
+              >
+                <li
+                  v-for="item in visibleItems(msg, group)"
+                  :key="`${item.action}-${item.name}`"
+                  class="proposal-card__list-item"
+                >
+                  <span
+                    class="proposal-card__dot"
+                    :class="`proposal-card__dot--${item.action.toLowerCase()}`"
+                  />
+                  {{ item.name }}
+                </li>
+                <li
+                  v-if="group.items.length > PROPOSAL_CARD_COLLAPSE_AT"
+                  class="proposal-card__more"
+                >
+                  <el-button
+                    link
+                    size="small"
+                    @click="toggleExpanded(msg, group.slice)"
+                  >
+                    {{ isExpanded(msg, group.slice)
+                      ? t('ai.studio.workspace.proposalCollapse')
+                      : t('ai.studio.workspace.proposalExpandAll', { n: group.items.length }) }}
+                  </el-button>
+                </li>
+              </ul>
+            </div>
+            <div
+              v-if="msg.proposal.preview?.issues?.length"
+              class="proposal-card__issues"
+            >
+              <div class="proposal-card__issues-title">
+                {{ t('ai.studio.workspace.proposalIssues') }}
+              </div>
+              <div
+                v-for="(issue, issueIdx) in msg.proposal.preview.issues"
+                :key="issueIdx"
+                class="proposal-card__issue"
+                :class="`proposal-card__issue--${issue.severity.toLowerCase()}`"
+              >
+                <el-icon :size="13">
+                  <CircleClose v-if="issue.severity === 'ERROR'" />
+                  <Warning v-else />
+                </el-icon>
+                <span><code v-if="issue.fieldPath">{{ issue.fieldPath }}</code>{{ issue.fieldPath ? ': ' : '' }}{{ issue.description }}</span>
+              </div>
+            </div>
+            <div
+              v-else-if="msg.proposal.preview && !msg.proposal.preview.checked"
+              class="proposal-card__unchecked"
+            >
+              {{ t('ai.studio.workspace.proposalUnchecked') }}
+            </div>
+            <div
+              v-if="!msg.proposal.applied && hasBlockingIssues(msg.proposal.preview)"
+              class="proposal-card__blocked"
+            >
+              {{ t('ai.studio.workspace.proposalBlocked') }}
             </div>
             <div class="proposal-card__footer">
-              <span
-                v-if="msg.proposal.applied"
-                class="proposal-card__applied"
-              >
-                <el-icon><Check /></el-icon>
-                {{ t('ai.studio.workspace.proposalApplied') }}
-              </span>
-              <el-button
-                v-else
-                type="primary"
-                size="small"
-                :loading="applyingProposalMsg === msg"
-                @click="applyProposal(msg)"
-              >
-                {{ t('ai.studio.workspace.proposalApply') }}
-              </el-button>
+              <template v-if="msg.proposal.applied">
+                <span class="proposal-card__applied">
+                  <el-icon><Check /></el-icon>
+                  {{ msg.proposal.appliedByName && !msg.proposal.appliedByMe
+                    ? t('ai.studio.workspace.appliedBy', { name: msg.proposal.appliedByName })
+                    : t('ai.studio.workspace.proposalApplied') }}
+                </span>
+                <el-button
+                  v-if="msg.proposal.undo"
+                  link
+                  size="small"
+                  class="proposal-card__undo"
+                  :loading="undoingProposalMsg === msg"
+                  @click="undoProposal(msg)"
+                >
+                  {{ t('ai.studio.workspace.undoButton') }}
+                </el-button>
+              </template>
+              <template v-else>
+                <el-button
+                  v-if="hasBlockingIssues(msg.proposal.preview)"
+                  size="small"
+                  plain
+                  class="proposal-card__fix"
+                  :disabled="copilotReplying || !canModifyThread"
+                  :title="t('ai.studio.workspace.proposalFixHint')"
+                  @click="requestAiFix(msg)"
+                >
+                  <el-icon><MagicStick /></el-icon>
+                  {{ t('ai.studio.workspace.proposalFixWithAi') }}
+                </el-button>
+                <el-button
+                  type="primary"
+                  size="small"
+                  :disabled="hasBlockingIssues(msg.proposal.preview) || !canModifyThread"
+                  :loading="applyingProposalMsg === msg"
+                  @click="applyProposal(msg)"
+                >
+                  {{ t('ai.studio.workspace.proposalApply') }}
+                </el-button>
+              </template>
             </div>
+          </div>
+        </div>
+        <!-- 队友正在本阶段生成提案（推送得知，结束即消失） -->
+        <div
+          v-for="job in teammateJobsInPhase"
+          :key="job.jobId"
+          class="copilot-msg copilot-msg--assistant copilot-msg--teammate-job"
+        >
+          <div class="copilot-msg__working">
+            <el-icon class="is-loading">
+              <Loading />
+            </el-icon>
+            {{ t('ai.studio.workspace.teammateGenerating', { name: job.authorName }) }}
           </div>
         </div>
         <div
@@ -373,7 +546,7 @@
           size="small"
           type="primary"
           plain
-          :disabled="!copilotInput.trim()"
+          :disabled="!copilotInput.trim() || !canModifyThread"
           @click="sendCopilotMessage(true)"
         >
           <el-icon><MagicStick /></el-icon>
@@ -383,18 +556,24 @@
           {{ copilotReplying ? t('ai.studio.workspace.stopHint') : t('ai.studio.workspace.proposeHint') }}
         </span>
       </div>
+      <div
+        v-if="sharedThreads && !canModifyThread"
+        class="copilot__readonly"
+      >
+        {{ t('ai.studio.workspace.threadReadOnly') }}
+      </div>
       <div class="copilot__input">
         <el-input
           v-model="copilotInput"
           :placeholder="t('ai.studio.workspace.copilotPlaceholder')"
-          :disabled="copilotReplying"
+          :disabled="copilotReplying || !canModifyThread"
           @keydown.enter.prevent="sendCopilotMessage()"
         >
           <template #suffix>
             <el-button
               text
               circle
-              :disabled="!copilotInput.trim() || copilotReplying"
+              :disabled="!copilotInput.trim() || copilotReplying || !canModifyThread"
               :aria-label="t('ai.studio.workspace.copilotSend')"
               @click="sendCopilotMessage()"
             >
@@ -432,11 +611,23 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, markRaw, ty
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, MagicStick, Check, Close, Promotion, UploadFilled, Loading } from '@element-plus/icons-vue'
+import { ArrowLeft, MagicStick, Check, Close, Promotion, UploadFilled, Loading, CircleClose, Warning } from '@element-plus/icons-vue'
 import { useFunctionUnitStore } from '@/stores/functionUnit'
 import { functionUnitApi, type ValidationResult } from '@/api/functionUnit'
 import { aiGenerationApi, type AiStudioProposalJob } from '@/api/aiGeneration'
+import { aiStudioThreadApi, type AiStudioThreadEventData, type AiStudioThreadEventType } from '@/api/aiStudioThread'
+import {
+  mergeThread, pushLocal, toImportMessages, isStudioStageReadOnly, toHistoryEntries,
+  appendServerMessages, latestServerId, SERVER_MESSAGES_PER_PHASE
+} from '@/utils/aiStudioSharedThread'
+import { useAiStudioThreadEvents } from '@/composables/useAiStudioThreadEvents'
+import { blockReadOnlyDesignerInteraction } from '@/utils/readOnlyDesignerInteraction'
 import { pickHttpErrorBodyMessage } from '@/utils/httpErrorMessage'
+import {
+  groupPreview, fallbackGroups, hasBlockingIssues, buildFixRequest, needsReplaceConfirm, formatUndoNote,
+  PROPOSAL_CARD_COLLAPSE_AT,
+  type ProposalCardGroup, type ProposalCardItem
+} from '@/utils/aiStudioProposalCard'
 import ProcessDesigner from '@/components/designer/ProcessDesigner.vue'
 import TableDesigner from '@/components/designer/TableDesigner.vue'
 import FormDesigner from '@/components/designer/FormDesigner.vue'
@@ -545,13 +736,16 @@ function goToPhase(phase: AiStudioPhase) {
 }
 
 function saveDraftNow() {
+  if (isStageReadOnly.value) return
   persistDraft()
   ElMessage.success(t('ai.studio.workspace.draftSaved'))
 }
 
 function confirmPhase() {
+  if (isStageReadOnly.value) return
   if (!completedPhases.value.includes(currentPhase.value)) {
     completedPhases.value.push(currentPhase.value)
+    void saveSharedCompletedPhases()
   }
   const idx = currentPhaseIndex.value
   if (idx < AI_STUDIO_PHASES.length - 1) {
@@ -611,8 +805,249 @@ async function runValidation() {
 
 // ---- AI Copilot：与 AI Generate 同源的模型链路（集团 gateway + AMToken 透传） ----
 // 会话按阶段隔离：每个阶段一个独立线程，切阶段即切线程，互不可见也互不进对方历史。
-// 线程随草稿持久化到 localStorage（契约见 utils/aiStudioDraft.ts），Continue AI draft 时恢复。
+// 线程按功能单元共享（同组成员看到同一份讨论）：对话消息由后端落库，这里只读取并与本地临时消息合并
+// （规则见 utils/aiStudioSharedThread.ts）；后端不可用时整体回落到 localStorage（契约见 utils/aiStudioDraft.ts）。
 type CopilotMessage = AiStudioChatMessage
+
+/** 后端共享线程可用；false 时一切照 localStorage 时代的行为走 */
+const sharedThreads = ref(false)
+/** 当前用户能否在共享线程里发言（MODIFY）；只读成员只能看 */
+const canModifyThread = ref(true)
+/** 中间设计区与阶段页脚是否只读（线程 canModify，线程不可用时回落到功能单元 canModify） */
+const isStageReadOnly = computed(() =>
+  isStudioStageReadOnly(sharedThreads.value, canModifyThread.value, store.current)
+)
+
+function onReadOnlyInteraction(event: Event): void {
+  if (!isStageReadOnly.value) return
+  blockReadOnlyDesignerInteraction(event)
+}
+/** 每阶段的刷新序号：乱序返回的旧结果直接丢弃 */
+const threadRefreshSeq: Partial<Record<AiStudioPhase, number>> = {}
+
+/**
+ * 用后端线程刷新某阶段。成功返回 true；失败只 warn 并返回 false（本地线程原样保留）。
+ * @param drop 已被后端版本取代的本地消息
+ */
+async function refreshThread(phase: AiStudioPhase, drop: CopilotMessage[] = []): Promise<boolean> {
+  if (!sharedThreads.value) return false
+  drop.forEach(m => replacedLocal.add(m))
+  const seq = (threadRefreshSeq[phase] ?? 0) + 1
+  threadRefreshSeq[phase] = seq
+  try {
+    const { data } = await aiStudioThreadApi.getMessages(fuId.value, phase)
+    if (threadRefreshSeq[phase] !== seq) return true
+    const atBottom = isCopilotScrolledToBottom()
+    const thread = copilotThread(phase)
+    copilotThreads.value[phase] = mergeThread(thread, data ?? [], thread.filter(m => replacedLocal.has(m)))
+    if (phase === currentPhase.value && atBottom) scrollCopilotToBottom()
+    return true
+  } catch (e) {
+    console.warn(`[ai-studio] shared thread refresh failed for ${phase}`, e)
+    return false
+  }
+}
+
+/**
+ * 已被后端版本取代的本地乐观消息。任何一次刷新（不论是谁触发的）合并时都把它们去掉——
+ * 否则推送触发的刷新先到、带 drop 的那次因乱序被丢弃时，同一句提问会显示两遍。
+ */
+const replacedLocal = new WeakSet<CopilotMessage>()
+
+/**
+ * 增量刷新：只拉本地最新 serverId 之后的消息。本地还没有后端消息，或一次拉满上限（中间可能有缺口）时退回整段。
+ */
+async function refreshThreadIncremental(phase: AiStudioPhase, drop: CopilotMessage[] = []): Promise<boolean> {
+  if (!sharedThreads.value) return false
+  const afterId = latestServerId(copilotThread(phase))
+  if (!afterId) return refreshThread(phase, drop)
+  drop.forEach(m => replacedLocal.add(m))
+  const seq = (threadRefreshSeq[phase] ?? 0) + 1
+  threadRefreshSeq[phase] = seq
+  try {
+    const { data } = await aiStudioThreadApi.getMessages(fuId.value, phase, afterId)
+    if (threadRefreshSeq[phase] !== seq) return true
+    if ((data?.length ?? 0) >= SERVER_MESSAGES_PER_PHASE) return refreshThread(phase)
+    const atBottom = isCopilotScrolledToBottom()
+    const thread = copilotThread(phase)
+    copilotThreads.value[phase] = appendServerMessages(thread, data ?? [], thread.filter(m => replacedLocal.has(m)))
+    if (phase === currentPhase.value && atBottom) scrollCopilotToBottom()
+    return true
+  } catch (e) {
+    console.warn(`[ai-studio] incremental thread refresh failed for ${phase}`, e)
+    return false
+  }
+}
+
+/** 按 id 刷新一条已在本地的消息（已应用状态变化）；本地没有的不追加，免得打乱顺序。 */
+async function refreshThreadMessage(phase: AiStudioPhase, messageId: number): Promise<boolean> {
+  const thread = copilotThreads.value[phase]
+  if (!thread?.some(m => m.serverId === messageId)) return true
+  try {
+    const { data } = await aiStudioThreadApi.getMessage(fuId.value, messageId)
+    appendServerMessages(copilotThread(phase), [data])
+    return true
+  } catch (e) {
+    console.warn(`[ai-studio] message ${messageId} refresh failed`, e)
+    return false
+  }
+}
+
+async function saveSharedCompletedPhases() {
+  if (!sharedThreads.value || !canModifyThread.value) return
+  try {
+    await aiStudioThreadApi.saveCompletedPhases(fuId.value, completedPhases.value)
+  } catch (e) {
+    console.warn('[ai-studio] failed to save shared progress', e)
+  }
+}
+
+/**
+ * 进入工作台时接上共享线程：拿共享进度，首次把本地旧线程/进度迁上去（只填后端还空着的阶段）。
+ * 任何失败都回落到纯本地模式。
+ */
+async function initSharedThreads(localCompleted: AiStudioPhase[]): Promise<AiStudioPhase[] | null> {
+  try {
+    const { data: state } = await aiStudioThreadApi.getState(fuId.value)
+    sharedThreads.value = true
+    canModifyThread.value = state.canModify
+    const counts = state.messageCounts ?? {}
+    const toImport: Record<string, ReturnType<typeof toImportMessages>> = {}
+    for (const phase of AI_STUDIO_PHASES) {
+      if (counts[phase]) continue
+      const msgs = toImportMessages(copilotThreads.value[phase])
+      if (msgs.length) toImport[phase] = msgs
+    }
+    const seedProgress = state.completedPhases === null && localCompleted.length > 0
+    if (state.canModify && (Object.keys(toImport).length || seedProgress)) {
+      try {
+        // 导入后本地旧消息先留着：后端该阶段有内容时合并会自动隐藏它们；
+        // 若此处删掉，而之后共享接口又失败（如限流），没刷新过的阶段在本地回落时会是空的
+        await aiStudioThreadApi.importThreads(fuId.value, toImport, localCompleted)
+        return seedProgress ? localCompleted : (state.completedPhases as AiStudioPhase[] | null)
+      } catch (e) {
+        console.warn('[ai-studio] importing local threads failed; they stay local for now', e)
+      }
+    }
+    return (state.completedPhases as AiStudioPhase[] | null)
+  } catch (e) {
+    sharedThreads.value = false
+    console.warn('[ai-studio] shared threads unavailable, using browser storage only', e)
+    return null
+  }
+}
+
+/**
+ * 窗口重新拿到焦点：补拉一次当前阶段与共享进度。推送在线时这是冗余的兜底，
+ * 推送断开期间（重连中）靠它保底。
+ */
+async function onWorkspaceFocus() {
+  if (!sharedThreads.value || document.visibilityState === 'hidden') return
+  void refreshThreadIncremental(currentPhase.value)
+  await refreshSharedProgress()
+}
+
+/**
+ * 首次接共享线程失败（限流、DW 重启中）时，稍后再试，别让整个会话都停在纯本地模式。
+ */
+const SHARED_RETRY_DELAYS_MS = [10000, 20000, 40000, 60000, 120000]
+let sharedRetryTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleSharedRetry(attempt = 0) {
+  if (attempt >= SHARED_RETRY_DELAYS_MS.length || proposalPollingCancelled) return
+  sharedRetryTimer = setTimeout(async () => {
+    sharedRetryTimer = null
+    if (proposalPollingCancelled || sharedThreads.value) return
+    const shared = await initSharedThreads(completedPhases.value)
+    if (!sharedThreads.value) {
+      scheduleSharedRetry(attempt + 1)
+      return
+    }
+    if (shared) completedPhases.value = shared
+    void refreshThread(currentPhase.value)
+    threadEvents.start()
+  }, SHARED_RETRY_DELAYS_MS[attempt])
+}
+
+async function refreshSharedProgress(): Promise<boolean> {
+  try {
+    const { data: state } = await aiStudioThreadApi.getState(fuId.value)
+    canModifyThread.value = state.canModify
+    if (state.completedPhases) completedPhases.value = state.completedPhases as AiStudioPhase[]
+    return true
+  } catch (e) {
+    console.warn('[ai-studio] shared progress refresh failed', e)
+    return false
+  }
+}
+
+/**
+ * 推送触发的刷新失败（最常见是网关限流）时隔几秒再试，别让这次变化一直不显示到下次推送/获得焦点。
+ */
+const PUSH_REFRESH_RETRY_MS = [3000, 10000]
+function refreshWithRetry(refresh: () => Promise<boolean>, attempt = 0) {
+  void refresh().then(ok => {
+    if (ok || attempt >= PUSH_REFRESH_RETRY_MS.length || proposalPollingCancelled) return
+    setTimeout(() => refreshWithRetry(refresh, attempt + 1), PUSH_REFRESH_RETRY_MS[attempt])
+  })
+}
+
+// ---- 实时推送：线程变化、进度变化、谁正在生成提案 ----
+
+/** 队友正在跑的提案作业（jobId → 阶段与作者）；自己的作业不在这里，由打字指示表示 */
+const teammateJobs = ref<Record<string, { phase: string; authorName: string }>>({})
+const teammateJobsInPhase = computed(() =>
+  Object.entries(teammateJobs.value)
+    .filter(([, j]) => j.phase === currentPhase.value)
+    .map(([jobId, j]) => ({ jobId, authorName: j.authorName })))
+
+function onThreadEvent(type: AiStudioThreadEventType, data: AiStudioThreadEventData) {
+  switch (type) {
+    case 'READY':
+      // 新连上（含断线重连）：补拉断线期间的变化；进行中的作业随后逐条重放
+      teammateJobs.value = {}
+      refreshWithRetry(() => refreshThreadIncremental(currentPhase.value))
+      refreshWithRetry(refreshSharedProgress)
+      break
+    case 'MESSAGE_ADDED':
+      // 其他阶段不必现在拉：切过去时会整段刷新
+      if (data.phase !== currentPhase.value) break
+      if (data.messageId) refreshWithRetry(() => refreshThreadIncremental(currentPhase.value))
+      else refreshWithRetry(() => refreshThread(currentPhase.value))
+      break
+    case 'MESSAGE_UPDATED':
+      if (data.phase === currentPhase.value && data.messageId) {
+        const phase = currentPhase.value
+        const id = data.messageId
+        refreshWithRetry(() => refreshThreadMessage(phase, id))
+      }
+      break
+    case 'PROGRESS_UPDATED':
+      refreshWithRetry(refreshSharedProgress)
+      break
+    case 'PROPOSAL_STARTED':
+      if (!data.jobId || !data.phase) break
+      if (!data.mine) {
+        teammateJobs.value = {
+          ...teammateJobs.value,
+          [data.jobId]: { phase: data.phase, authorName: data.authorName ?? '?' }
+        }
+      } else if (!copilotReplying.value && data.jobId !== copilotProposalJobId.value
+        && (AI_STUDIO_PHASES as readonly string[]).includes(data.phase)) {
+        // 自己在别的浏览器/标签页发起的作业：这里也接着等结果
+        void resumePendingProposal({ jobId: data.jobId, phase: data.phase as AiStudioPhase, submittedAt: Date.now() })
+      }
+      break
+    case 'PROPOSAL_FINISHED':
+      if (data.jobId && teammateJobs.value[data.jobId]) {
+        const rest = { ...teammateJobs.value }
+        delete rest[data.jobId]
+        teammateJobs.value = rest
+      }
+      break
+  }
+}
+
+const threadEvents = useAiStudioThreadEvents(() => fuId.value, onThreadEvent)
 
 const copilotOpen = ref(true)
 const copilotInput = ref('')
@@ -642,7 +1077,8 @@ function copilotThread(phase: AiStudioPhase): CopilotMessage[] {
         phase: aiStudioPhaseLabel(t, phase),
         desc: phaseDesc(phase)
       }),
-      isPhaseNote: true
+      isPhaseNote: true,
+      anchorId: 0
     }]
     copilotThreads.value[phase] = thread
   }
@@ -652,6 +1088,11 @@ function copilotThread(phase: AiStudioPhase): CopilotMessage[] {
 // 纯读取：线程的按需创建在 watch(currentPhase) / onMounted / 发送时做，不在 computed 里带副作用
 const copilotMessages = computed(() => copilotThreads.value[currentPhase.value] ?? [])
 
+function isCopilotScrolledToBottom(): boolean {
+  const el = copilotBodyRef.value
+  return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 40
+}
+
 function scrollCopilotToBottom() {
   void nextTick(() => {
     copilotBodyRef.value?.scrollTo({ top: copilotBodyRef.value.scrollHeight })
@@ -660,17 +1101,7 @@ function scrollCopilotToBottom() {
 
 /** 送给模型的历史窗口：本阶段线程里最近 10 条真实对话（引导语与错误气泡不算）。 */
 function copilotHistory(phase: AiStudioPhase) {
-  return copilotThread(phase)
-    .filter(m => !m.isError && !m.isPhaseNote)
-    .slice(-10)
-    .map(m => ({
-      role: m.role === 'user' ? ('USER' as const) : ('ASSISTANT' as const),
-      content: m.text,
-      // 上一轮的结构化提案一起带回去：否则"把刚才那个模板改一下"模型只看得到自己说过"Here is the proposed change"
-      ...(m.role === 'assistant' && m.proposal
-        ? { proposal: m.proposal.data, proposalScope: m.proposal.scope }
-        : {})
-    }))
+  return toHistoryEntries(copilotThread(phase), t('ai.studio.workspace.proposalReady'))
 }
 
 /** 结构化提案仅在有 generatedData 切片的阶段可用（与后端 PROPOSAL_SCOPE_BY_PHASE 一致）。 */
@@ -680,15 +1111,20 @@ const PROPOSAL_PHASES: readonly AiStudioPhase[] = [
 ]
 const proposalSupported = computed(() => PROPOSAL_PHASES.includes(currentPhase.value))
 
-async function sendCopilotMessage(propose = false) {
-  const text = copilotInput.value.trim()
-  if (!text || copilotReplying.value) return
+/**
+ * @param overrideText 由按钮（如"让 AI 修正"）发起时用它当消息，输入框里的草稿原样保留
+ */
+async function sendCopilotMessage(propose = false, overrideText?: string) {
+  const text = (overrideText ?? copilotInput.value).trim()
+  if (!text || copilotReplying.value || !canModifyThread.value) return
   // 锁定发送时所在的阶段线程：等待期间切走，回复也落回这个线程
   const phase = currentPhase.value
   const thread = copilotThread(phase)
   const history = copilotHistory(phase)
-  thread.push({ role: 'user', text })
-  copilotInput.value = ''
+  // 共享模式下这条提问先作为本地乐观消息显示，后端落库后被后端版本取代；
+  // 本地模式下它就是线程的正式内容（日后首次迁移时上传）
+  const asked = pushLocal(thread, { role: 'user', text, localOnly: sharedThreads.value || undefined })
+  if (!overrideText) copilotInput.value = ''
   beginCopilotWait(phase)
   try {
     if (propose) {
@@ -701,8 +1137,10 @@ async function sendCopilotMessage(propose = false) {
       // 先落盘再轮询：刷新/离开页面后 onMounted 能凭这条记录接着等同一个作业
       saveAiStudioPendingProposal(fuId.value, { jobId: job.jobId, phase, submittedAt: Date.now() })
       copilotProposalJobId.value = job.jobId
+      // 提交成功时后端已把提问写进共享线程
+      void refreshThreadIncremental(phase, [asked])
       const done = await pollProposal(job.jobId)
-      if (done) pushProposalResult(thread, done)
+      if (done) await landProposalResult(phase, done)
     } else {
       const res = await aiGenerationApi.studioChat({
         functionUnitId: fuId.value,
@@ -710,7 +1148,12 @@ async function sendCopilotMessage(propose = false) {
         message: text,
         history
       }, copilotAbort.signal)
-      thread.push({ role: 'assistant', text: res.data.reply ?? '' })
+      // 回复与提问都已由后端落库：刷新即可；刷新失败时退回本地追加，别让回复丢了
+      if (!(await refreshThreadIncremental(phase, [asked]))) {
+        pushLocal(copilotThread(phase), {
+          role: 'assistant', text: res.data.reply ?? '', localOnly: sharedThreads.value || undefined
+        })
+      }
     }
   } catch (e: unknown) {
     // 用户主动 Stop：请求被中止，不算错误，线程里已由 stopCopilot 记过一笔
@@ -753,7 +1196,7 @@ async function stopCopilot() {
     } else {
       copilotAbort.abort()
     }
-    copilotThread(phase).push({ role: 'assistant', text: t('ai.studio.workspace.stopped'), isPhaseNote: true })
+    pushLocal(copilotThread(phase), { role: 'assistant', text: t('ai.studio.workspace.stopped'), isPhaseNote: true })
   } finally {
     copilotStopping.value = false
     endCopilotWait(phase)
@@ -788,7 +1231,7 @@ function errorReason(e: unknown): string {
 
 function pushCopilotError(thread: CopilotMessage[], e: unknown) {
   const reason = errorReason(e)
-  thread.push({
+  pushLocal(thread, {
     role: 'assistant',
     text: t('ai.studio.workspace.copilotError', { reason }),
     isError: true
@@ -798,8 +1241,11 @@ function pushCopilotError(thread: CopilotMessage[], e: unknown) {
 // ---- 提案作业轮询 ----
 
 const PROPOSAL_POLL_INTERVAL_MS = 4000
-/** 连续这么多次轮询失败（网络/5xx）才放弃；单次抖动不该让用户丢掉一轮 7 分钟的生成 */
-const PROPOSAL_POLL_MAX_CONSECUTIVE_FAILURES = 8
+/**
+ * 连续这么多次轮询失败（网络/5xx）才放弃：约 3 分钟，足够熬过一次 DW 重启——
+ * 作业快照落库后，重启完再问到的是终态或"已中断"，而不是白等。
+ */
+const PROPOSAL_POLL_MAX_CONSECUTIVE_FAILURES = 45
 
 /** 组件卸载后置 true：轮询循环看到就退出，不再往已销毁的线程里推消息 */
 let proposalPollingCancelled = false
@@ -807,6 +1253,10 @@ let proposalPollingCancelled = false
 const cancelledJobIds = new Set<string>()
 onBeforeUnmount(() => {
   proposalPollingCancelled = true
+  threadEvents.stop()
+  if (sharedRetryTimer) clearTimeout(sharedRetryTimer)
+  window.removeEventListener('focus', onWorkspaceFocus)
+  document.removeEventListener('visibilitychange', onWorkspaceFocus)
 })
 
 function sleep(ms: number) {
@@ -845,44 +1295,75 @@ async function pollProposal(jobId: string): Promise<AiStudioProposalJob | null> 
   }
 }
 
+/**
+ * 作业终态落到线程：共享模式下成功的结果已由后端写进线程，刷新即可（刷新失败才本地追加）；
+ * 失败/取消只是发起人自己的临时说明。
+ */
+async function landProposalResult(phase: AiStudioPhase, job: AiStudioProposalJob) {
+  if (job.status === 'SUCCEEDED' && await refreshThreadIncremental(phase)) {
+    if (!job.proposal) {
+      pushLocal(copilotThread(phase), { role: 'assistant', text: t('ai.studio.workspace.proposalNone'), isPhaseNote: true })
+    }
+    return
+  }
+  pushProposalResult(copilotThread(phase), job)
+}
+
 function pushProposalResult(thread: CopilotMessage[], job: AiStudioProposalJob) {
   if (job.status === 'CANCELLED') {
     // 服务端侧取消（被新请求替换 / 别的标签页点了 Stop）：记一笔说明，不当错误
-    thread.push({ role: 'assistant', text: t('ai.studio.workspace.stopped'), isPhaseNote: true })
+    pushLocal(thread, { role: 'assistant', text: t('ai.studio.workspace.stopped'), isPhaseNote: true })
     return
   }
   if (job.status === 'FAILED') {
-    thread.push({
+    // DW 重启打断的作业：模型调用无法续跑（凭证不落库），给一键重新发起
+    const interrupted = job.errorCode === PROPOSAL_INTERRUPTED
+    pushLocal(thread, {
       role: 'assistant',
-      text: t('ai.studio.workspace.copilotError', { reason: job.errorMessage ?? job.errorCode ?? 'FAILED' }),
-      isError: true
+      text: interrupted
+        ? t('ai.studio.workspace.proposalInterrupted')
+        : t('ai.studio.workspace.copilotError', { reason: job.errorMessage ?? job.errorCode ?? 'FAILED' }),
+      isError: true,
+      retryMessage: interrupted && job.message ? job.message : undefined
     })
     return
   }
-  const { reply, proposal, proposalScope } = job
+  const { reply, proposal, proposalScope, preview } = job
   const message: CopilotMessage = {
     role: 'assistant',
-    text: reply ?? (proposal ? t('ai.studio.workspace.proposalReady') : '')
+    text: reply ?? (proposal ? t('ai.studio.workspace.proposalReady') : ''),
+    localOnly: sharedThreads.value || undefined
   }
   if (proposal && proposalScope) {
-    message.proposal = { scope: proposalScope, data: proposal }
+    message.proposal = { scope: proposalScope, data: proposal, preview: preview ?? null }
   } else {
     // 要求了提案但模型没产出数据块：显式说明，别让用户以为按钮坏了
     message.text = `${message.text}\n\n${t('ai.studio.workspace.proposalNone')}`.trim()
   }
-  thread.push(message)
+  pushLocal(thread, message)
+}
+
+const PROPOSAL_INTERRUPTED = 'AI_STUDIO_PROPOSAL_INTERRUPTED'
+
+/** 用原消息重新发起被中断的提案（按钮只出现一次，点过即收起） */
+function retryInterruptedProposal(msg: CopilotMessage) {
+  const text = msg.retryMessage
+  if (!text || copilotReplying.value) return
+  msg.retryMessage = undefined
+  void sendCopilotMessage(true, text)
 }
 
 /** 进入页面时发现上次的提案作业还没等完：接着轮询同一个 jobId，结果落回发起时的阶段线程。 */
 async function resumePendingProposal(pending: AiStudioPendingProposal) {
-  const thread = copilotThread(pending.phase)
+  if (copilotReplying.value) return
   copilotProposalJobId.value = pending.jobId
+  saveAiStudioPendingProposal(fuId.value, pending)
   beginCopilotWait(pending.phase)
   try {
     const done = await pollProposal(pending.jobId)
-    if (done) pushProposalResult(thread, done)
+    if (done) await landProposalResult(pending.phase, done)
   } catch (e: unknown) {
-    pushCopilotError(thread, e)
+    pushCopilotError(copilotThread(pending.phase), e)
   } finally {
     endCopilotWait(pending.phase)
   }
@@ -890,43 +1371,71 @@ async function resumePendingProposal(pending: AiStudioPendingProposal) {
 
 // ---- 提案卡片：摘要与 Apply ----
 
-/** 提案内容摘要：各切片的条数（+ 流程是否更新），供卡片按 "+ 条目" 列出。 */
-function proposalItems(data: Record<string, unknown>): { label: string; count: number | null }[] {
-  const items: { label: string; count: number | null }[] = []
-  const push = (key: string, label: string) => {
-    const n = Array.isArray(data[key]) ? (data[key] as unknown[]).length : 0
-    if (n > 0) items.push({ label, count: n })
-  }
-  push('tableDefinitions', t('functionUnit.tables'))
-  push('tableRelations', t('ai.studio.workspace.proposalItemRelations'))
-  push('formDefinitions', t('functionUnit.forms'))
-  push('actionDefinitions', t('functionUnit.actionDesign'))
-  push('decisionDefinitions', t('functionUnit.decisions'))
-  // 邮件三阶段：与设计器 Tab 同名，upsert 语义（数量 = 提案里点名的新增/修改项）
-  push('emailTemplates', t('emailTemplate.title'))
-  push('emailConnections', t('connection.title'))
-  push('emailMonitorRules', t('emailMonitor.title'))
-  push('mainTableViews', t('functionUnit.viewDesign'))
-  push('serviceTaskBindings', t('functionUnit.automation'))
-  if (data.processDefinition) items.push({ label: t('functionUnit.process'), count: null })
-  return items
+/** 提案卡分组：有后端预览按 新增/更新/替换 分组列条目，老提案退化为按切片条数。 */
+function proposalGroups(proposal: NonNullable<CopilotMessage['proposal']>): ProposalCardGroup[] {
+  return proposal.preview
+    ? groupPreview(proposal.preview, (k: string) => t(k))
+    : fallbackGroups(proposal.data, (k: string) => t(k))
+}
+
+/** 展开状态按 消息 + 切片 记，不进持久化 */
+const expandedSlices = ref(new WeakMap<CopilotMessage, Set<string>>())
+function isExpanded(msg: CopilotMessage, slice: string): boolean {
+  return expandedSlices.value.get(msg)?.has(slice) ?? false
+}
+function toggleExpanded(msg: CopilotMessage, slice: string) {
+  const set = expandedSlices.value.get(msg) ?? new Set<string>()
+  if (set.has(slice)) set.delete(slice); else set.add(slice)
+  // ref 会把 WeakMap 包成响应式集合，set 即触发重算（Set 本身不是响应式的，所以要重新 set）
+  expandedSlices.value.set(msg, set)
+}
+function visibleItems(msg: CopilotMessage, group: ProposalCardGroup): ProposalCardItem[] {
+  return group.items.length > PROPOSAL_CARD_COLLAPSE_AT && !isExpanded(msg, group.slice)
+    ? group.items.slice(0, PROPOSAL_CARD_COLLAPSE_AT)
+    : group.items
 }
 
 /** 正在 Apply 的那条消息（同一时刻只允许一个 Apply 在跑） */
 const applyingProposalMsg = ref<CopilotMessage | null>(null)
+/** 正在撤销的那条消息 */
+const undoingProposalMsg = ref<CopilotMessage | null>(null)
 /** 改这个值会重挂载中间区设计器——Apply 写库后画布/列表必须重新加载 */
 const stageReloadKey = ref(0)
 
+/** 不可撤销的 Apply（清空重建类 scope，由后端预览的 undoable 标出）：先让用户确认一次。 */
+async function confirmReplacingApply(msg: CopilotMessage): Promise<boolean> {
+  const proposal = msg.proposal
+  if (!proposal || !needsReplaceConfirm(proposal.preview)) return true
+  const replaces = (proposal.preview?.replacements ?? []).reduce((n, r) => n + r.replacesExisting, 0)
+  try {
+    await ElMessageBox.confirm(
+      t('ai.studio.workspace.applyReplaceConfirmMsg', { n: replaces }),
+      t('ai.studio.workspace.applyReplaceConfirmTitle'),
+      { type: 'warning', confirmButtonText: t('ai.studio.workspace.proposalApply') }
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function applyProposal(msg: CopilotMessage) {
   if (!msg.proposal || msg.proposal.applied || applyingProposalMsg.value) return
+  if (!(await confirmReplacingApply(msg))) return
   applyingProposalMsg.value = msg
   try {
-    await aiGenerationApi.studioApplyProposal({
+    const res = await aiGenerationApi.studioApplyProposal({
       functionUnitId: fuId.value,
       scope: msg.proposal.scope,
       generatedData: msg.proposal.data
     })
     msg.proposal.applied = true
+    msg.proposal.appliedByMe = true
+    msg.proposal.localIssues = undefined
+    msg.proposal.undo = res.data?.undoToken
+      ? { token: res.data.undoToken, until: res.data.undoableUntil }
+      : null
+    void syncApplied(msg, true)
     ElMessage.success(t('ai.studio.workspace.proposalApplySuccess'))
     await store.refreshAll(fuId.value)
     stageReloadKey.value++
@@ -935,8 +1444,78 @@ async function applyProposal(msg: CopilotMessage) {
     // 拼成 "message (path: reason; …)"，与全局拦截器的提示同一份文案，只是这里多了阶段语境
     const reason = pickHttpErrorBodyMessage(e?.response?.data) ?? e?.message ?? String(e)
     ElMessage.error({ message: t('ai.studio.workspace.proposalApplyFailed', { reason }), duration: 8000, showClose: true })
+    // 失败原因写回卡片：预校验漏掉的问题（Apply 前状态又变了）也留在卡上，Apply 自动禁用并给出修正入口，
+    // 与预校验的呈现走同一条路径，而不是只活在一条会被关掉的 toast 里
+    const details: { errorType?: string; fieldPath?: string; description?: string }[] =
+      Array.isArray(e?.response?.data?.error?.details?.errors) ? e.response.data.error.details.errors : []
+    if (details.length && msg.proposal) {
+      const issues = details.map(d => ({
+        severity: 'ERROR' as const,
+        errorType: d.errorType ?? 'APPLY_FAILED',
+        fieldPath: d.fieldPath ?? '',
+        description: d.description ?? reason
+      }))
+      msg.proposal.preview = msg.proposal.preview
+        ? { ...msg.proposal.preview, issues }
+        : { items: [], replacements: [], issues, checked: true, undoable: false }
+      msg.proposal.localIssues = true
+    }
   } finally {
     applyingProposalMsg.value = null
+  }
+}
+
+/** 把卡片的已应用状态同步到共享线程（队友据此看到"已应用 · by 某某"）；失败只 warn */
+async function syncApplied(msg: CopilotMessage, applied: boolean) {
+  if (!sharedThreads.value || !msg.serverId) return
+  try {
+    await aiStudioThreadApi.markApplied(fuId.value, msg.serverId, applied)
+  } catch (e) {
+    console.warn('[ai-studio] failed to share the applied state', e)
+  }
+}
+
+/** 把卡片上的问题交给 AI 修正：发起一轮新的提案，历史里带着上一轮提案，模型据此定向改。 */
+function requestAiFix(msg: CopilotMessage) {
+  const request = buildFixRequest(msg.proposal?.preview, (k: string) => t(k))
+  if (!request) return
+  void sendCopilotMessage(true, request)
+}
+
+/** 撤销一次 Apply：后端逐项逆操作，回来后重载设计器并把卡片还原成可 Apply。 */
+async function undoProposal(msg: CopilotMessage) {
+  const token = msg.proposal?.undo?.token
+  if (!token || undoingProposalMsg.value) return
+  undoingProposalMsg.value = msg
+  try {
+    const res = await aiGenerationApi.studioUndoApply(token)
+    const notes = res.data?.undoNotes ?? []
+    if (msg.proposal) {
+      msg.proposal.applied = false
+      msg.proposal.appliedByMe = false
+      msg.proposal.appliedByName = null
+      msg.proposal.undo = null
+    }
+    void syncApplied(msg, false)
+    ElMessage.success({
+      message: notes.length
+        ? `${t('ai.studio.workspace.undoDone')} ${notes.slice(0, 3).map(n => formatUndoNote(n, (k, p) => t(k, p))).join('; ')}`
+        : t('ai.studio.workspace.undoDone'),
+      duration: 6000,
+      showClose: true
+    })
+    await store.refreshAll(fuId.value)
+    stageReloadKey.value++
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { error?: { code?: string } } }; message?: string } | null
+    // 令牌过期是常态（窗口过了、后端重启过）：提示后把按钮撤掉，别让用户反复点
+    const expired = err?.response?.data?.error?.code === 'AI_STUDIO_UNDO_EXPIRED'
+    if (expired && msg.proposal) msg.proposal.undo = null
+    ElMessage.error(expired
+      ? t('ai.studio.workspace.undoExpired')
+      : t('ai.studio.workspace.undoFailed', { reason: pickHttpErrorBodyMessage(err?.response?.data) ?? err?.message ?? String(e) }))
+  } finally {
+    undoingProposalMsg.value = null
   }
 }
 
@@ -949,6 +1528,7 @@ watch(currentPhase, (phase) => {
   // 确保该阶段的 Copilot 线程存在（新线程带引导语开场）并滚到底
   copilotThread(phase)
   scrollCopilotToBottom()
+  void refreshThread(phase)
 })
 
 onMounted(async () => {
@@ -959,10 +1539,13 @@ onMounted(async () => {
   // 先恢复聊天线程再定阶段：阶段 watch 里的 copilotThread() 看到已恢复的线程
   // 就不会重建（引导语只属于真正的首次进入）
   copilotThreads.value = loadAiStudioChatThreads(fuId.value)
+  // 共享进度优先于本地草稿里的进度；当前停在哪个阶段仍是每个人自己的
+  const sharedCompleted = await initSharedThreads(draft?.completedPhases ?? [])
+  const draftCompleted = () => sharedCompleted ?? draft?.completedPhases ?? []
 
   if (draft && mode === 'continue') {
     currentPhase.value = draft.phase
-    completedPhases.value = draft.completedPhases ?? []
+    completedPhases.value = draftCompleted()
   } else if (draft && mode === 'new' && (draft.completedPhases?.length || draft.phase !== AI_STUDIO_PHASES[0])) {
     // 入口承诺"未经确认不覆盖"：重新开始会丢弃草稿进度与聊天记录，必须先问
     try {
@@ -976,24 +1559,49 @@ onMounted(async () => {
       clearAiStudioChatThreads(fuId.value)
       clearAiStudioPendingProposal(fuId.value)
       copilotThreads.value = {}
+      // 共享模式：进度按功能单元共享，一并重置；队友的讨论不删，只清本浏览器的缓存
+      void saveSharedCompletedPhases()
     } catch {
       currentPhase.value = draft.phase
-      completedPhases.value = draft.completedPhases ?? []
+      completedPhases.value = draftCompleted()
     }
   } else if (draft && mode !== 'new') {
     // 直接进入（刷新/收藏链接）：默认续用草稿进度
     currentPhase.value = draft.phase
-    completedPhases.value = draft.completedPhases ?? []
+    completedPhases.value = draftCompleted()
+  } else if (sharedCompleted) {
+    // 本浏览器没来过，但队友已经推进过：沿用共享进度；选了"继续"就停在第一个未确认的阶段
+    completedPhases.value = sharedCompleted
+    if (mode === 'continue') {
+      currentPhase.value = AI_STUDIO_PHASES.find(p => !sharedCompleted.includes(p)) ?? AI_STUDIO_PHASES[0]
+    }
   }
 
   persistDraft()
   copilotThread(currentPhase.value)
+  void refreshThread(currentPhase.value)
+  if (sharedThreads.value) threadEvents.start()
+  else scheduleSharedRetry()
+  window.addEventListener('focus', onWorkspaceFocus)
+  document.addEventListener('visibilitychange', onWorkspaceFocus)
   if (currentPhase.value === 'FORM_DESIGN') void store.fetchTables(fuId.value)
   if (currentPhase.value === 'VALIDATION') void runValidation()
 
   // 上次离开时还有提案作业在跑（异步、服务端继续算）：接着等，不重新发起
   const pending = loadAiStudioPendingProposal(fuId.value)
-  if (pending) void resumePendingProposal(pending)
+  if (pending) {
+    void resumePendingProposal(pending)
+  } else if (sharedThreads.value) {
+    // 本浏览器没有待办：看看自己是不是在别的浏览器里发起过、还没跑完的作业
+    try {
+      const { data: active } = await aiGenerationApi.studioActiveProposal(fuId.value)
+      if (active && (AI_STUDIO_PHASES as readonly string[]).includes(active.phase)) {
+        void resumePendingProposal({ jobId: active.jobId, phase: active.phase as AiStudioPhase, submittedAt: Date.now() })
+      }
+    } catch (e) {
+      console.warn('[ai-studio] active proposal lookup failed', e)
+    }
+  }
 })
 </script>
 
@@ -1206,6 +1814,15 @@ onMounted(async () => {
     min-height: 0;
     overflow: auto;
     padding: 16px 20px;
+  }
+
+  &__readonly {
+    margin: 12px 20px 0;
+    width: auto;
+  }
+
+  &__designer {
+    height: 100%;
   }
 
   &__footer {
@@ -1442,6 +2059,13 @@ onMounted(async () => {
     color: var(--el-text-color-secondary);
   }
 
+  &__readonly {
+    padding: 8px 14px 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--el-color-warning-dark-2);
+  }
+
   &__input {
     padding: 12px 14px;
   }
@@ -1484,9 +2108,141 @@ onMounted(async () => {
     font-weight: 700;
   }
 
+  &__group + &__group {
+    margin-top: 6px;
+  }
+
+  &__group-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--el-text-color-regular);
+  }
+
+  &__group-label {
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+  }
+
+  &__badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 18px;
+    background-color: var(--el-fill-color);
+    color: var(--el-text-color-secondary);
+
+    &--new {
+      background-color: var(--el-color-success-light-9);
+      color: var(--el-color-success);
+    }
+
+    &--update {
+      background-color: var(--el-color-primary-light-9);
+      color: var(--el-color-primary);
+    }
+
+    &--replace {
+      background-color: var(--el-color-warning-light-9);
+      color: var(--el-color-warning-dark-2);
+      font-weight: 600;
+    }
+  }
+
+  &__list {
+    list-style: none;
+    margin: 2px 0 0;
+    padding: 0 0 0 18px;
+  }
+
+  &__list-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--el-text-color-regular);
+    font-family: var(--el-font-family-mono, ui-monospace, monospace);
+  }
+
+  &__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--el-color-info);
+
+    &--new, &--bind { background-color: var(--el-color-success); }
+    &--update, &--rebind { background-color: var(--el-color-primary); }
+    &--replace { background-color: var(--el-color-warning); }
+  }
+
+  &__more {
+    padding-left: 12px;
+  }
+
+  &__issues {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--el-border-color);
+  }
+
+  &__issues-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--el-text-color-secondary);
+    margin-bottom: 4px;
+  }
+
+  &__issue {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 12.5px;
+    line-height: 1.6;
+
+    code {
+      font-size: 11.5px;
+      padding: 0 3px;
+      border-radius: 3px;
+      background-color: var(--el-fill-color);
+    }
+
+    &--error { color: var(--el-color-danger); }
+    &--warning { color: var(--el-color-warning-dark-2); }
+
+    .el-icon { margin-top: 3px; flex: none; }
+  }
+
+  &__unchecked {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+  }
+
+  &__undo {
+    margin-left: 10px;
+  }
+
+  &__fix {
+    margin-right: 8px;
+  }
+
+  &__blocked {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--el-color-danger);
+  }
+
   &__footer {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     margin-top: 10px;
   }
 
@@ -1551,11 +2307,35 @@ onMounted(async () => {
     }
   }
 
+  // 队友的提问靠左、换底色，与自己的提问区分开
+  &--user#{&}--teammate {
+    align-self: flex-start;
+
+    .copilot-msg__bubble {
+      background-color: var(--el-color-info-light-9);
+    }
+  }
+
+  &__who--teammate {
+    font-weight: 500;
+  }
+
   &__working {
     margin-top: 6px;
     font-size: 12px;
     line-height: 1.5;
     color: var(--el-text-color-secondary);
+  }
+
+  &--teammate-job &__working {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 0;
+  }
+
+  &__retry {
+    margin-top: 6px;
   }
 
   &__bubble--typing {

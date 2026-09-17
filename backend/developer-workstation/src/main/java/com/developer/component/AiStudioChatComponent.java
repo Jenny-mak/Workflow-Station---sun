@@ -1,6 +1,7 @@
 package com.developer.component;
 
 import com.developer.dto.AiStudioApplyRequest;
+import com.developer.dto.AiStudioApplyResponse;
 import com.developer.dto.AiStudioChatRequest;
 import com.developer.dto.AiStudioChatResponse;
 import com.developer.dto.AiStudioProposalJobResponse;
@@ -29,6 +30,9 @@ public interface AiStudioChatComponent {
     /** 查询提案作业；仅作业发起者可见，其他情况一律 {@code AI_STUDIO_PROPOSAL_NOT_FOUND}。 */
     AiStudioProposalJobResponse getProposal(String jobId, String userId);
 
+    /** 本人在该功能单元上正在跑的作业；没有返回 null。 */
+    AiStudioProposalJobResponse getActiveProposal(Long functionUnitId, String userId);
+
     /** 取消进行中的提案作业（幂等；不存在/非本人 → AI_STUDIO_PROPOSAL_NOT_FOUND）。 */
     AiStudioProposalJobResponse cancelProposal(String jobId, String userId);
 
@@ -36,5 +40,9 @@ public interface AiStudioChatComponent {
      * 应用改动提案：工作区访问校验 → 抢 AI 锁（与 AI Generate 同一把，冲突 409）→
      * 归一化 + 平台校验（失败 422，不落库）→ 按 scope 写入 → 释放锁。
      */
-    void applyProposal(AiStudioApplyRequest request, String userId);
+    /** 应用提案；可撤销的 scope 会在响应里带回撤销令牌。 */
+    AiStudioApplyResponse applyProposal(AiStudioApplyRequest request, String userId);
+
+    /** 撤销一次 Apply（逐项逆操作）；令牌过期/非本人 → AI_STUDIO_UNDO_EXPIRED。 */
+    AiStudioApplyResponse undoApply(String undoToken, String userId);
 }

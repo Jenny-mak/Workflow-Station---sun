@@ -28,9 +28,17 @@ public class AiStudioProposalJobResponse {
 
     private String phase;
 
+    /** 发起时的原始消息（"重新发起"用） */
+    private String message;
+
+    /** 发起人展示名（队友看到"某某正在生成提案"） */
+    private String authorName;
+
     private Status status;
 
     private Instant submittedAt;
+
+    private Instant startedAt;
 
     private Instant finishedAt;
 
@@ -40,6 +48,9 @@ public class AiStudioProposalJobResponse {
     private Map<String, Object> proposal;
 
     private String proposalScope;
+
+    /** 提案卡预览，见 {@link AiStudioProposalPreview} */
+    private AiStudioProposalPreview preview;
 
     /** 以下两项仅 FAILED 时有值。 */
     private String errorCode;

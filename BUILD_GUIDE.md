@@ -870,6 +870,8 @@ Kafka(K8S) ───────────────────────
 |--------|------|--------|
 | `DEVELOPER_DEPLOY_REQUIRE_ADMIN_AUTH` | 一键部署到 admin 前是否要求当前 HTTP 请求已带 `Authorization: Bearer …`（生产经 Kong 转发用户 JWT 时应为 `true`） | `true`（默认） |
 | `ADMIN_CENTER_URL` | 与 `application.yml` 中 `admin-center.url` 一致；部署目标非默认时需覆盖 | `http://admin-center:8080` |
+| `DW_RATE_LIMIT_ENABLED` | 进程内 Bucket4j 限流开关（`rate-limit.enabled`）。限流由 Kong 统一负责，仅在 DW 不经 Kong 暴露时打开 | `false`（默认） |
+| `DW_RATE_LIMIT_PER_MINUTE` | 开启时每个 remoteAddr 每分钟请求数（`rate-limit.requests-per-minute`），每实例独立计数 | `600`（默认） |
 
 说明：`DEVELOPER_DEPLOY_REQUIRE_ADMIN_AUTH=false` 仅建议用于本地自动化或测试；生产环境应依赖 **Kong + JWT**，由前端/网关携带令牌，服务端再转发至 admin-center 的 `function-units-import` 接口。
 

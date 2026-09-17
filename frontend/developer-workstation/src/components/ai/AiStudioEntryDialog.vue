@@ -143,12 +143,16 @@ import {
   loadAiStudioDraft,
   type AiStudioDraft,
   type AiStudioEntryMode,
-  type AiStudioOpenPayload
+  type AiStudioOpenPayload,
+  type AiStudioPhase
 } from '@/utils/aiStudioDraft'
+import { aiStudioThreadApi } from '@/api/aiStudioThread'
 
 const props = defineProps<{
   visible: boolean
   functionUnitId: number
+  /** 本浏览器没有草稿、但团队已在 AI Studio 里推进过时，用它当草稿名 */
+  functionUnitName?: string
 }>()
 
 const emit = defineEmits<{
@@ -169,9 +173,35 @@ watch(
     if (!visible) return
     draft.value = loadAiStudioDraft(props.functionUnitId)
     if (!draft.value) mode.value = 'new'
+    void loadSharedDraft()
   },
   { immediate: true }
 )
+
+/**
+ * AI Studio 进度按功能单元共享：本浏览器没有草稿，但队友已经确认过阶段或在线程里讨论过时，
+ * 同样点亮"继续"，停在第一个未确认的阶段。后端不可用时维持本地判断。
+ */
+async function loadSharedDraft() {
+  if (draft.value) return
+  const functionUnitId = props.functionUnitId
+  try {
+    const { data } = await aiStudioThreadApi.getState(functionUnitId)
+    if (draft.value || !props.visible || functionUnitId !== props.functionUnitId) return
+    const completed = (data.completedPhases ?? [])
+      .filter((p): p is AiStudioPhase => (AI_STUDIO_PHASES as readonly string[]).includes(p))
+    const hasMessages = Object.values(data.messageCounts ?? {}).some(n => n > 0)
+    if (!completed.length && !hasMessages) return
+    draft.value = {
+      name: props.functionUnitName || `#${functionUnitId}`,
+      phase: AI_STUDIO_PHASES.find(p => !completed.includes(p)) ?? AI_STUDIO_PHASES[AI_STUDIO_PHASES.length - 1],
+      completedPhases: completed,
+      updatedAt: data.updatedAt ?? undefined
+    }
+  } catch (e) {
+    console.warn('[ai-studio] shared progress unavailable for the entry dialog', e)
+  }
+}
 
 function handleConfirm() {
   emit('open', {

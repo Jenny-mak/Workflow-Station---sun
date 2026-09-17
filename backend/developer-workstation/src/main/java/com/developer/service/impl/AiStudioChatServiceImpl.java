@@ -45,7 +45,11 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
             You are advisory only: you cannot modify the design yourself; the user applies every \
             change in the designer on the left. Give concrete, actionable guidance in the \
             platform's own terms for the current phase. Answer in the same language as the \
-            user's latest message. Be concise; prefer short lists over long prose.""";
+            user's latest message. Be concise; prefer short lists over long prose.
+            The user message may start with the function unit's current design for this phase. \
+            When it does, ground every answer in those real names (tables, fields, forms, nodes, \
+            flow keys) and never invent ones that are not listed. The listing is name-level only: \
+            say so instead of guessing when a detail it does not carry is needed.""";
 
     /** 阶段 key → system prompt 里的一句话职责描述（模型上下文用，非 UI 文案）。 */
     private static final Map<String, String> PHASE_BLURBS = Map.ofEntries(
@@ -118,12 +122,15 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
     private final AiGatewayClient aiGatewayClient;
     private final AiResponseParser aiResponseParser;
     private final AiGenerationService aiGenerationService;
+    private final AiStudioContextDigest contextDigest;
 
     public AiStudioChatServiceImpl(AiGatewayClient aiGatewayClient, AiResponseParser aiResponseParser,
-                                   AiGenerationService aiGenerationService) {
+                                   AiGenerationService aiGenerationService,
+                                   AiStudioContextDigest contextDigest) {
         this.aiGatewayClient = aiGatewayClient;
         this.aiResponseParser = aiResponseParser;
         this.aiGenerationService = aiGenerationService;
+        this.contextDigest = contextDigest;
     }
 
     @Override
@@ -221,7 +228,9 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
         }
 
         String system = SYSTEM_PROMPT.formatted(request.getPhase(), blurb);
-        String user = buildTranscript(request);
+        String digest = advisoryDigest(request);
+        String user = digest.isEmpty() ? buildTranscript(request)
+                : "## Current design (" + request.getPhase() + ")\n" + digest + "\n\n" + buildTranscript(request);
 
         Map<String, Object> httpResult = aiGatewayClient.chat(
                 new AiPromptBuilder.RenderedPrompt(system, user), amToken);
@@ -233,10 +242,27 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
             throw new AiGenerationException("AI_GATEWAY_EMPTY_RESPONSE",
                     "AI gateway returned no usable reply text");
         }
-        log.info("AI Studio copilot replied: functionUnitId={}, phase={}, historySize={}, replyChars={}",
+        log.info("AI Studio copilot replied: functionUnitId={}, phase={}, historySize={}, digestChars={}, replyChars={}",
                 request.getFunctionUnitId(), request.getPhase(),
-                request.getHistory() == null ? 0 : request.getHistory().size(), text.length());
+                request.getHistory() == null ? 0 : request.getHistory().size(), digest.length(), text.length());
         return text.trim();
+    }
+
+    /**
+     * 顾问轮的"当前设计现状"：按阶段裁剪的名称级摘要（见 {@link AiStudioContextDigest}）。
+     *
+     * <p>失败一律降级为无上下文对话——顾问式回答没有上下文只是泛泛而谈，为此让整轮对话失败
+     * 是更差的结果。超大功能单元的 {@code AI_CONTEXT_TOO_LARGE} 也走这条路。</p>
+     */
+    private String advisoryDigest(AiStudioChatRequest request) {
+        try {
+            return contextDigest.digest(request.getPhase(),
+                    aiGenerationService.serializeFunctionUnitContext(request.getFunctionUnitId()));
+        } catch (RuntimeException e) {
+            log.warn("AI Studio copilot chat continues without the design digest (functionUnitId={}): {}",
+                    request.getFunctionUnitId(), e.getMessage());
+            return "";
+        }
     }
 
     /**

@@ -147,7 +147,9 @@ $migrations = @(
     "00-schema/78-dw-icons-name-not-unique.sql",
     "00-schema/80-rename-email-connection-credential.sql",
     "00-schema/81-bi-data-view-assignment.sql",
-    "00-schema/82-bi-dashboard-registry-superset-roles.sql"
+    "00-schema/82-bi-dashboard-registry-superset-roles.sql",
+    "00-schema/83-dw-ai-studio-shared-thread.sql",
+    "00-schema/84-dw-ai-studio-proposal-jobs.sql"
 )
 foreach ($m in $migrations) {
     $path = Join-Path $ScriptDir $m

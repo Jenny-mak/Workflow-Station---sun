@@ -17,7 +17,15 @@ public interface AiStudioChatService {
      * 单轮结果。普通对话只有 reply；propose 轮次可能附带改动提案
      * （{@code AiGeneratedData} 同构的 Map）与其写入范围。
      */
-    record StudioChatResult(String reply, java.util.Map<String, Object> proposal, String proposalScope) {
+    record StudioChatResult(String reply, java.util.Map<String, Object> proposal, String proposalScope,
+                            com.developer.dto.AiStudioProposalPreview preview) {
+        public StudioChatResult(String reply, java.util.Map<String, Object> proposal, String proposalScope) {
+            this(reply, proposal, proposalScope, null);
+        }
+
+        public StudioChatResult withPreview(com.developer.dto.AiStudioProposalPreview p) {
+            return new StudioChatResult(reply, proposal, proposalScope, p);
+        }
     }
 
     /**

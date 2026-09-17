@@ -21,4 +21,7 @@ public class AiStudioChatResponse {
 
     /** 提案对应的写入范围（TABLES / FORMS / ACTIONS / DECISIONS / PROCESS），Apply 时原样带回 */
     private String proposalScope;
+
+    /** 提案卡预览（新增/更新/替换 + 预校验问题）；仅提案轮且预览成功时非空 */
+    private AiStudioProposalPreview preview;
 }

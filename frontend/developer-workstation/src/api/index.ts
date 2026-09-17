@@ -5,6 +5,13 @@ import i18n from '@/i18n'
 import { pickHttpErrorBodyMessage } from '@/utils/httpErrorMessage'
 import { redirectToUnifiedLogin, setSsoReturnPath } from '@/utils/sso'
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    /** 调用方自己处理失败（如有本地回落），不弹全局错误提示；401 刷新与登录跳转照常 */
+    silentError?: boolean
+  }
+}
+
 let isRefreshing = false
 let failedQueue: Array<{ resolve: Function; reject: Function }> = []
 
@@ -73,6 +80,10 @@ api.interceptors.response.use(
       } finally {
         isRefreshing = false
       }
+    }
+
+    if (originalRequest?.silentError) {
+      return Promise.reject(error)
     }
 
     if (response) {

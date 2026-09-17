@@ -12,7 +12,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.developer.security.LegacyVirtualGroupRoleLookup;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DeveloperSsoExchangeService {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final LegacyVirtualGroupRoleLookup legacyVirtualGroupRoleLookup;
     private final UserRoleService userRoleService;
     private final JwtProperties jwtProperties;
 
@@ -48,7 +48,7 @@ public class DeveloperSsoExchangeService {
                 .distinct()
                 .collect(Collectors.toList());
         if (roles.isEmpty()) {
-            roles = getRolesForUserLegacy(user.getId());
+            roles = legacyVirtualGroupRoleLookup.findRoleCodes(user.getId());
         }
         List<String> permissions = getPermissionsForRoles(roles);
         List<LoginResponse.RoleWithSource> rolesWithSources = buildRolesWithSources(effectiveRoles);
@@ -157,22 +157,6 @@ public class DeveloperSsoExchangeService {
             keyBytes = Arrays.copyOf(keyBytes, 32);
         }
         return Keys.hmacShaKeyFor(keyBytes);
-    }
-
-    private List<String> getRolesForUserLegacy(String userId) {
-        try {
-            String sql = "SELECT DISTINCT r.code FROM sys_virtual_group_members vgm " +
-                    "JOIN sys_virtual_group_roles vgr ON vgm.group_id = vgr.virtual_group_id " +
-                    "JOIN sys_roles r ON vgr.role_id = r.id " +
-                    "WHERE vgm.user_id = ?";
-            List<String> roles = jdbcTemplate.queryForList(sql, String.class, userId);
-            if (roles.isEmpty()) {
-                return List.of("DEVELOPER");
-            }
-            return roles;
-        } catch (Exception e) {
-            return List.of("DEVELOPER");
-        }
     }
 
     private List<String> getPermissionsForRoles(List<String> roles) {

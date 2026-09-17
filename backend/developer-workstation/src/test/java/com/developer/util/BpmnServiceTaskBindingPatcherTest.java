@@ -146,6 +146,43 @@ class BpmnServiceTaskBindingPatcherTest {
     }
 
     @Test
+    void unbindClearsFlowKeyServiceTypeAndLegacyKeysButLeavesOtherTasks() {
+        String xml = bpmn(" xmlns:custom=\"http://workflow.platform/schema/custom\"", """
+                <bpmn:serviceTask id="svc_sync">
+                  <bpmn:extensionElements><custom:properties>
+                    <custom:property name="serviceType" value="ap"/>
+                    <custom:property name="ap:flowKey" value="k"/>
+                    <custom:property name="ap:inputMapping" value="{}"/>
+                    <custom:property name="note" value="keep me"/>
+                  </custom:properties></bpmn:extensionElements>
+                </bpmn:serviceTask>
+                <bpmn:serviceTask id="svc_other">
+                  <bpmn:extensionElements><custom:properties>
+                    <custom:property name="ap:flowKey" value="other"/>
+                  </custom:properties></bpmn:extensionElements>
+                </bpmn:serviceTask>
+                """);
+
+        String patched = BpmnServiceTaskBindingPatcher.unbind(xml, List.of("svc_sync"));
+
+        BpmnServiceTaskScanner.ServiceTaskInfo unbound = task(patched, "svc_sync");
+        assertNull(unbound.flowKey());
+        assertNull(unbound.serviceType());
+        assertNull(unbound.legacyFlowId());
+        assertFalse(patched.contains("ap:inputMapping"));
+        assertTrue(patched.contains("name=\"note\" value=\"keep me\""), "unrelated properties survive");
+        assertEquals("other", task(patched, "svc_other").flowKey(), "other tasks are untouched");
+    }
+
+    @Test
+    void unbindIsANoopForUnknownTasksOrEmptyInput() {
+        String xml = bpmn("", "<bpmn:serviceTask id=\"svc_sync\"/>");
+        assertSame(xml, BpmnServiceTaskBindingPatcher.unbind(xml, List.of()));
+        // 未知 id 不抛：撤销时任务可能已被别的改动删掉
+        assertEquals(List.of(), BpmnServiceTaskFlowRefs.extract(BpmnServiceTaskBindingPatcher.unbind(xml, List.of("ghost"))));
+    }
+
+    @Test
     void base64StoredProcessIsScannable() {
         String xml = bpmn("", "<bpmn:serviceTask id=\"svc_sync\"/>");
         String patched = BpmnServiceTaskBindingPatcher.bind(xml, Map.of("svc_sync", "k"));

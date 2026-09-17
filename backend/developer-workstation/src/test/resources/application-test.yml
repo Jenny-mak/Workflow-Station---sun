@@ -104,6 +104,7 @@ security:
   jwt-secret-key: testSecretKeyForDeveloperWorkstationModule123456
 
 rate-limit:
+  enabled: false
   requests-per-minute: 1000
 
 developer:

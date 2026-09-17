@@ -2,6 +2,7 @@ package com.developer.controller;
 
 import com.developer.component.AiStudioChatComponent;
 import com.developer.dto.AiStudioApplyRequest;
+import com.developer.dto.AiStudioApplyResponse;
 import com.developer.dto.AiStudioChatRequest;
 import com.developer.dto.AiStudioChatResponse;
 import com.developer.dto.AiStudioProposalJobResponse;
@@ -14,6 +15,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -79,6 +82,16 @@ public class AiStudioChatController extends BaseController {
         return handleRequest(() -> aiStudioChatComponent.startProposal(request, userId, amToken));
     }
 
+    @GetMapping("/proposals/active")
+    @Operation(summary = "The caller's running proposal job on a function unit (null when none)")
+    @RequireDeveloperPermission("FUNCTION_UNIT_VIEW")
+    public ResponseEntity<ApiResponse<AiStudioProposalJobResponse>> getActiveProposal(
+            @org.springframework.web.bind.annotation.RequestParam Long functionUnitId) {
+        String userId = SecurityContextUtils.getCurrentUserId()
+                .orElseThrow(() -> new RuntimeException(i18nService.getMessage("auth.unauthenticated_user")));
+        return handleRequest(() -> aiStudioChatComponent.getActiveProposal(functionUnitId, userId));
+    }
+
     @GetMapping("/proposals/{jobId}")
     @Operation(summary = "Poll a change-proposal job")
     @RequireDeveloperPermission("FUNCTION_UNIT_VIEW")
@@ -100,13 +113,19 @@ public class AiStudioChatController extends BaseController {
     @PostMapping("/apply")
     @Operation(summary = "Apply a copilot change proposal to the function unit design")
     @RequireDeveloperPermission("FUNCTION_UNIT_UPDATE")
-    public ResponseEntity<ApiResponse<Void>> applyProposal(@Valid @RequestBody AiStudioApplyRequest request) {
+    public ResponseEntity<ApiResponse<AiStudioApplyResponse>> applyProposal(@Valid @RequestBody AiStudioApplyRequest request) {
         String userId = SecurityContextUtils.getCurrentUserId()
                 .orElseThrow(() -> new RuntimeException(i18nService.getMessage("auth.unauthenticated_user")));
-        return handleRequest(() -> {
-            aiStudioChatComponent.applyProposal(request, userId);
-            return null;
-        });
+        return handleRequest(() -> aiStudioChatComponent.applyProposal(request, userId));
+    }
+
+    @PostMapping("/undo")
+    @Operation(summary = "Undo a previously applied proposal (token from the apply response)")
+    @RequireDeveloperPermission("FUNCTION_UNIT_UPDATE")
+    public ResponseEntity<ApiResponse<AiStudioApplyResponse>> undoApply(@RequestBody Map<String, String> body) {
+        String userId = SecurityContextUtils.getCurrentUserId()
+                .orElseThrow(() -> new RuntimeException(i18nService.getMessage("auth.unauthenticated_user")));
+        return handleRequest(() -> aiStudioChatComponent.undoApply(body.get("undoToken"), userId));
     }
 
     /**

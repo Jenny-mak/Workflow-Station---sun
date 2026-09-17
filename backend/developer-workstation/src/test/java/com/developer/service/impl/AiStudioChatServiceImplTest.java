@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -44,7 +45,9 @@ class AiStudioChatServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new AiStudioChatServiceImpl(aiGatewayClient, aiResponseParser, aiGenerationService);
+        // 摘要器是纯函数，用真实实现：顺带覆盖"设计现状进 prompt"这条链路
+        service = new AiStudioChatServiceImpl(aiGatewayClient, aiResponseParser, aiGenerationService,
+                new AiStudioContextDigest());
     }
 
     private AiStudioChatRequest request(String phase, String message,
@@ -75,7 +78,9 @@ class AiStudioChatServiceImplTest {
 
         assertEquals("add a foreign key", result.reply());
         assertNull(result.proposal());
-        verifyNoInteractions(aiGenerationService);
+        // 顾问轮读上下文只为拼"当前设计现状"摘要；GENERATION 管线（callAiModel）依旧不碰
+        verify(aiGenerationService).serializeFunctionUnitContext(1L);
+        verify(aiGenerationService, never()).callAiModel(any(), any(), any(), any(), any(), any(), any(), any(), any());
 
         ArgumentCaptor<AiPromptBuilder.RenderedPrompt> prompt =
                 ArgumentCaptor.forClass(AiPromptBuilder.RenderedPrompt.class);
@@ -88,10 +93,58 @@ class AiStudioChatServiceImplTest {
     }
 
     @Test
+    void advisoryChatGroundsThePromptInTheCurrentDesignWithoutDumpingBpmn() {
+        com.developer.dto.FunctionUnitContextDTO context = new com.developer.dto.FunctionUnitContextDTO();
+        context.setTableDefinitions(List.of(Map.of(
+                "tableName", "orders", "tableType", "MAIN", "tableDisplayName", "Orders",
+                "fieldDefinitions", List.of(
+                        Map.of("fieldName", "id", "dataType", "BIGINT", "isPrimaryKey", true),
+                        Map.of("fieldName", "order_no", "dataType", "VARCHAR")),
+                "foreignKeys", List.of())));
+        context.setProcessDefinition(Map.of("bpmnXml",
+                "<bpmn:definitions xmlns:bpmn=\"x\"><bpmn:process id=\"p\"><bpmn:userTask id=\"u1\" name=\"Review\"/></bpmn:process></bpmn:definitions>"));
+        when(aiGenerationService.serializeFunctionUnitContext(1L)).thenReturn(context);
+        when(aiGatewayClient.chat(any(), any())).thenReturn(Map.of("ok", true));
+        when(aiResponseParser.parse(any())).thenReturn(Map.of("reply", "looks fine"));
+
+        service.chat(request("TABLE_DESIGN", "what is wrong with my tables?", null), "t");
+
+        ArgumentCaptor<AiPromptBuilder.RenderedPrompt> prompt = ArgumentCaptor.forClass(AiPromptBuilder.RenderedPrompt.class);
+        verify(aiGatewayClient).chat(prompt.capture(), any());
+        String user = prompt.getValue().user();
+        assertTrue(user.startsWith("## Current design (TABLE_DESIGN)"));
+        assertTrue(user.contains("orders (MAIN) \"Orders\": id:BIGINT [PK], order_no:VARCHAR"));
+        // 表设计阶段不带流程；任何阶段都不把 BPMN 原文塞进对话
+        assertFalse(user.contains("<bpmn:"));
+        assertFalse(user.contains("Process nodes"));
+        assertTrue(user.endsWith("User: what is wrong with my tables?"));
+    }
+
+    @Test
+    void advisoryChatFallsBackToNoDigestWhenTheContextCannotBeSerialized() {
+        when(aiGenerationService.serializeFunctionUnitContext(1L))
+                .thenThrow(new AiGenerationException("AI_CONTEXT_TOO_LARGE", "too big"));
+        when(aiGatewayClient.chat(any(), any())).thenReturn(Map.of("ok", true));
+        when(aiResponseParser.parse(any())).thenReturn(Map.of("reply", "still answering"));
+
+        StudioChatResult result = service.chat(request("TABLE_DESIGN", "hello", null), "t");
+
+        assertEquals("still answering", result.reply());
+        ArgumentCaptor<AiPromptBuilder.RenderedPrompt> prompt = ArgumentCaptor.forClass(AiPromptBuilder.RenderedPrompt.class);
+        verify(aiGatewayClient).chat(prompt.capture(), any());
+        assertFalse(prompt.getValue().user().contains("## Current design"));
+        assertTrue(prompt.getValue().user().startsWith("User: hello"));
+    }
+
+    @Test
     void historyEntryWithProposalIsRenderedIntoTranscriptAndCapped() {
         AiStudioChatRequest.HistoryMessage proposed = historyMessage("ASSISTANT", "Here is the proposed change.");
         proposed.setProposalScope("EMAIL_TEMPLATES");
-        proposed.setProposal(Map.of("emailTemplates", List.of(Map.of("name", "Order Shipped", "subject", "x".repeat(7000)))));
+        // 有序 Map：name 必须排在超长 subject 前面，才不会被截断掉（Map.of 的迭代顺序不固定）
+        Map<String, Object> template = new java.util.LinkedHashMap<>();
+        template.put("name", "Order Shipped");
+        template.put("subject", "x".repeat(7000));
+        proposed.setProposal(Map.of("emailTemplates", List.of(template)));
         when(aiGatewayClient.chat(any(), any())).thenReturn(Map.of("ok", true));
         when(aiResponseParser.parse(any())).thenReturn(Map.of("reply", "sure"));
 

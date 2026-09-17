@@ -1,8 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
+import { flushPromises } from '@vue/test-utils'
 import AiStudioEntryDialog from '@/components/ai/AiStudioEntryDialog.vue'
 import { aiStudioDraftStorageKey } from '@/utils/aiStudioDraft'
+import { aiStudioThreadApi } from '@/api/aiStudioThread'
+
+vi.mock('@/api/aiStudioThread', () => ({
+  aiStudioThreadApi: { getState: vi.fn() }
+}))
+const getState = vi.mocked(aiStudioThreadApi.getState)
 
 const i18n = createI18n({
   legacy: false,
@@ -52,9 +59,9 @@ const ElDialogStub = {
 
 const FU_ID = 42
 
-function mountDialog() {
+function mountDialog(extraProps: Record<string, unknown> = {}) {
   return mount(AiStudioEntryDialog, {
-    props: { visible: true, functionUnitId: FU_ID },
+    props: { visible: true, functionUnitId: FU_ID, ...extraProps },
     global: {
       plugins: [i18n],
       stubs: {
@@ -70,6 +77,9 @@ function mountDialog() {
 describe('AiStudioEntryDialog', () => {
   beforeEach(() => {
     localStorage.clear()
+    getState.mockReset()
+    // 默认：后端不可用 → 维持纯本地判断
+    getState.mockRejectedValue(new Error('offline'))
   })
 
   it('renders title, both mode cards and guide steps in designer-tab order plus Review', () => {
@@ -134,5 +144,33 @@ describe('AiStudioEntryDialog', () => {
     expect(warnSpy).toHaveBeenCalled()
     expect(localStorage.getItem(aiStudioDraftStorageKey(FU_ID))).toBeNull()
     warnSpy.mockRestore()
+  })
+
+  it('without a local draft: resumes the team\'s shared progress at the first unconfirmed phase', async () => {
+    getState.mockResolvedValue({ data: {
+      completedPhases: ['PROCESS_DESIGN', 'TABLE_DESIGN'], updatedBy: 'u2', updatedAt: '2026-09-17T00:00:00Z',
+      messageCounts: {}, canModify: true
+    } } as never)
+    const wrapper = mountDialog({ functionUnitName: 'Expense Management' })
+    await flushPromises()
+    const cards = wrapper.findAll('.mode-card')
+    expect(cards[1].classes()).not.toContain('is-disabled')
+    expect(cards[1].text()).toContain('Resume Expense Management · Form Design')
+    expect(getState).toHaveBeenCalledWith(FU_ID)
+  })
+
+  it('an empty shared state keeps the continue card disabled; a local draft skips the lookup', async () => {
+    getState.mockResolvedValue({ data: {
+      completedPhases: null, updatedBy: null, updatedAt: null, messageCounts: {}, canModify: true
+    } } as never)
+    const wrapper = mountDialog()
+    await flushPromises()
+    expect(wrapper.findAll('.mode-card')[1].classes()).toContain('is-disabled')
+
+    getState.mockClear()
+    localStorage.setItem(aiStudioDraftStorageKey(FU_ID), JSON.stringify({ name: 'Local', phase: 'FORM_DESIGN' }))
+    mountDialog()
+    await flushPromises()
+    expect(getState).not.toHaveBeenCalled()
   })
 })

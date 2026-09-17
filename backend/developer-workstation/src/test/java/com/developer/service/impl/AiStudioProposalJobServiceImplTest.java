@@ -67,6 +67,42 @@ class AiStudioProposalJobServiceImplTest {
     }
 
     @Test
+    void successHookRunsOnceOnlyForJobsThatReallySucceeded() throws Exception {
+        java.util.List<String> hooked = new java.util.concurrent.CopyOnWriteArrayList<>();
+        AiStudioProposalJobResponse ok = service.submit(1L, "TABLE_DESIGN", "u1", "k",
+                () -> new StudioChatResult("fine", null, null), r -> hooked.add(r.reply()));
+        awaitTerminal(ok.getJobId(), "u1");
+
+        AiStudioProposalJobResponse failed = service.submit(2L, "TABLE_DESIGN", "u1", "k",
+                () -> { throw new AiGenerationException("X", "no"); }, r -> hooked.add("failed"));
+        awaitTerminal(failed.getJobId(), "u1");
+
+        // 被取消的作业：迟到的结果既不落快照，也不触发回调
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AiStudioProposalJobResponse cancelled = service.submit(3L, "TABLE_DESIGN", "u1", "k", () -> {
+            started.countDown();
+            try {
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return new StudioChatResult("late", null, null);
+        }, r -> hooked.add("late"));
+        assertTrue(started.await(2, TimeUnit.SECONDS));
+        service.cancel(cancelled.getJobId(), "u1");
+        release.countDown();
+
+        // 回调抛错不改变作业状态
+        AiStudioProposalJobResponse hookFails = service.submit(4L, "TABLE_DESIGN", "u1", "k",
+                () -> new StudioChatResult("still ok", null, null), r -> { throw new IllegalStateException("db down"); });
+        assertEquals(Status.SUCCEEDED, awaitTerminal(hookFails.getJobId(), "u1").getStatus());
+
+        Thread.sleep(50);
+        assertEquals(java.util.List.of("fine"), hooked);
+    }
+
+    @Test
     void failureKeepsErrorCodeFromAiGenerationException() throws Exception {
         AiStudioProposalJobResponse submitted = service.submit(1L, "PROCESS_DESIGN", "u1", "k", () -> {
             throw new AiGenerationException("AI_STUDIO_PROPOSAL_EMPTY", "nothing came back");

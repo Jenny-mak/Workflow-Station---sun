@@ -275,6 +275,17 @@ public abstract class BaseController {
             return ResponseEntity.status(httpStatus).body(ApiResponse.error(error));
         }
         
+        // 工作区隔离拒绝：与 WorkspaceExceptionHandler 同语义的 403（在 handleRequest 内抛出时不会走到那边）
+        if (e instanceof com.developer.security.FunctionUnitWorkspaceAccessDeniedException denied) {
+            ErrorResponse error = ErrorResponse.builder()
+                    .code("WORKSPACE_FORBIDDEN")
+                    .message(denied.getMessage())
+                    .timestamp(Instant.now())
+                    .traceId(UUID.randomUUID().toString())
+                    .build();
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(error));
+        }
+
         // Forward ResourceNotFoundException with a proper 404
         if (e instanceof ResourceNotFoundException rnfe) {
             ErrorResponse error = ErrorResponse.builder()

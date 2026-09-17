@@ -89,6 +89,10 @@ data:
   # 必须与 AP 库里被 stamp 的那个 TEAM project 的 externalId 完全一致(runbook 第 5 步)。
   # 不一致 => managed-authn 给每个用户各建一个新 project,侧栏出现重名 Personal Project。
   ACTIVEPIECES_MANAGED_PROJECT_EXTERNAL_ID: "hermes-main"
+  # developer-workstation 进程内限流(RateLimitConfig)。限流由 Kong(Redis 共享计数)统一负责,
+  # 保持关闭;Kong 在 Istio sidecar 后时本过滤器按 remoteAddr 分桶会让全平台共享一个桶。
+  DW_RATE_LIMIT_ENABLED: "false"
+  DW_RATE_LIMIT_PER_MINUTE: "600"
   # AI Generate(developer-workstation)直连集团 AI gateway 的 OpenAI 兼容 chat/completions。
   # 不再经 Activepieces —— 原先的 piece-ai 版 flow 已随该链路废弃删除。
   # 凭证是**每用户**的 DSP AMToken,由浏览器经 X-AM-Token 头透传,故这里不配任何密钥。

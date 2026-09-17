@@ -45,6 +45,55 @@ public final class BpmnServiceTaskBindingPatcher {
     }
 
     /**
+     * 解绑：清掉这些 serviceTask 的 {@code ap:flowKey}、{@code serviceType} 与全部 legacy ap:* 键。
+     * 供撤销用——把一个"本来没绑定"的任务还原成未绑定，而不是留下半截配置。
+     *
+     * @return 补丁后的 BPMN 明文；无任务时原样返回
+     */
+    public static String unbind(String bpmnXml, java.util.Collection<String> taskIds) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return bpmnXml;
+        }
+        if (bpmnXml == null || bpmnXml.isBlank()) {
+            throw new AiGenerationException("AI_BPMN_SERVICE_TASK_NOT_FOUND",
+                    "The function unit has no process definition to unbind service tasks on");
+        }
+        Document document;
+        try {
+            document = BpmnServiceTaskScanner.parseSecurely(bpmnXml);
+        } catch (Exception e) {
+            throw new AiGenerationException("AI_EXISTING_BPMN_INVALID",
+                    "Existing BPMN could not be parsed: " + e.getMessage());
+        }
+        for (String taskId : taskIds) {
+            Element task = taskId == null ? null : findServiceTask(document, taskId.trim());
+            if (task == null) continue;
+            Element ext = BpmnServiceTaskScanner.directChild(task, "extensionElements");
+            if (ext == null) continue;
+            Element properties = designerPropertiesContainer(ext);
+            if (properties == null) continue;
+            NodeList all = properties.getElementsByTagNameNS("*", "*");
+            for (int i = all.getLength() - 1; i >= 0; i--) {
+                if (!(all.item(i) instanceof Element el)) continue;
+                String local = BpmnServiceTaskScanner.localName(el);
+                if (!"property".equals(local) && !"values".equals(local)) continue;
+                String name = el.getAttribute("name");
+                if (LEGACY_AP_KEYS.contains(name)
+                        || BpmnServiceTaskScanner.PROP_FLOW_KEY.equals(name)
+                        || BpmnServiceTaskScanner.PROP_SERVICE_TYPE.equals(name)) {
+                    el.getParentNode().removeChild(el);
+                }
+            }
+        }
+        try {
+            return serialize(document);
+        } catch (Exception e) {
+            throw new AiGenerationException("AI_BPMN_BINDING_FAILED",
+                    "Failed to serialize the patched BPMN: " + e.getMessage());
+        }
+    }
+
+    /**
      * @param bpmnXml         明文 BPMN（调用方负责 smartDecode）
      * @param flowKeyByTaskId serviceTask id → flowKey（非空）
      * @return 补丁后的 BPMN 明文；无绑定时原样返回

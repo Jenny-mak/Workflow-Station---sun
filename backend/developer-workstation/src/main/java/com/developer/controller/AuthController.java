@@ -5,6 +5,7 @@ import com.developer.dto.LoginRequest;
 import com.developer.dto.LoginResponse;
 import com.developer.entity.User;
 import com.developer.repository.UserRepository;
+import com.developer.security.LegacyVirtualGroupRoleLookup;
 import com.platform.security.config.JwtProperties;
 import com.platform.security.dto.UserEffectiveRole;
 import com.platform.security.service.JwtTokenService;
@@ -22,7 +23,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -40,7 +40,7 @@ public class AuthController {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JdbcTemplate jdbcTemplate;
+    private final LegacyVirtualGroupRoleLookup legacyVirtualGroupRoleLookup;
     private final UserRoleService userRoleService;
     private final I18nService i18nService;
     private final JwtTokenService jwtTokenService;
@@ -93,7 +93,7 @@ public class AuthController {
             
             // Fall back to legacy role lookup when the new system returns none
             if (roles.isEmpty()) {
-                roles = getRolesForUserLegacy(user.getId());
+                roles = legacyVirtualGroupRoleLookup.findRoleCodes(user.getId());
             }
             
             List<String> permissions = getPermissionsForRoles(roles);
@@ -186,7 +186,7 @@ public class AuthController {
             List<UserEffectiveRole> effectiveRoles = userRoleService.getEffectiveRolesForUser(userId);
             List<String> roles = effectiveRoles.stream()
                     .map(UserEffectiveRole::getRoleCode).distinct().collect(java.util.stream.Collectors.toList());
-            if (roles.isEmpty()) { roles = getRolesForUserLegacy(user.getId()); }
+            if (roles.isEmpty()) { roles = legacyVirtualGroupRoleLookup.findRoleCodes(user.getId()); }
             List<String> permissions = getPermissionsForRoles(roles);
             
             String newAccessToken = generateToken(user, roles, permissions);
@@ -278,7 +278,7 @@ public class AuthController {
                     .collect(Collectors.toList());
             
             if (roles.isEmpty()) {
-                roles = getRolesForUserLegacy(user.getId());
+                roles = legacyVirtualGroupRoleLookup.findRoleCodes(user.getId());
             }
             
             List<LoginResponse.RoleWithSource> rolesWithSources = buildRolesWithSources(effectiveRoles);
@@ -423,29 +423,6 @@ public class AuthController {
             keyBytes = Arrays.copyOf(keyBytes, 32);
         }
         return Keys.hmacShaKeyFor(keyBytes);
-    }
-
-    private List<String> getRolesForUserLegacy(String userId) {
-        try {
-            // Roles granted via virtual group membership
-            String sql = "SELECT DISTINCT r.code FROM sys_virtual_group_members vgm " +
-                    "JOIN sys_virtual_group_roles vgr ON vgm.group_id = vgr.virtual_group_id " +
-                    "JOIN sys_roles r ON vgr.role_id = r.id " +
-                    "WHERE vgm.user_id = ?";
-            List<String> roles = jdbcTemplate.queryForList(sql, String.class, userId);
-            
-            // Default role when none are found
-            if (roles.isEmpty()) {
-                log.warn("No roles found for user {}, returning default DEVELOPER role", userId);
-                return List.of("DEVELOPER");
-            }
-            
-            log.info("Found {} roles for user {}: {}", roles.size(), userId, roles);
-            return roles;
-        } catch (Exception e) {
-            log.error("Error fetching roles for user {}: {}", userId, e.getMessage(), e);
-            return List.of("DEVELOPER");
-        }
     }
 
     private List<String> getPermissionsForRoles(List<String> roles) {

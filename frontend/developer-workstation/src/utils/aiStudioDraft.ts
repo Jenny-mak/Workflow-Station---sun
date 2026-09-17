@@ -106,11 +106,32 @@ export interface AiStudioChatMessage {
   text: string
   isError?: boolean
   isPhaseNote?: boolean
+  /** 共享线程里的消息 id；没有的是本地消息（见 utils/aiStudioSharedThread.ts） */
+  serverId?: number
+  /** 共享线程消息的作者展示名 */
+  authorName?: string | null
+  /** 共享线程消息是否是我发的；本地消息视为我的 */
+  mine?: boolean
+  /** 只属于本浏览器的提问（发送中 / 发送失败），不参与首次迁移 */
+  localOnly?: boolean
+  /** 本地消息发出时线程里最新的 serverId，合并后据此插回原位置 */
+  anchorId?: number
+  /** DW 重启打断的提案：重新发起时用的原消息（只在发起人本地的错误气泡上） */
+  retryMessage?: string
   /** 结构化改动提案（propose 轮次）：data 即 Apply 时原样带回的 generatedData */
   proposal?: {
     scope: string
     data: Record<string, unknown>
     applied?: boolean
+    /** 共享线程：谁 Apply 的、是不是我（只有我能撤销） */
+    appliedByName?: string | null
+    appliedByMe?: boolean
+    /** preview 里的问题来自本地一次 Apply 失败（后端不知道），刷新时保留 */
+    localIssues?: boolean
+    /** 后端生成期算好的预览；老线程里的提案没有这个字段，卡片退化为按条数显示 */
+    preview?: import('@/api/aiGeneration').AiStudioProposalPreview | null
+    /** Apply 后的撤销令牌与截止时间；撤销过或不可撤销的 scope 没有这个字段 */
+    undo?: { token: string; until: string | null } | null
   }
 }
 

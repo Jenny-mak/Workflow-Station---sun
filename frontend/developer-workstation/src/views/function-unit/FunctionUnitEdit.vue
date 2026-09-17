@@ -344,6 +344,7 @@
     <AiStudioEntryDialog
       v-if="AI_STUDIO_ENABLED"
       :function-unit-id="functionUnitId"
+      :function-unit-name="store.current?.name"
       :visible="showAiStudioDialog"
       @update:visible="showAiStudioDialog = $event"
       @open="handleOpenAiStudio"

@@ -117,9 +117,14 @@ security:
     audit-logging: ${SECURITY_PERMISSION_AUDIT:true}
     max-permission-name-length: ${SECURITY_PERMISSION_MAX_NAME_LENGTH:100}
     max-role-name-length: ${SECURITY_ROLE_MAX_NAME_LENGTH:100}
-  
-  rate-limit:
-    requests-per-minute: 100
+
+# In-process rate limit (RateLimitConfig). Off by default: Kong is the rate-limit authority
+# (Redis-backed, 600/min global + 10/min login) and all DW traffic goes through it. Enable only
+# when DW is exposed without Kong. Must stay top-level: it used to sit under `security:`, which
+# silently left the filter on its 60/min default.
+rate-limit:
+  enabled: ${DW_RATE_LIMIT_ENABLED:false}
+  requests-per-minute: ${DW_RATE_LIMIT_PER_MINUTE:600}
 
 # Workflow Engine Configuration
 workflow-engine:
