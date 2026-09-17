@@ -118,4 +118,18 @@ describe('LookupField delegate prefetch / remote search', () => {
     )
     wrapper.unmount()
   })
+
+  it('omits excludePrimaryKeys from remoteFilter results', async () => {
+    const wrapper = mount(LookupField, {
+      props: { ...baseProps, excludePrimaryKeys: ['u-0'] },
+      global: { stubs },
+    })
+    await flushPromises()
+    await (wrapper.vm as { handleFocus: () => void }).handleFocus()
+    await flushPromises()
+    const rows = (wrapper.vm as { filteredResults: Array<{ id: string }> }).filteredResults
+    expect(rows.some((row) => row.id === 'u-0')).toBe(false)
+    expect(rows.some((row) => row.id === 'u-1')).toBe(true)
+    wrapper.unmount()
+  })
 })

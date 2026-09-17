@@ -260,7 +260,23 @@ public class WorkflowEngineClient {
      * Queries user todo tasks
      */
     public Optional<Map<String, Object>> getUserTasks(String userId, int page, int size) {
-        return taskClient.getUserTasks(userId, page, size);
+        return taskClient.getUserTasks(userId, page, size, true);
+    }
+
+    /**
+     * Queries a user's assigned tasks. See
+     * {@link WorkflowEngineTaskClient#getUserTasks(String, int, int, boolean)}.
+     */
+    public Optional<Map<String, Object>> getUserTasks(String userId, int page, int size,
+                                                      boolean applyActiveWorkspaceBu) {
+        return taskClient.getUserTasks(userId, page, size, applyActiveWorkspaceBu);
+    }
+
+    /**
+     * Standing-rule overlay: assigned tasks of the delegator via trusted engine path.
+     */
+    public Map<String, Object> getDelegatorAssignedTasks(String delegatorId, int page, int size) {
+        return taskClient.getDelegatorAssignedTasks(delegatorId, page, size);
     }
 
     /**

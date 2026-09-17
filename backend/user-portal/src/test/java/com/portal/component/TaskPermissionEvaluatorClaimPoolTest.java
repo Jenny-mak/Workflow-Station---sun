@@ -37,7 +37,8 @@ class TaskPermissionEvaluatorClaimPoolTest {
 
     private TaskPermissionEvaluator evaluator() {
         return new TaskPermissionEvaluator(
-                delegationRuleRepository, workflowEngineClient, workspaceTaskFilterComponent);
+                new DelegationRuleMatcher(delegationRuleRepository, workspaceTaskFilterComponent),
+                workflowEngineClient, workspaceTaskFilterComponent);
     }
 
     @Test

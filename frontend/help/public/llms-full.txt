@@ -103,6 +103,20 @@ Unclaimed pool: Delegate is hidden until someone is assigned.
 
 Failures: Please select user; Please select both business unit and role; cannot delegate to yourself; completed tasks cannot be delegated.
 
+## Delegations (standing rules) (/help/up-delegations)
+
+Create standing rules so another user, or a Business Unit + Role pair, can complete tasks that stay assigned to you. This is not the Delegate button on one task.
+
+Default To Do does not add these tasks. Open Delegations → Delegated, or To Do with filter Delegated (same query).
+
+Order: Setup → Delegations → Create Delegation → Specified user or Specified BU and Role → All, Partial, or Temporary → save → the other person opens Delegated (match workspace for BU+Role) and completes On behalf of you.
+
+Specified user: Delegate To lookup; you are not in the list. Specified BU and Role: both required; visible only on that workspace pair; SYS_ADMIN does not see every delegated task; no Claim.
+
+Urgent is not offered in Create. Unclaimed candidate-pool tasks never appear on Delegated.
+
+Failures: Please select delegate; Please select both business unit and role; Partial without Function Unit; Temporary without start and end; cannot delegate to yourself; expired or paused rules hide tasks; wrong workspace hides BU+Role tasks.
+
 ## Form Design — Advanced Upload (/help/form-upload)
 
 Advanced Upload is in the Extend palette. New fields default to Single (one file, saved as a URL for Activepieces File / send-email). Turn on Multi to set Max files (default 10 when turned on, 2–50). Default Max file size is 10MB; the platform hard cap is 50MB. Saved JSON that still has Multiple off + Limit 1 and no Max files was a generator default; those fields still accept up to 10 until the switch is changed. The properties panel shows Multi and Max file size. Basic palette Upload stays the stock form-create control.

@@ -25,7 +25,8 @@
 | complete 参数（代码） | — | `onBehalfOfUserId`（办理人 A） |
 
 对照：委托 = 任务仍挂 A，别人顶着办；转办 = Transfer，办理人换成别人。  
-**认领** = 共享池里还没落到人时先占单（会改 `assignee`）。本文 BU+Role 委托 **不做认领**。
+**认领** = 共享池里还没落到人时先占单（会改 `assignee`）。本文 BU+Role 委托 **不做认领**。  
+用户走向（Role M 池未认领叠不出去、代办人权限不是 UBR 转授）：见站立规则 [portal-task-delegation.md §5.2a / §5.2b](./portal-task-delegation.md)。
 
 ---
 
@@ -140,7 +141,7 @@ BU、Role **存 code 不存数字 ID**（与 BPMN BU_ROLE 一致，跨环境稳�
 
 A → 详情「委托」→ 选目标类型：
 
-- **指定用户**：选 B（禁自己）+ 原因。
+- **指定用户**：选 B（下拉不列出自己；POST 仍禁自己）+ 原因。
 - **指定 BU 和 Role**：先选 BU，Role 下拉用 `GET /business-units/{id}/roles`（与 View 准入同一数据源，**不用**全局 `/roles`）。两侧都必填。
 
 `POST /tasks/{id}/delegate`。引擎写扩展表；**禁止** `setAssignee`、禁止加 candidate。Portal **禁止**改 `current_assignee`。
@@ -152,6 +153,8 @@ A → 详情「委托」→ 选目标类型：
 - **BU+Role**：仅当 JWT 当前工作台 `(active BU, active Role)` 的 **code 成对等于** 委托目标时，才进入该用户的 **委托任务**。切到别的工作台即不可见。SYS_ADMIN 不因此看见全部委托任务。
 - 该 UBR 目前没人：委托任务列表为空，单仍挂 A，A 可办。
 - My Requests：当前处理人仍是 A。
+- **未认领 Role 池**：无 Delegate 按钮；站立规则也叠不出去（sibling §5.2a）。认领后 assignee=A，再 Delegate / 规则才生效。
+- **代办人权限**：能办的是这一条待办（同一张节点表单），不是 A 的 Role / New Request / View。完整表见 sibling **§5.2b**。
 
 ### 7.3 办理
 

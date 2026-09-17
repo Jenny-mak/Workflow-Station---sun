@@ -146,7 +146,7 @@ public class TaskQueryComponent {
     private PageResponse<TaskInfo> queryDelegatedTasksOnlyPage(
             String userId, TaskQueryRequest request, int page, int size) {
         List<TaskInfo> allTasks = new ArrayList<>(queryDelegatedTasks(userId));
-        allTasks = mineTaskScanner.applyPortalPostEngineFilters(userId, allTasks);
+        allTasks = mineTaskScanner.applyDelegatedOverlayPostFilters(allTasks);
         if (TaskInfoQueryFilters.needsRequestIdEnrichment(request)) {
             requestIdEnricher.enrichTaskRequestIds(allTasks);
         }

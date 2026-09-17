@@ -4,6 +4,7 @@ import com.portal.dto.DelegationListQueryRequest;
 import com.portal.dto.PortalListPage;
 import com.portal.entity.DelegationAudit;
 import com.portal.entity.DelegationRule;
+import com.portal.enums.DelegateTargetType;
 import com.portal.enums.DelegationStatus;
 import com.portal.enums.DelegationType;
 import com.portal.util.DelegationAuditColumnSpec;
@@ -95,7 +96,8 @@ public class DelegationListQueryComponent {
         pageParams.add(request.size());
         pageParams.add(request.page() * request.size());
         String orderBy = filterSql.orderBy(request.sortField(), request.sortDirection());
-        String sql = "SELECT r.id, r.delegator_id, r.delegate_id, r.delegation_type, r.start_time,"
+        String sql = "SELECT r.id, r.delegator_id, r.delegate_id, r.delegate_target_type,"
+                + " r.delegate_bu_code, r.delegate_role_code, r.delegation_type, r.start_time,"
                 + " r.end_time, r.status, r.reason, r.created_at, r.updated_at"
                 + where + orderBy + " LIMIT ? OFFSET ?";
         return ListQuerySupport.query(jdbcTemplate, sql, pageParams, rs -> {
@@ -130,6 +132,9 @@ public class DelegationListQueryComponent {
                 .id(rs.getLong("id"))
                 .delegatorId(rs.getString("delegator_id"))
                 .delegateId(rs.getString("delegate_id"))
+                .delegateTargetType(enumOrNull(rs.getString("delegate_target_type"), DelegateTargetType.class))
+                .delegateBuCode(rs.getString("delegate_bu_code"))
+                .delegateRoleCode(rs.getString("delegate_role_code"))
                 .delegationType(enumOrNull(rs.getString("delegation_type"), DelegationType.class))
                 .startTime(toLocalDateTime(rs.getTimestamp("start_time")))
                 .endTime(toLocalDateTime(rs.getTimestamp("end_time")))

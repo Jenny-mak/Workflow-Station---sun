@@ -3,7 +3,9 @@ package com.portal.component;
 import com.portal.dto.DelegationRuleRequest;
 import com.portal.entity.DelegationAudit;
 import com.portal.entity.DelegationRule;
+import com.portal.enums.DelegateTargetType;
 import com.portal.enums.DelegationStatus;
+import com.portal.enums.DelegationType;
 import com.portal.exception.PortalException;
 import com.portal.repository.DelegationAuditRepository;
 import com.portal.repository.DelegationRuleRepository;
@@ -35,19 +37,14 @@ public class DelegationComponent {
      */
     @Transactional
     public DelegationRule createDelegationRule(String delegatorId, DelegationRuleRequest request) {
-        // 验证不能委托给自己
-        if (delegatorId.equals(request.getDelegateId())) {
-            throw new PortalException("400", i18nService.getMessage("portal.cannot_delegate_self"));
-        }
-
-        // 检查是否存在循环委托
-        if (hasCircularDelegation(delegatorId, request.getDelegateId())) {
+        validateRuleRequest(delegatorId, request);
+        if (request.effectiveTargetType() == DelegateTargetType.USER
+                && hasCircularDelegation(delegatorId, request.getDelegateId().trim())) {
             throw new PortalException("400", i18nService.getMessage("portal.circular_delegation"));
         }
 
         DelegationRule rule = DelegationRule.builder()
                 .delegatorId(delegatorId)
-                .delegateId(request.getDelegateId())
                 .delegationType(request.getDelegationType())
                 .processTypes(request.getProcessTypes())
                 .priorityFilter(request.getPriorityFilter())
@@ -56,13 +53,10 @@ public class DelegationComponent {
                 .reason(request.getReason())
                 .status(DelegationStatus.ACTIVE)
                 .build();
-
+        applyTarget(rule, request);
         rule = delegationRuleRepository.save(rule);
-
-        // 记录审计日志
-        recordAudit(delegatorId, request.getDelegateId(), null, "CREATE_DELEGATION", "SUCCESS", request.getReason());
-
-        log.info("用户 {} 创建了委托规则给 {}", delegatorId, request.getDelegateId());
+        recordAudit(delegatorId, describeTarget(rule), null, "CREATE_DELEGATION", "SUCCESS", request.getReason());
+        log.info("用户 {} 创建了委托规则给 {}", delegatorId, describeTarget(rule));
         return rule;
     }
 
@@ -78,8 +72,13 @@ public class DelegationComponent {
         if (!delegatorId.equals(rule.getDelegatorId())) {
             throw new PortalException("403", i18nService.getMessage("portal.only_delegator_modify"));
         }
+        validateRuleRequest(delegatorId, request);
+        if (request.effectiveTargetType() == DelegateTargetType.USER
+                && hasCircularDelegation(delegatorId, request.getDelegateId().trim())) {
+            throw new PortalException("400", i18nService.getMessage("portal.circular_delegation"));
+        }
 
-        rule.setDelegateId(request.getDelegateId());
+        applyTarget(rule, request);
         rule.setDelegationType(request.getDelegationType());
         rule.setProcessTypes(request.getProcessTypes());
         rule.setPriorityFilter(request.getPriorityFilter());
@@ -90,7 +89,7 @@ public class DelegationComponent {
         rule = delegationRuleRepository.save(rule);
 
         // 记录审计日志
-        recordAudit(delegatorId, request.getDelegateId(), null, "UPDATE_DELEGATION", "SUCCESS", request.getReason());
+        recordAudit(delegatorId, describeTarget(rule), null, "UPDATE_DELEGATION", "SUCCESS", request.getReason());
 
         log.info("用户 {} 更新了委托规则 {}", delegatorId, ruleId);
         return rule;
@@ -112,7 +111,7 @@ public class DelegationComponent {
         delegationRuleRepository.delete(rule);
 
         // 记录审计日志
-        recordAudit(delegatorId, rule.getDelegateId(), null, "DELETE_DELEGATION", "SUCCESS", null);
+        recordAudit(delegatorId, describeTarget(rule), null, "DELETE_DELEGATION", "SUCCESS", null);
 
         log.info("用户 {} 删除了委托规则 {}", delegatorId, ruleId);
     }
@@ -132,7 +131,7 @@ public class DelegationComponent {
         rule.setStatus(DelegationStatus.SUSPENDED);
         rule = delegationRuleRepository.save(rule);
 
-        recordAudit(delegatorId, rule.getDelegateId(), null, "SUSPEND_DELEGATION", "SUCCESS", null);
+        recordAudit(delegatorId, describeTarget(rule), null, "SUSPEND_DELEGATION", "SUCCESS", null);
 
         log.info("用户 {} 暂停了委托规则 {}", delegatorId, ruleId);
         return rule;
@@ -153,7 +152,7 @@ public class DelegationComponent {
         rule.setStatus(DelegationStatus.ACTIVE);
         rule = delegationRuleRepository.save(rule);
 
-        recordAudit(delegatorId, rule.getDelegateId(), null, "RESUME_DELEGATION", "SUCCESS", null);
+        recordAudit(delegatorId, describeTarget(rule), null, "RESUME_DELEGATION", "SUCCESS", null);
 
         log.info("用户 {} 恢复了委托规则 {}", delegatorId, ruleId);
         return rule;
@@ -224,6 +223,57 @@ public class DelegationComponent {
                 .orElse(null);
     }
 
+    private void validateRuleRequest(String delegatorId, DelegationRuleRequest request) {
+        if (request == null || request.getDelegationType() == null) {
+            throw new PortalException("400", i18nService.getMessage("portal.delegation_type_required"));
+        }
+        if (request.getDelegationType() == DelegationType.PARTIAL
+                && (request.getProcessTypes() == null || request.getProcessTypes().stream()
+                        .noneMatch(v -> v != null && !v.isBlank()))) {
+            throw new PortalException("400", i18nService.getMessage("portal.delegation_partial_process_types_required"));
+        }
+        if (request.getDelegationType() == DelegationType.TEMPORARY
+                && (request.getStartTime() == null || request.getEndTime() == null)) {
+            throw new PortalException("400", i18nService.getMessage("portal.delegation_temporary_window_required"));
+        }
+        if (request.isBuRoleTarget()) {
+            if (blank(request.getDelegateBuCode()) || blank(request.getDelegateRoleCode())) {
+                throw new PortalException("400", i18nService.getMessage("portal.delegation_bu_role_pair_required"));
+            }
+            return;
+        }
+        if (blank(request.getDelegateId())) {
+            throw new PortalException("400", i18nService.getMessage("portal.delegation_delegate_required"));
+        }
+        if (delegatorId.equals(request.getDelegateId().trim())) {
+            throw new PortalException("400", i18nService.getMessage("portal.cannot_delegate_self"));
+        }
+    }
+
+    private static void applyTarget(DelegationRule rule, DelegationRuleRequest request) {
+        rule.setDelegateTargetType(request.effectiveTargetType());
+        if (request.isBuRoleTarget()) {
+            rule.setDelegateId(null);
+            rule.setDelegateBuCode(request.getDelegateBuCode().trim());
+            rule.setDelegateRoleCode(request.getDelegateRoleCode().trim());
+            return;
+        }
+        rule.setDelegateId(request.getDelegateId().trim());
+        rule.setDelegateBuCode(null);
+        rule.setDelegateRoleCode(null);
+    }
+
+    private static String describeTarget(DelegationRule rule) {
+        if (rule.isBuRoleTarget()) {
+            return rule.getDelegateBuCode() + "/" + rule.getDelegateRoleCode();
+        }
+        return rule.getDelegateId();
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+
     /**
      * 检查是否存在循环委托
      */
@@ -233,14 +283,16 @@ public class DelegationComponent {
                 .findActiveDelegationRules(delegateId, LocalDateTime.now());
         
         for (DelegationRule rule : delegateRules) {
+            if (!rule.isUserTarget() || rule.getDelegateId() == null) {
+                continue;
+            }
             if (rule.getDelegateId().equals(delegatorId)) {
                 return true;
             }
-            // 递归检查（限制深度为2级）
             List<DelegationRule> subRules = delegationRuleRepository
                     .findActiveDelegationRules(rule.getDelegateId(), LocalDateTime.now());
             for (DelegationRule subRule : subRules) {
-                if (subRule.getDelegateId().equals(delegatorId)) {
+                if (subRule.isUserTarget() && delegatorId.equals(subRule.getDelegateId())) {
                     return true;
                 }
             }

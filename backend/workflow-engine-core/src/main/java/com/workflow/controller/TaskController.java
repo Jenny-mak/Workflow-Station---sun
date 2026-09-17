@@ -66,6 +66,7 @@ public class TaskController {
     private final SubTableAssignmentHandler subTableAssignmentHandler;
     private final com.workflow.component.MultiInstanceDataResolver multiInstanceDataResolver;
     private final TaskHistoryAssembler taskHistoryAssembler;
+    private final com.workflow.component.PortalInternalTokenVerifier portalInternalTokenVerifier;
 
     /**
      * Query task list.
@@ -247,6 +248,46 @@ public class TaskController {
         String buCode = StringUtils.hasText(buId) ? adminCenterClient.getBusinessUnitCodeById(buId.trim()) : null;
         String roleCode = StringUtils.hasText(roleId) ? adminCenterClient.getRoleCodeById(roleId.trim()) : null;
         TaskListResult result = taskManagerComponent.getDelegatedRuntimeTasks(actor.get(), buCode, roleCode);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    /**
+     * Assigned+candidate tasks of {@code userId}, for portal standing-rule overlay.
+     * Requires the caller's JWT plus {@code X-Internal-Token}; does not apply viewer workspace BU.
+     * Public {@code GET /api/v1/tasks} still rejects {@code userId != actor}.
+     */
+    @GetMapping("/assigned-to")
+    @Operation(summary = "Delegator assigned tasks",
+            description = "Portal standing overlay: assigned tasks of the given user without workspace BU filter")
+    public ResponseEntity<ApiResponse<TaskListResult>> getAssignedToTasks(
+            @RequestParam("userId") String userId,
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", required = false) Integer size,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken) {
+        Optional<String> actor = WorkflowActorResolver.currentUserId();
+        if (actor.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("UNAUTHORIZED", "Authentication required"));
+        }
+        if (!portalInternalTokenVerifier.isConfigured()) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(ApiResponse.error("SERVICE_UNAVAILABLE", "portal.internal.api-token is not configured"));
+        }
+        if (!portalInternalTokenVerifier.matches(internalToken)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error("FORBIDDEN", "Internal token required"));
+        }
+        if (!StringUtils.hasText(userId)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error("BAD_REQUEST", "userId is required"));
+        }
+        securityIntegrationService.validateAndAuditInput("userId", userId, "delegator_assigned_query");
+        WorkflowConfig workflowConfig = configurationManager.getConfiguration(WorkflowConfig.class);
+        int pageSize = size != null ? size : workflowConfig.getDefaultPageSize();
+        if (pageSize > workflowConfig.getMaxPageSize()) {
+            pageSize = workflowConfig.getMaxPageSize();
+        }
+        TaskListResult result = taskManagerComponent.getUserTasks(userId.trim(), page, pageSize, null);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 

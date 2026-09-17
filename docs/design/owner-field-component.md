@@ -360,7 +360,7 @@ Creator **不要**用 `startUserId` 覆盖 Save 时的字段值。
 
 任务认领 / 取消认领 / 转办 / **领导改派（BU Role 池）** / 节点切换 / **普通任务或某条 MI 子任务 Complete**时，按 §3.3.3 / §3.3.4 重算并写进该实例上所有 `source=CASE_HANDLER` 的 Owner 列（主表 variables + 已有子表行）。MI 内层任务必须带上该任务的 `_currentItem`，只改对上的 Participants 行。可以挂在现有 `ProcessInstanceSyncComponent` 同类写点之后，但写入目标是 **Owner JSON**，不要改系统实例列的语义，也不要把系统列和 Owner 当成同一字段。
 
-**委托（Delegate）与转办（Transfer）分开写：** 平台委托**不改**任务 `assignee`（单仍挂 A，B 代 A 办）。见 [portal-task-single-delegate.md](./portal-task-single-delegate.md)。
+**委托（Delegate）与转办（Transfer）分开写：** 平台委托**不改**任务 `assignee`（单仍挂 A，B 代 A 办）。见 [portal-task-single-delegate.md](./portal-task-single-delegate.md)。认领池未 hold 不叠委托、代办人权限不是 UBR 转授：见 [portal-task-delegation.md §5.2a / §5.2b](./portal-task-delegation.md)。
 
 | 事件 | Case Handler 写什么 |
 |---|---|

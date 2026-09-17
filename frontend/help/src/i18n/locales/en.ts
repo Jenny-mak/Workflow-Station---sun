@@ -192,6 +192,10 @@ export default {
       title: 'Delegate a task',
       summary: 'Hand this one To Do to a person or a BU+Role pair without changing Current Assignee.',
     },
+    upDelegations: {
+      title: 'Delegations (standing rules)',
+      summary: 'Standing rules that let someone else complete your tasks for a window of time, by user or BU+Role. Default To Do does not merge them.',
+    },
     formUpload: {
       title: 'Form Design — Advanced Upload',
       summary: 'Extend Advanced Upload: Multi switch (default Single), size cap, FileNet. Basic Upload stays the stock control.',
@@ -694,6 +698,53 @@ export default {
     failTitle: 'When it fails',
     failBody:
       'Confirm without a user shows Please select user. Confirm without both Business Unit and Role shows Please select both business unit and role. Delegating to yourself is rejected. A completed task cannot be delegated. An unclaimed pool task has no Delegate button.',
+  },
+  upDelegationsGuide: {
+    pageTitle: 'Delegations (standing rules)',
+    crumb: 'User Portal · Setup · Delegations',
+    intro:
+      'Create standing rules so another user, or a Business Unit + Role pair, can complete tasks that stay assigned to you. This is not the Delegate button on one task. Default To Do does not add these tasks; open the Delegated tab here or the Delegated filter on To Do.',
+    flowTitle: 'Order of work',
+    flow1: 'Open Setup → Delegations',
+    flow2: 'Click Create Delegation',
+    flow3: 'Choose Specified user or Specified BU and Role',
+    flow4: 'Choose All, Partial, or Temporary and save',
+    flow5: 'The other person opens Delegated (match workspace for BU+Role) and completes On behalf of you',
+    openTitle: 'Open the page',
+    openBody:
+      'User Portal → Setup → Delegations. The red question mark next to the title opens this page. Three tabs: My Delegations (your rules), Delegated (tasks you can complete for others), Audit Records.',
+    openSample: 'Setup menu',
+    createSample: 'primary button on the page header',
+    userTitle: 'Specified user',
+    userBody:
+      'Tick Specified user. Click Delegate To and search the user table (Username, Display Name, Full Name, Email, Employee ID). Your own row is not in the list. Tasks stay assigned to you. The other person completes them On behalf of you.',
+    userRadioSample: 'first choice under Delegate to',
+    userFieldSample: 'person who will complete on your behalf',
+    buTitle: 'Specified BU and Role',
+    buBody:
+      'Tick Specified BU and Role. Pick Business Unit, then Role. Role stays disabled until a unit is selected. Both are required. People see and complete those tasks only when the header workspace is that same pair. Switching workspace hides them. System Administrator does not see every delegated task. There is no Claim step.',
+    buRadioSample: 'second choice under Delegate to',
+    buFieldSample: 'first of the required pair',
+    roleFieldSample: 'second of the required pair; disabled until a unit is chosen',
+    typeTitle: 'Delegation type',
+    typeBody:
+      'All covers every assigned task in the window. Partial: pick one or more Function Units by display name (same list as New Request); only those units match. Temporary needs start and end time. Urgent is not offered in Create. You can pause, resume, or delete a rule from My Delegations.',
+    allSample: 'every assigned task in the window',
+    partialSample: 'Function Unit names, required',
+    temporarySample: 'start and end required',
+    tasksTitle: 'Who sees the work',
+    tasksBody:
+      'Delegated tasks appear on this page’s Delegated tab and on To Do when the filter is Delegated. Same query. They are not merged into the default To Do list. Current Assignee stays you. The other person sees On behalf of you and can complete without claiming. You can still complete the task yourself.',
+    tabSample: 'second tab; same list as To Do → Delegated',
+    onBehalfSample: 'what the other person sees on Basic Info',
+    notTitle: 'What this is not',
+    notBody:
+      'The Delegate button on one open task is a different page. Transfer changes Current Assignee. Permission self-service requests are also different. Unclaimed candidate-pool tasks never appear on Delegated.',
+    buttonSample: 'one-task dialog on task detail',
+    transferSample: 'reassign button; changes Current Assignee',
+    failTitle: 'When it fails',
+    failBody:
+      'Create without a user shows Please select delegate. Create without both Business Unit and Role shows Please select both business unit and role. Partial without a Function Unit, or Temporary without start and end, is rejected. You cannot delegate to yourself. Expired or paused rules hide the tasks. The wrong workspace hides BU+Role tasks.',
   },
   formUploadGuide: {
     pageTitle: 'Form Design — Advanced Upload',

@@ -88,6 +88,11 @@ admin-center:
 user-portal:
   url: ${USER_PORTAL_URL:http://localhost:8082}
 
+# Shared with user-portal portal.internal.api-token (standing-delegation assigned-to query)
+portal:
+  internal:
+    api-token: ${PORTAL_INTERNAL_API_TOKEN:}
+
 # File service base URL (for converting relative file paths to absolute URLs)
 file-service:
   base-url: ${FILE_SERVICE_BASE_URL:http://localhost:8083}

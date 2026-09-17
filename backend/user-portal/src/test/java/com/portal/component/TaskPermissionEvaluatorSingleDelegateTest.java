@@ -32,7 +32,8 @@ class TaskPermissionEvaluatorSingleDelegateTest {
     @BeforeEach
     void setUp() {
         evaluator = new TaskPermissionEvaluator(
-                delegationRuleRepository, workflowEngineClient, workspaceTaskFilterComponent);
+                new DelegationRuleMatcher(delegationRuleRepository, workspaceTaskFilterComponent),
+                workflowEngineClient, workspaceTaskFilterComponent);
     }
 
     @Test

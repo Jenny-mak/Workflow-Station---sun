@@ -191,6 +191,7 @@ final class EngineTaskMapper {
                 .formKey((String) taskMap.get("formKey"))
                 .taskDefinitionKey((String) taskMap.get("taskDefinitionKey"))
                 .variables(variables)
+                .functionUnitCode(functionUnitCodeFromEngineMap(taskMap, variables))
                 .candidateUserIds(candidateUserIds)
                 .candidateGroupIds(candidateGroupIds)
                 .delegatorId(engineStringField(taskMap.get("delegatedBy")))
@@ -200,6 +201,14 @@ final class EngineTaskMapper {
                 .delegatedRoleCode(engineStringField(taskMap.get("delegatedRoleCode")))
                 .delegated(booleanField(taskMap.get("isDelegated")))
                 .build();
+    }
+
+    static String functionUnitCodeFromEngineMap(Map<String, Object> taskMap, Map<String, Object> variables) {
+        String direct = engineStringField(taskMap != null ? taskMap.get("functionUnitCode") : null);
+        if (direct != null) {
+            return direct;
+        }
+        return engineStringField(variables != null ? variables.get("functionUnitCode") : null);
     }
 
     static Boolean booleanField(Object value) {

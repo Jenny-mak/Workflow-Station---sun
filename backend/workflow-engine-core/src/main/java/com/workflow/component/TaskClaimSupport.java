@@ -55,6 +55,9 @@ public class TaskClaimSupport {
     @Autowired
     private TaskOrphanRepairService taskOrphanRepairService;
 
+    @Autowired
+    private UserTaskExtendedInfoWriter userTaskExtendedInfoWriter;
+
     public TaskAssignmentResult claimTask(String taskId, TaskClaimRequest request) {
         try {
             Task flowableTask = requireTask(taskId);
@@ -63,6 +66,12 @@ public class TaskClaimSupport {
             }
             Optional<ExtendedTaskInfo> extendedOpt = extendedTaskInfoRepository
                     .findByTaskIdAndIsDeletedFalse(taskId);
+            if (extendedOpt.isEmpty() && userTaskExtendedInfoWriter != null) {
+                ExtendedTaskInfo created = userTaskExtendedInfoWriter.ensureFromFlowable(flowableTask);
+                if (created != null) {
+                    extendedOpt = Optional.of(created);
+                }
+            }
             if (extendedOpt.isPresent()) {
                 ExtendedTaskInfo extended = extendedOpt.get();
                 validateClaimPermission(extended, request.getClaimedBy(), flowableTask);

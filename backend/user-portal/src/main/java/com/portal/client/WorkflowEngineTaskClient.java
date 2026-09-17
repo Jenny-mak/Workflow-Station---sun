@@ -3,6 +3,7 @@ package com.portal.client;
 import com.platform.common.util.ApiResponseBodyUnwrap;
 import com.platform.common.util.SafeUrlInput;
 import com.platform.security.util.SecurityContextUtils;
+import com.portal.config.PortalInternalApiProperties;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,17 +31,34 @@ import java.util.Optional;
 public class WorkflowEngineTaskClient {
 
     private final WorkflowEngineClient engine;
+    private final PortalInternalApiProperties portalInternalApiProperties;
 
-    public WorkflowEngineTaskClient(@Lazy @Autowired WorkflowEngineClient engine) {
+    public WorkflowEngineTaskClient(@Lazy @Autowired WorkflowEngineClient engine,
+                                    PortalInternalApiProperties portalInternalApiProperties) {
         this.engine = engine;
+        this.portalInternalApiProperties = portalInternalApiProperties;
     }
 
     // ==================== Task queries ====================
 
     /**
-     * Queries user todo tasks
+     * Queries user todo tasks. Applies the caller's active workspace BU by default.
      */
     public Optional<Map<String, Object>> getUserTasks(String userId, int page, int size) {
+        return getUserTasks(userId, page, size, true);
+    }
+
+    /**
+     * Queries a user's assigned tasks.
+     *
+     * @param applyActiveWorkspaceBu when true, forwards the caller's
+     *        {@code activeBusinessUnitId} so FIXED_BU_ROLE todos match the
+     *        viewer's workspace. Standing-rule overlay must pass false: it
+     *        loads the <em>delegator's</em> tasks, which may live in a
+     *        different BU than the delegatee's current workspace.
+     */
+    public Optional<Map<String, Object>> getUserTasks(String userId, int page, int size,
+                                                      boolean applyActiveWorkspaceBu) {
         if (!engine.isAvailable()) {
             return Optional.empty();
         }
@@ -49,9 +67,11 @@ public class WorkflowEngineTaskClient {
                     .queryParam("userId", userId)
                     .queryParam("page", page)
                     .queryParam("size", size);
-            SecurityContextUtils.getCurrentActiveBusinessUnitId()
-                    .filter(id -> id != null && !id.isBlank())
-                    .ifPresent(bu -> ub.queryParam("activeBusinessUnitId", bu));
+            if (applyActiveWorkspaceBu) {
+                SecurityContextUtils.getCurrentActiveBusinessUnitId()
+                        .filter(id -> id != null && !id.isBlank())
+                        .ifPresent(bu -> ub.queryParam("activeBusinessUnitId", bu));
+            }
             String url = ub.encode().build().toUriString();
 
             ResponseEntity<Map<String, Object>> response = engine.restTemplate().exchange(
@@ -65,6 +85,45 @@ public class WorkflowEngineTaskClient {
             log.warn("Failed to get user tasks from workflow engine: {}", e.getMessage());
         }
         return Optional.empty();
+    }
+
+    /**
+     * Assigned+candidate tasks of a delegator for standing-rule overlay.
+     * Uses {@code GET /api/v1/tasks/assigned-to} with {@code X-Internal-Token} because
+     * public {@code GET /api/v1/tasks} rejects {@code userId !=} the JWT actor (403).
+     * Does not apply the viewer's workspace BU. Transport failure throws; it is not an empty list.
+     */
+    public Map<String, Object> getDelegatorAssignedTasks(String delegatorId, int page, int size) {
+        if (!engine.isAvailable()) {
+            throw new IllegalStateException(
+                    "Flowable engine unavailable, please check if workflow-engine-core service is running");
+        }
+        String token = portalInternalApiProperties.getApiToken();
+        if (token == null || token.isBlank()) {
+            throw new IllegalStateException("portal.internal.api-token is not configured");
+        }
+        try {
+            String url = engine.engineUrl() + "/api/v1/tasks/assigned-to?userId="
+                    + SafeUrlInput.encodeQueryValue(delegatorId)
+                    + "&page=" + page
+                    + "&size=" + size;
+            HttpHeaders headers = new HttpHeaders();
+            engine.forwardInboundAuthorization(headers);
+            headers.set("X-Internal-Token", token);
+            ResponseEntity<Map<String, Object>> response = engine.restTemplate().exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(headers),
+                    new ParameterizedTypeReference<Map<String, Object>>() {});
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                throw new IllegalStateException(
+                        "Failed to load delegator assigned tasks: HTTP " + response.getStatusCode());
+            }
+            return ApiResponseBodyUnwrap.unwrapDataMap(response.getBody());
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Failed to load delegator assigned tasks from workflow engine: " + e.getMessage(), e);
+        }
     }
 
     /**

@@ -1,7 +1,14 @@
 <template>
   <div class="delegations-page">
     <div class="page-header">
-      <h1>{{ t('delegation.title') }}</h1>
+      <h1 class="page-title-row">
+        <span>{{ t('delegation.title') }}</span>
+        <PortalHelpLink
+          path="/up-delegations"
+          :ariaLabel="t('delegation.guideLinkAria')"
+          test-id="delegation-guide-link"
+        />
+      </h1>
       <el-button
         type="primary"
         @click="createDialogVisible = true"
@@ -25,9 +32,7 @@
         :label="t('delegation.proxyTasks')"
         name="proxy"
       >
-        <div class="portal-card">
-          <el-empty :description="t('delegation.noProxyTasks')" />
-        </div>
+        <DelegationProxyTasksList ref="proxyListRef" />
       </el-tab-pane>
 
       <el-tab-pane
@@ -49,16 +54,22 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import DelegationRulesList from '@/components/delegations/DelegationRulesList.vue'
+import DelegationProxyTasksList from '@/components/delegations/DelegationProxyTasksList.vue'
 import DelegationAuditList from '@/components/delegations/DelegationAuditList.vue'
 import DelegationCreateDialog from '@/components/delegations/DelegationCreateDialog.vue'
+import PortalHelpLink from '@/components/PortalHelpLink.vue'
 
 const { t } = useI18n()
 const activeTab = ref('my')
 const createDialogVisible = ref(false)
 const rulesListRef = ref<{ reload: () => Promise<void> } | null>(null)
+const proxyListRef = ref<{ ensureLoaded: () => void } | null>(null)
 const auditListRef = ref<{ ensureLoaded: () => void } | null>(null)
 
 function onTabChange(name: string | number) {
+  if (name === 'proxy') {
+    proxyListRef.value?.ensureLoaded()
+  }
   if (name === 'audit') {
     auditListRef.value?.ensureLoaded()
   }
@@ -87,12 +98,15 @@ function onCreated() {
     align-items: center;
     margin-bottom: 16px;
     flex-shrink: 0;
+  }
 
-    h1 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 600;
-    }
+  .page-title-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
   }
 
   :deep(.el-tabs) {

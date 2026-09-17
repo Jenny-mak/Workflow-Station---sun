@@ -62,7 +62,8 @@ export function useTaskDisplay(taskInfo: Ref<Record<string, any>>) {
     const info = taskInfo.value
     if (info.delegated === true) return true
     if (info.delegatedTo && String(info.delegatedTo).trim()) return true
-    return !!(info.delegatedBuCode && info.delegatedRoleCode)
+    if (info.delegatedBuCode && info.delegatedRoleCode) return true
+    return String(info.assignmentType || '').toUpperCase() === 'DELEGATED'
   }
 
   function getDelegationStatusDisplay(): string {
@@ -72,8 +73,7 @@ export function useTaskDisplay(taskInfo: Ref<Record<string, any>>) {
     const me = userStore.userInfo?.id
     const username = userStore.userInfo?.username
     const isAssignee = sameIdentity(me, info.assignee) || sameIdentity(username, info.assignee)
-    const isUserDelegatee = sameIdentity(me, info.delegatedTo) || sameIdentity(username, info.delegatedTo)
-    if (isUserDelegatee && !isAssignee) {
+    if (!isAssignee) {
       const name = info.assigneeName || info.assignee || info.delegatorName || info.delegatorId || '-'
       return t('task.onBehalfOf', { name })
     }

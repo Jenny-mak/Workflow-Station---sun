@@ -101,6 +101,13 @@ export const GUIDELINES: Guideline[] = [
     load: () => import('@/views/TaskDelegateGuide.vue'),
   },
   {
+    id: 'up-delegations',
+    path: '/up-delegations',
+    titleKey: 'guides.upDelegations.title',
+    summaryKey: 'guides.upDelegations.summary',
+    load: () => import('@/views/UpDelegationsGuide.vue'),
+  },
+  {
     id: 'form-upload',
     path: '/form-upload',
     titleKey: 'guides.formUpload.title',
@@ -417,7 +424,7 @@ export const NAV_TREE: NavNode[] = [
         id: 'up-setup',
         titleKey: 'nav.upSectionSetup',
         children: [
-          { kind: 'leaf', id: 'up-deleg', titleKey: 'nav.upDelegations' },
+          { kind: 'leaf', id: 'up-deleg', titleKey: 'nav.upDelegations', to: '/up-delegations' },
           { kind: 'leaf', id: 'up-profile', titleKey: 'nav.upProfileSetup' },
         ],
       },

@@ -4,7 +4,6 @@ import com.platform.security.util.SecurityContextUtils;
 import com.portal.client.WorkflowEngineClient;
 import com.portal.dto.TaskInfo;
 import com.portal.entity.DelegationRule;
-import com.portal.repository.DelegationRuleRepository;
 import com.portal.util.RequestContextInheritanceUtils;
 import com.portal.util.WorkflowEnginePayloadHelper;
 import lombok.RequiredArgsConstructor;
@@ -15,15 +14,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
 /**
@@ -38,7 +36,8 @@ public class DelegatedTaskQueryComponent {
     private static final int DELEGATOR_ENGINE_PAGE_SIZE = 200;
 
     private final WorkflowEngineClient workflowEngineClient;
-    private final DelegationRuleRepository delegationRuleRepository;
+    private final DelegationRuleMatcher delegationRuleMatcher;
+    private final RequestIdEnricher requestIdEnricher;
 
     public List<TaskInfo> queryDelegatedTasks(String userId) {
         if (!workflowEngineClient.isAvailable()) {
@@ -82,84 +81,97 @@ public class DelegatedTaskQueryComponent {
     }
 
     private List<TaskInfo> loadStandingRuleDelegatedTasks(String userId) {
-        List<DelegationRule> delegations = delegationRuleRepository
-                .findActiveDelegationsForDelegate(userId, LocalDateTime.now());
-        if (delegations.isEmpty()) {
+        String username = SecurityContextUtils.getCurrentUsername().orElse(null);
+        List<DelegationRule> rules = delegationRuleMatcher.listActiveRulesForActor(userId, username);
+        if (rules.isEmpty()) {
             return Collections.emptyList();
         }
-        Set<String> delegatorIds = delegations.stream()
-                .map(DelegationRule::getDelegatorId)
-                .collect(Collectors.toSet());
+        Map<String, List<DelegationRule>> byDelegator = rules.stream()
+                .collect(Collectors.groupingBy(DelegationRule::getDelegatorId, LinkedHashMap::new, Collectors.toList()));
 
         SecurityContext ctx = SecurityContextHolder.getContext();
         ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
 
-        List<CompletableFuture<List<TaskInfo>>> futures = delegatorIds.stream()
-                .map(delegatorId -> CompletableFuture.supplyAsync(() -> RequestContextInheritanceUtils.runWithInheritedRequestAndSecurity(
-                        ctx, attrs, () -> loadDelegatedTasksForDelegator(userId, delegatorId))))
+        List<CompletableFuture<List<TaskInfo>>> futures = byDelegator.entrySet().stream()
+                .map(entry -> CompletableFuture.supplyAsync(() -> RequestContextInheritanceUtils.runWithInheritedRequestAndSecurity(
+                        ctx, attrs, () -> loadDelegatedTasksForDelegator(entry.getKey(), entry.getValue()))))
                 .toList();
 
         List<TaskInfo> delegatedTasks = new ArrayList<>();
         for (CompletableFuture<List<TaskInfo>> f : futures) {
             try {
                 delegatedTasks.addAll(f.join());
-            } catch (Exception e) {
-                log.warn("Failed to join delegated task future: {}", e.getMessage());
+            } catch (CompletionException e) {
+                Throwable cause = e.getCause();
+                if (cause instanceof RuntimeException re) {
+                    throw re;
+                }
+                throw e;
             }
         }
         return delegatedTasks;
     }
 
-    private List<TaskInfo> loadDelegatedTasksForDelegator(String delegateUserId, String delegatorId) {
+    private List<TaskInfo> loadDelegatedTasksForDelegator(String delegatorId, List<DelegationRule> rules) {
         List<TaskInfo> delegatedTasks = new ArrayList<>();
-        try {
-            for (int p = 0; ; p++) {
-                Optional<Map<String, Object>> result =
-                        workflowEngineClient.getUserTasks(delegatorId, p, DELEGATOR_ENGINE_PAGE_SIZE);
-                if (result.isEmpty()) {
-                    break;
-                }
-                Map<String, Object> responseBody = result.get();
-                List<Map<String, Object>> tasks = WorkflowEnginePayloadHelper.taskListFromPayload(responseBody);
-                if (tasks == null || tasks.isEmpty()) {
-                    break;
-                }
-                for (Map<String, Object> taskMap : tasks) {
-                    TaskInfo taskInfo = EngineTaskMapper.convertMapToTaskInfo(taskMap);
-                    TaskInfo delegatedTask = TaskInfo.builder()
-                            .taskId(taskInfo.getTaskId())
-                            .taskName(taskInfo.getTaskName())
-                            .description(taskInfo.getDescription())
-                            .processInstanceId(taskInfo.getProcessInstanceId())
-                            .processDefinitionKey(taskInfo.getProcessDefinitionKey())
-                            .processDefinitionName(taskInfo.getProcessDefinitionName())
-                            .bpmnAssigneeType(taskInfo.getBpmnAssigneeType())
-                            .bpmnBusinessUnitId(taskInfo.getBpmnBusinessUnitId())
-                            .bpmnRoleIds(taskInfo.getBpmnRoleIds())
-                            .assignmentType("DELEGATED")
-                            .assignee(taskInfo.getAssignee())
-                            .assigneeName(taskInfo.getAssigneeName())
-                            .delegatorId(delegatorId)
-                            .delegatorName(delegatorId)
-                            .initiatorId(taskInfo.getInitiatorId())
-                            .initiatorName(taskInfo.getInitiatorName())
-                            .priority(taskInfo.getPriority())
-                            .status(taskInfo.getStatus())
-                            .createTime(taskInfo.getCreateTime())
-                            .dueDate(taskInfo.getDueDate())
-                            .isOverdue(taskInfo.getIsOverdue())
-                            .formKey(taskInfo.getFormKey())
-                            .variables(taskInfo.getVariables())
-                            .build();
-                    delegatedTasks.add(delegatedTask);
-                }
-                if (tasks.size() < DELEGATOR_ENGINE_PAGE_SIZE) {
-                    break;
-                }
+        for (int p = 0; ; p++) {
+            Map<String, Object> payload =
+                    workflowEngineClient.getDelegatorAssignedTasks(delegatorId, p, DELEGATOR_ENGINE_PAGE_SIZE);
+            List<Map<String, Object>> tasks = WorkflowEnginePayloadHelper.taskListFromPayload(payload);
+            if (tasks == null || tasks.isEmpty()) {
+                break;
             }
-        } catch (Exception e) {
-            log.warn("Failed to get delegated tasks for delegator {}: {}", delegatorId, e.getMessage());
+            delegatedTasks.addAll(matchStandingPage(delegatorId, rules, tasks));
+            if (tasks.size() < DELEGATOR_ENGINE_PAGE_SIZE) {
+                break;
+            }
         }
         return delegatedTasks;
+    }
+
+    /**
+     * Assigned-to list omits Flowable variables. Fill {@code functionUnitCode} from
+     * {@code up_process_instance} before PARTIAL matching (same batch as To Do).
+     */
+    private List<TaskInfo> matchStandingPage(
+            String delegatorId, List<DelegationRule> rules, List<Map<String, Object>> tasks) {
+        List<TaskInfo> mapped = new ArrayList<>(tasks.size());
+        for (Map<String, Object> taskMap : tasks) {
+            mapped.add(EngineTaskMapper.convertMapToTaskInfo(taskMap));
+        }
+        requestIdEnricher.enrichTaskRequestIds(mapped);
+        List<TaskInfo> matched = new ArrayList<>();
+        for (TaskInfo taskInfo : mapped) {
+            if (!standingTaskMatches(taskInfo, delegatorId, rules)) {
+                continue;
+            }
+            stampStandingOverlay(taskInfo, delegatorId);
+            matched.add(taskInfo);
+        }
+        return matched;
+    }
+
+    private static void stampStandingOverlay(TaskInfo taskInfo, String delegatorId) {
+        taskInfo.setAssignmentType("DELEGATED");
+        taskInfo.setDelegatorId(delegatorId);
+        if (taskInfo.getDelegatorName() == null || taskInfo.getDelegatorName().isBlank()) {
+            taskInfo.setDelegatorName(taskInfo.getAssigneeName() != null
+                    ? taskInfo.getAssigneeName() : delegatorId);
+        }
+    }
+
+    private boolean standingTaskMatches(TaskInfo task, String delegatorId, List<DelegationRule> rules) {
+        if (!delegationRuleMatcher.isAssignedDelegatableTask(task)) {
+            return false;
+        }
+        if (!DelegationRuleMatcher.matchesPortalIdentity(task.getAssignee(), delegatorId, null)) {
+            return false;
+        }
+        for (DelegationRule rule : rules) {
+            if (delegationRuleMatcher.ruleMatches(task, rule)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

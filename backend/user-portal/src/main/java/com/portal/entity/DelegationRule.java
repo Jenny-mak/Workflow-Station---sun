@@ -2,6 +2,7 @@ package com.portal.entity;
 
 import com.portal.enums.DelegationStatus;
 import com.portal.enums.DelegationType;
+import com.portal.enums.DelegateTargetType;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -33,8 +34,18 @@ public class DelegationRule {
     @Column(name = "delegator_id", nullable = false, length = 64)
     private String delegatorId;
 
-    @Column(name = "delegate_id", nullable = false, length = 64)
+    @Column(name = "delegate_id", length = 64)
     private String delegateId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "delegate_target_type", length = 20)
+    private DelegateTargetType delegateTargetType;
+
+    @Column(name = "delegate_bu_code", length = 64)
+    private String delegateBuCode;
+
+    @Column(name = "delegate_role_code", length = 64)
+    private String delegateRoleCode;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "delegation_type", nullable = false, length = 20)
@@ -77,4 +88,12 @@ public class DelegationRule {
     @jakarta.persistence.Version
     @Column(name = "lock_version")
     private Long lockVersion;
+
+    public boolean isUserTarget() {
+        return delegateTargetType == null || delegateTargetType == DelegateTargetType.USER;
+    }
+
+    public boolean isBuRoleTarget() {
+        return delegateTargetType == DelegateTargetType.BU_ROLE;
+    }
 }
