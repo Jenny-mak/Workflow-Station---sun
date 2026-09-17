@@ -354,20 +354,34 @@
         </div>
       </div>
       <div
-        v-if="proposalSupported"
+        v-if="proposalSupported || copilotReplying"
         class="copilot__propose"
       >
         <el-button
+          v-if="copilotReplying"
+          size="small"
+          type="danger"
+          plain
+          :loading="copilotStopping"
+          @click="stopCopilot"
+        >
+          <el-icon><Close /></el-icon>
+          {{ t('ai.studio.workspace.stopButton') }}
+        </el-button>
+        <el-button
+          v-else
           size="small"
           type="primary"
           plain
-          :disabled="!copilotInput.trim() || copilotReplying"
+          :disabled="!copilotInput.trim()"
           @click="sendCopilotMessage(true)"
         >
           <el-icon><MagicStick /></el-icon>
           {{ t('ai.studio.workspace.proposeButton') }}
         </el-button>
-        <span class="copilot__propose-hint">{{ t('ai.studio.workspace.proposeHint') }}</span>
+        <span class="copilot__propose-hint">
+          {{ copilotReplying ? t('ai.studio.workspace.stopHint') : t('ai.studio.workspace.proposeHint') }}
+        </span>
       </div>
       <div class="copilot__input">
         <el-input
@@ -651,7 +665,11 @@ function copilotHistory(phase: AiStudioPhase) {
     .slice(-10)
     .map(m => ({
       role: m.role === 'user' ? ('USER' as const) : ('ASSISTANT' as const),
-      content: m.text
+      content: m.text,
+      // 上一轮的结构化提案一起带回去：否则"把刚才那个模板改一下"模型只看得到自己说过"Here is the proposed change"
+      ...(m.role === 'assistant' && m.proposal
+        ? { proposal: m.proposal.data, proposalScope: m.proposal.scope }
+        : {})
     }))
 }
 
@@ -691,17 +709,59 @@ async function sendCopilotMessage(propose = false) {
         phase,
         message: text,
         history
-      })
+      }, copilotAbort.signal)
       thread.push({ role: 'assistant', text: res.data.reply ?? '' })
     }
   } catch (e: unknown) {
-    pushCopilotError(thread, e)
+    // 用户主动 Stop：请求被中止，不算错误，线程里已由 stopCopilot 记过一笔
+    if (!isAbortError(e)) pushCopilotError(thread, e)
   } finally {
     endCopilotWait(phase)
   }
 }
 
+/** 当前对话轮的中止句柄；每轮 begin 时换新，Stop 时 abort */
+let copilotAbort = new AbortController()
+const copilotStopping = ref(false)
+
+function isAbortError(e: unknown): boolean {
+  const err = e as { code?: string; name?: string } | null
+  return err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError' || err?.name === 'AbortError'
+}
+
+/**
+ * 停止当前这一轮：提案轮调后端取消（中断后台线程、丢弃迟到结果）并停掉轮询；
+ * 对话轮直接中止 HTTP。两种都立刻把输入区还给用户，并在线程里记一条"已停止"。
+ */
+async function stopCopilot() {
+  if (!copilotReplying.value || copilotStopping.value) return
+  const phase = copilotReplyingPhase.value ?? currentPhase.value
+  const jobId = copilotProposalJobId.value
+  copilotStopping.value = true
+  try {
+    if (jobId) {
+      cancelledJobIds.add(jobId)
+      clearAiStudioPendingProposal(fuId.value)
+      try {
+        await aiGenerationApi.studioCancelProposal(jobId)
+      } catch (e: unknown) {
+        // 作业已经不在（404）等同于已停；其它失败提示但仍释放 UI——轮询侧已按 cancelledJobIds 退出
+        if ((e as { response?: { status?: number } } | null)?.response?.status !== 404) {
+          ElMessage.warning(t('ai.studio.workspace.stopFailed', { reason: errorReason(e) }))
+        }
+      }
+    } else {
+      copilotAbort.abort()
+    }
+    copilotThread(phase).push({ role: 'assistant', text: t('ai.studio.workspace.stopped'), isPhaseNote: true })
+  } finally {
+    copilotStopping.value = false
+    endCopilotWait(phase)
+  }
+}
+
 function beginCopilotWait(phase: AiStudioPhase) {
+  copilotAbort = new AbortController()
   copilotReplying.value = true
   copilotReplyingPhase.value = phase
   scrollCopilotToBottom()
@@ -743,6 +803,8 @@ const PROPOSAL_POLL_MAX_CONSECUTIVE_FAILURES = 8
 
 /** 组件卸载后置 true：轮询循环看到就退出，不再往已销毁的线程里推消息 */
 let proposalPollingCancelled = false
+/** 用户点 Stop 取消掉的作业：对应的轮询循环退出，迟到的终态也不再推进线程 */
+const cancelledJobIds = new Set<string>()
 onBeforeUnmount(() => {
   proposalPollingCancelled = true
 })
@@ -759,16 +821,17 @@ async function pollProposal(jobId: string): Promise<AiStudioProposalJob | null> 
   let failures = 0
   for (;;) {
     await sleep(PROPOSAL_POLL_INTERVAL_MS)
-    if (proposalPollingCancelled) return null
+    if (proposalPollingCancelled || cancelledJobIds.has(jobId)) return null
     try {
       const { data: job } = await aiGenerationApi.studioGetProposal(jobId)
       failures = 0
-      if (job.status === 'SUCCEEDED' || job.status === 'FAILED') {
+      if (cancelledJobIds.has(jobId)) return null
+      if (job.status === 'SUCCEEDED' || job.status === 'FAILED' || job.status === 'CANCELLED') {
         clearAiStudioPendingProposal(fuId.value)
         return job
       }
     } catch (e: unknown) {
-      if (proposalPollingCancelled) return null
+      if (proposalPollingCancelled || cancelledJobIds.has(jobId)) return null
       if ((e as { response?: { status?: number } } | null)?.response?.status === 404) {
         clearAiStudioPendingProposal(fuId.value)
         throw new Error(t('ai.studio.workspace.proposalLost'))
@@ -783,6 +846,11 @@ async function pollProposal(jobId: string): Promise<AiStudioProposalJob | null> 
 }
 
 function pushProposalResult(thread: CopilotMessage[], job: AiStudioProposalJob) {
+  if (job.status === 'CANCELLED') {
+    // 服务端侧取消（被新请求替换 / 别的标签页点了 Stop）：记一笔说明，不当错误
+    thread.push({ role: 'assistant', text: t('ai.studio.workspace.stopped'), isPhaseNote: true })
+    return
+  }
   if (job.status === 'FAILED') {
     thread.push({
       role: 'assistant',

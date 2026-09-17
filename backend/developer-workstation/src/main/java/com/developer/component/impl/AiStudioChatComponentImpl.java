@@ -111,13 +111,21 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
                 request.getFunctionUnitId(), request.getPhase(), userId);
         // 第一步必须留在请求线程：阶段不支持要立刻 4xx，且上下文序列化依赖请求事务里的 JPA 懒加载
         AiStudioChatService.ProposalDraft draft = aiStudioChatService.prepareProposal(request);
-        return aiStudioProposalJobService.submit(request.getFunctionUnitId(), request.getPhase(), userId,
+        // 指纹 = 阶段 + 本轮消息：刷新/双击的重复提交复用作业，改了主意的新请求替换旧作业
+        String requestKey = request.getPhase() + "\u0000" + (request.getMessage() != null ? request.getMessage().trim() : "");
+        return aiStudioProposalJobService.submit(request.getFunctionUnitId(), request.getPhase(), userId, requestKey,
                 () -> aiStudioChatService.runProposal(draft, amToken));
     }
 
     @Override
     public AiStudioProposalJobResponse getProposal(String jobId, String userId) {
         return aiStudioProposalJobService.get(jobId, userId);
+    }
+
+    @Override
+    public AiStudioProposalJobResponse cancelProposal(String jobId, String userId) {
+        log.info("AI Studio proposal cancel requested: jobId={}, userId={}", jobId, userId);
+        return aiStudioProposalJobService.cancel(jobId, userId);
     }
 
     @Override

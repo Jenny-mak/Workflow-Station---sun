@@ -53,5 +53,11 @@ public class AiStudioChatRequest {
         @NotBlank
         @Size(max = 4000)
         private String content;
+
+        /** 该条 ASSISTANT 消息附带的结构化提案（AiGeneratedData 同构），供二次修改时模型参考；可空 */
+        private java.util.Map<String, Object> proposal;
+
+        /** 提案的写入范围；可空 */
+        private String proposalScope;
     }
 }

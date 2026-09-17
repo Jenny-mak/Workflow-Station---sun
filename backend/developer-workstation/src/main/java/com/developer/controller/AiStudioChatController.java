@@ -88,6 +88,15 @@ public class AiStudioChatController extends BaseController {
         return handleRequest(() -> aiStudioChatComponent.getProposal(jobId, userId));
     }
 
+    @PostMapping("/proposals/{jobId}/cancel")
+    @Operation(summary = "Cancel a running change-proposal job (idempotent)")
+    @RequireDeveloperPermission("FUNCTION_UNIT_VIEW")
+    public ResponseEntity<ApiResponse<AiStudioProposalJobResponse>> cancelProposal(@PathVariable String jobId) {
+        String userId = SecurityContextUtils.getCurrentUserId()
+                .orElseThrow(() -> new RuntimeException(i18nService.getMessage("auth.unauthenticated_user")));
+        return handleRequest(() -> aiStudioChatComponent.cancelProposal(jobId, userId));
+    }
+
     @PostMapping("/apply")
     @Operation(summary = "Apply a copilot change proposal to the function unit design")
     @RequireDeveloperPermission("FUNCTION_UNIT_UPDATE")

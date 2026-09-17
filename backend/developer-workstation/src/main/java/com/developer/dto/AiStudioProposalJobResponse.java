@@ -20,7 +20,7 @@ import java.util.Map;
 @AllArgsConstructor
 public class AiStudioProposalJobResponse {
 
-    public enum Status { PENDING, RUNNING, SUCCEEDED, FAILED }
+    public enum Status { PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED }
 
     private String jobId;
 
