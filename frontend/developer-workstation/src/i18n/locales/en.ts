@@ -2792,5 +2792,27 @@ export default {
     forbiddenDesc: 'Sorry, you do not have permission to access this page',
     goBack: 'Go Back',
     backHome: 'Back to Home'
+  },
+  hermesMaster: {
+    name: 'Hermes Master',
+    shortName: 'HM',
+    ariaLabel: 'Hermes Master assistant. Click to chat, drag to move.',
+    contextGeneral: 'Your Developer Workstation guide',
+    contextFunctionUnit: 'Looking at this function unit',
+    greeting: "Hi, I'm Hermes Master, HM for short. Ask me how things work in Developer Workstation, let me review your function unit design, or tell me what you want to do and I'll walk you through it.",
+    placeholder: 'Ask HM… (Enter to send)',
+    send: 'Send',
+    stop: 'Stop',
+    clear: 'New chat',
+    rest: 'Let HM take a nap',
+    thinking: 'HM is thinking',
+    error: "I couldn't reach the AI service. Please try again in a moment.",
+    suggestions: {
+      whatCanDwDo: 'What can I do in Developer Workstation?',
+      createFunctionUnit: 'How do I create a function unit?',
+      buildOrder: 'In what order should I design a function unit?',
+      reviewDesign: 'Review the design of this function unit',
+      nextStep: 'What should I do next on this function unit?'
+    }
   }
 }

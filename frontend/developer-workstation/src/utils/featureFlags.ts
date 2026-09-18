@@ -31,3 +31,12 @@ export const AI_GENERATION_ENABLED = true
  * 会给出显式的开发中提示。为 false 时按钮与弹窗都不渲染。
  */
 export const AI_STUDIO_ENABLED = true
+
+/**
+ * Hermes Master（HM）：常驻 DW 每个页面的助手机器人（`components/hermes-master/`）。
+ * 为 false 时 App.vue 不挂载它，`src/api/hermesMaster.ts` 的请求也就不会发出。
+ *
+ * 对话走后端 `/ai-generation/hermes-master/chat`，与 AI Generate 同受 `ai-generation.enabled` 控制：
+ * 后端关着时机器人照常活动，只是对话会在气泡里显示失败提示。
+ */
+export const HERMES_MASTER_ENABLED = true

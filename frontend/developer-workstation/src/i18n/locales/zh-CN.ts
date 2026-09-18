@@ -2785,5 +2785,27 @@ export default {
     forbiddenDesc: '抱歉，您没有权限访问此页面',
     goBack: '返回上一页',
     backHome: '返回首页'
+  },
+  hermesMaster: {
+    name: 'Hermes Master',
+    shortName: 'HM',
+    ariaLabel: 'Hermes Master 助手，点击聊天，拖拽移动',
+    contextGeneral: '你的 Developer Workstation 向导',
+    contextFunctionUnit: '正在看这个功能单元',
+    greeting: '你好，我是 Hermes Master，叫我 HM 就行。可以问我 Developer Workstation 怎么用，让我帮你看看功能单元的设计，或者告诉我你想做什么，我一步步带你操作。',
+    placeholder: '问问 HM…（Enter 发送）',
+    send: '发送',
+    stop: '停止',
+    clear: '新对话',
+    rest: '让 HM 去睡一会儿',
+    thinking: 'HM 正在思考',
+    error: '暂时连不上 AI 服务，请稍后再试。',
+    suggestions: {
+      whatCanDwDo: 'Developer Workstation 能做什么？',
+      createFunctionUnit: '怎么创建一个功能单元？',
+      buildOrder: '设计功能单元应该按什么顺序来？',
+      reviewDesign: '帮我看看这个功能单元的设计',
+      nextStep: '这个功能单元下一步该做什么？'
+    }
   }
 }
