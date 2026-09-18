@@ -431,17 +431,23 @@ public class AiStudioDocumentSyncService {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("fromVersion", baseVersion);
             result.put("toVersion", baseVersion);
+            base.get(type).ifPresent(doc -> {
+                result.put("fromLabel", FunctionUnitDocumentService.label(doc));
+                result.put("toLabel", FunctionUnitDocumentService.label(doc));
+            });
             String updated = output.documents().get(type);
             if (updated != null && !updated.equals(baseContent.strip())) {
                 try {
                     AiDocument saved = documentService.append(request.functionUnitId(), type, updated, baseVersion,
                             versionSummary, request.author().userId());
                     result.put("toVersion", saved.getVersion());
+                    result.put("toLabel", FunctionUnitDocumentService.label(saved));
                     anyUpdated = true;
                 } catch (DeveloperBusinessException e) {
                     if (!"CONFLICT_DOCUMENT_VERSION".equals(e.getErrorCode())) throw e;
                     AiDocument latest = documentService.latest(request.functionUnitId(), type).orElseThrow();
                     result.put("toVersion", latest.getVersion());
+                    result.put("toLabel", FunctionUnitDocumentService.label(latest));
                     result.put("blockedBy", latest.getCreatedBy());
                     anyBlocked = true;
                 }

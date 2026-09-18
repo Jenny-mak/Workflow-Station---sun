@@ -8,7 +8,7 @@
         v-if="saved"
         class="document-editor__meta"
       >
-        v{{ saved.version }} · {{ saved.createdBy }} · {{ formatTime(saved.createdAt) }}
+        {{ documentVersionLabel(saved) }} · {{ saved.createdBy }} · {{ formatTime(saved.createdAt) }}
         <template v-if="saved.summary"> · {{ formatDocumentSource(t, saved.summary) }}</template>
       </span>
       <span
@@ -106,7 +106,7 @@ import {
   type FunctionUnitDocumentType
 } from '@/api/functionUnitDocument'
 import { pickHttpErrorCode, resolveUserFacingHttpMessage } from '@/utils/httpErrorMessage'
-import { formatDocumentSource } from '@/utils/functionUnitDocumentSource'
+import { documentVersionLabel, formatDocumentSource } from '@/utils/functionUnitDocumentSource'
 
 const props = defineProps<{
   functionUnitId: number
@@ -151,7 +151,7 @@ async function load() {
 async function submit(baseVersion: number) {
   const res = await functionUnitDocumentApi.save(props.functionUnitId, props.type, draft.value, baseVersion)
   applySaved(res.data)
-  ElMessage.success(t('functionUnit.documents.saved', { version: res.data.version }))
+  ElMessage.success(t('functionUnit.documents.saved', { version: documentVersionLabel(res.data) }))
 }
 
 /** 别人先保存了：载入最新（丢弃本地修改），或以最新版本为基准仍然保存。 */

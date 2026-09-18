@@ -37,6 +37,11 @@ public class AiStudioThreadState {
     @Builder.Default
     private List<String> completedPhases = new ArrayList<>();
 
+    /** 文档的当前设计轮次；"开始新的 AI 设计"时 +1（见 FunctionUnitDocumentService） */
+    @Column(name = "document_major", nullable = false)
+    @Builder.Default
+    private Integer documentMajor = 1;
+
     @Column(name = "updated_by", length = 64)
     private String updatedBy;
 

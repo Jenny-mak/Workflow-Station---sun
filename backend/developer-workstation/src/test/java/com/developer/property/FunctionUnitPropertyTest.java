@@ -63,7 +63,8 @@ public class FunctionUnitPropertyTest {
                 mock(com.developer.repository.EmailMonitorRuleRepository.class),
                 mock(com.developer.repository.EmailTemplateRepository.class),
                 new com.developer.service.impl.FunctionUnitDocumentService(
-                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class),
+                org.mockito.Mockito.mock(com.developer.repository.AiStudioThreadStateRepository.class)));
     }
     
     /**
@@ -204,7 +205,8 @@ public class FunctionUnitPropertyTest {
                 mock(com.developer.repository.EmailMonitorRuleRepository.class),
                 mock(com.developer.repository.EmailTemplateRepository.class),
                 new com.developer.service.impl.FunctionUnitDocumentService(
-                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class),
+                org.mockito.Mockito.mock(com.developer.repository.AiStudioThreadStateRepository.class)));
 
         // ?????? + ????
         FunctionUnit original = new FunctionUnit();
@@ -295,7 +297,8 @@ public class FunctionUnitPropertyTest {
                 mock(com.developer.repository.EmailMonitorRuleRepository.class),
                 mock(com.developer.repository.EmailTemplateRepository.class),
                 new com.developer.service.impl.FunctionUnitDocumentService(
-                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class),
+                org.mockito.Mockito.mock(com.developer.repository.AiStudioThreadStateRepository.class)));
 
         // ????????1 sub ??id=13??? ???id=11??? ???id=12??
         // BPMN ??subTableId=13 / formId=11 / actionIds=[12]

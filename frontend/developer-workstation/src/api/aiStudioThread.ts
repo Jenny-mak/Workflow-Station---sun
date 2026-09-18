@@ -23,8 +23,12 @@ export interface AiStudioThreadState {
 
 /** 一份文档在一次同步里的结果；toVersion > fromVersion 表示写入了新版本 */
 export interface AiStudioDocSyncDocument {
+  /** 内部序号（恢复与对比用） */
   fromVersion: number
   toVersion: number
+  /** 显示用版本号，例如 v1.2；同步前没有文档时没有 fromLabel */
+  fromLabel?: string
+  toLabel?: string
   /** 同步期间有人手动保存过，AI 结果被放弃 */
   blockedBy?: string
 }

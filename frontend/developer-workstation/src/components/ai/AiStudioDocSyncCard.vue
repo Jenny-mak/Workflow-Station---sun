@@ -52,7 +52,7 @@
           </el-button>
         </template>
         <template v-else-if="row.doc.toVersion > row.doc.fromVersion">
-          <span>v{{ row.doc.fromVersion }} → v{{ row.doc.toVersion }}</span>
+          <span>{{ row.doc.fromLabel ?? '—' }} → {{ row.doc.toLabel }}</span>
           <el-button
             link
             type="primary"
@@ -110,7 +110,7 @@ import {
 } from '@/api/functionUnitDocument'
 import { aiStudioPhaseLabel, type AiStudioPhase } from '@/utils/aiStudioDraft'
 import { resolveUserFacingHttpMessage } from '@/utils/httpErrorMessage'
-import { formatDocSyncError } from '@/utils/functionUnitDocumentSource'
+import { documentVersionLabel, formatDocSyncError } from '@/utils/functionUnitDocumentSource'
 
 const props = defineProps<{
   docSync: AiStudioDocSync
@@ -150,7 +150,7 @@ async function restorePrevious(type: FunctionUnitDocumentType, doc: AiStudioDocS
   try {
     await ElMessageBox.confirm(
       t('ai.studio.docSync.restoreConfirm', {
-        doc: t(`functionUnit.documents.type.${type}`), from: doc.fromVersion
+        doc: t(`functionUnit.documents.type.${type}`), from: doc.fromLabel ?? `v${doc.fromVersion}`
       }),
       t('ai.studio.docSync.restorePrevious'),
       { type: 'warning', confirmButtonText: t('functionUnit.documents.restore') }
@@ -162,7 +162,8 @@ async function restorePrevious(type: FunctionUnitDocumentType, doc: AiStudioDocS
   try {
     // 以这次 AI 写入的版本为基准：之后若有人又改过，后端回 409，不会把别人的修改一起冲掉
     const res = await functionUnitDocumentApi.restore(props.functionUnitId, type, doc.fromVersion, doc.toVersion)
-    ElMessage.success(t('functionUnit.documents.restored', { from: doc.fromVersion, to: res.data.version }))
+    ElMessage.success(t('functionUnit.documents.restored',
+      { from: doc.fromLabel ?? `v${doc.fromVersion}`, to: documentVersionLabel(res.data) }))
     emit('restored')
   } catch (e) {
     ElMessage.error(isDocumentConflict(e)

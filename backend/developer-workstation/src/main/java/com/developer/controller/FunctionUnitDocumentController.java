@@ -76,6 +76,13 @@ public class FunctionUnitDocumentController extends BaseController {
         });
     }
 
+    @PostMapping("/next-round")
+    @Operation(summary = "Start a new design round: the next save gets the next major version")
+    @RequireDeveloperPermission("FUNCTION_UNIT_UPDATE")
+    public ResponseEntity<ApiResponse<Integer>> startNewRound(@PathVariable Long functionUnitId) {
+        return handleRequest(() -> documentComponent.startNewRound(functionUnitId));
+    }
+
     @PostMapping("/{type}/versions/{version}/restore")
     @Operation(summary = "Append a new version with the content of an older one")
     @RequireDeveloperPermission("FUNCTION_UNIT_UPDATE")

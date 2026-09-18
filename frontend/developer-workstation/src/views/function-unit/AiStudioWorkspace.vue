@@ -651,6 +651,7 @@ import { useFunctionUnitStore } from '@/stores/functionUnit'
 import { functionUnitApi, type ValidationResult } from '@/api/functionUnit'
 import { aiGenerationApi, type AiStudioProposalJob } from '@/api/aiGeneration'
 import { aiStudioThreadApi, type AiStudioThreadEventData, type AiStudioThreadEventType } from '@/api/aiStudioThread'
+import { functionUnitDocumentApi } from '@/api/functionUnitDocument'
 import {
   mergeThread, pushLocal, toImportMessages, isStudioStageReadOnly, toHistoryEntries,
   appendServerMessages, latestServerId, SERVER_MESSAGES_PER_PHASE
@@ -1627,6 +1628,9 @@ onMounted(async () => {
       copilotThreads.value = {}
       // 共享模式：进度按功能单元共享，一并重置；队友的讨论不删，只清本浏览器的缓存
       void saveSharedCompletedPhases()
+      // 新一轮设计：两份文档的下一次保存进入新的主版本（v2.1）
+      void functionUnitDocumentApi.startNewRound(fuId.value)
+        .catch(e => console.warn('[ai-studio] could not start a new document round', e))
     } catch {
       currentPhase.value = draft.phase
       completedPhases.value = draftCompleted()

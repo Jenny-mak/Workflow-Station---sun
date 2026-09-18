@@ -19,7 +19,7 @@
         :class="{ 'is-selected': viewing?.version === item.version }"
       >
         <div class="document-history__head">
-          <strong>v{{ item.version }}</strong>
+          <strong>{{ documentVersionLabel(item) }}</strong>
           <el-tag
             v-if="item.version === currentVersion"
             size="small"
@@ -53,7 +53,7 @@
               link
               type="warning"
               :loading="restoring === item.version"
-              @click="restore(item.version)"
+              @click="restore(item)"
             >
               {{ t('functionUnit.documents.restore') }}
             </el-button>
@@ -94,7 +94,7 @@ import {
   type FunctionUnitDocumentType
 } from '@/api/functionUnitDocument'
 import { resolveUserFacingHttpMessage } from '@/utils/httpErrorMessage'
-import { formatDocumentSource } from '@/utils/functionUnitDocumentSource'
+import { documentVersionLabel, formatDocumentSource } from '@/utils/functionUnitDocumentSource'
 
 const props = defineProps<{
   modelValue: boolean
@@ -146,10 +146,11 @@ function compare(version: number) {
   diffVisible.value = true
 }
 
-async function restore(version: number) {
+async function restore(item: FunctionUnitDocument) {
+  const version = item.version
   try {
     await ElMessageBox.confirm(
-      t('functionUnit.documents.restoreConfirm', { version }),
+      t('functionUnit.documents.restoreConfirm', { version: documentVersionLabel(item) }),
       documentLabel.value,
       { type: 'warning', confirmButtonText: t('functionUnit.documents.restore') }
     )
@@ -159,7 +160,8 @@ async function restore(version: number) {
   restoring.value = version
   try {
     const res = await functionUnitDocumentApi.restore(props.functionUnitId, props.type, version, props.currentVersion)
-    ElMessage.success(t('functionUnit.documents.restored', { from: version, to: res.data.version }))
+    ElMessage.success(t('functionUnit.documents.restored',
+      { from: documentVersionLabel(item), to: documentVersionLabel(res.data) }))
     emit('restored', res.data)
     await load()
   } catch (e) {

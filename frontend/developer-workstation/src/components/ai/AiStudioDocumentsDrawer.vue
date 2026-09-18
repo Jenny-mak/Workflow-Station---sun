@@ -44,7 +44,7 @@
       >
         <template v-if="documents[type]">
           <div class="docs-drawer__meta">
-            v{{ documents[type]!.version }} · {{ documents[type]!.createdBy }}
+            {{ documentVersionLabel(documents[type]) }} · {{ documents[type]!.createdBy }}
             · {{ formatTime(documents[type]!.createdAt) }}
             <template v-if="documents[type]!.summary">
               · {{ formatDocumentSource(t, documents[type]!.summary) }}
@@ -69,7 +69,7 @@ import { useRouter } from 'vue-router'
 import { Loading } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import MarkdownRenderer from './MarkdownRenderer.vue'
-import { formatDocumentSource } from '@/utils/functionUnitDocumentSource'
+import { documentVersionLabel, formatDocumentSource } from '@/utils/functionUnitDocumentSource'
 import {
   functionUnitDocumentApi,
   FUNCTION_UNIT_DOCUMENT_TYPES,

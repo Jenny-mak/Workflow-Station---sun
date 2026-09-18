@@ -52,30 +52,31 @@ describe('AiStudioDocSyncCard', () => {
       phases: ['TABLE_DESIGN'],
       changeSummary: 'Added the orders table.',
       documents: {
-        REQUIREMENTS: { fromVersion: 3, toVersion: 3 },
-        DESIGN: { fromVersion: 2, toVersion: 3 }
+        REQUIREMENTS: { fromVersion: 3, toVersion: 3, fromLabel: 'v1.3', toLabel: 'v1.3' },
+        DESIGN: { fromVersion: 2, toVersion: 3, fromLabel: 'v1.2', toLabel: 'v1.3' }
       }
     })
 
     expect(wrapper.text()).toContain('Documents updated')
     expect(wrapper.text()).toContain('Added the orders table.')
-    expect(wrapper.text()).toContain('v2 → v3')
+    expect(wrapper.text()).toContain('v1.2 → v1.3')
     expect(wrapper.text()).toContain('No changes')
     expect(buttons(wrapper)).toEqual(['View changes', 'Restore previous version', 'Open documents'])
 
     confirmMock.mockResolvedValue('confirm')
-    restoreMock.mockResolvedValue({ data: { version: 4 } })
+    restoreMock.mockResolvedValue({ data: { version: 4, majorVersion: 1, minorVersion: 4 } })
     await wrapper.findAll('button')[1].trigger('click')
     await flushPromises()
 
     expect(restoreMock).toHaveBeenCalledWith(7, 'DESIGN', 2, 3)
-    expect(ElMessage.success).toHaveBeenCalledWith('Restored v2 as v4')
+    expect(ElMessage.success).toHaveBeenCalledWith('Restored v1.2 as v1.4')
     expect(wrapper.emitted('restored')).toHaveLength(1)
   })
 
   it('a later edit makes "restore previous" a conflict instead of overwriting it', async () => {
     const wrapper = mountCard({
-      status: 'UPDATED', phases: [], documents: { DESIGN: { fromVersion: 1, toVersion: 2 } }
+      status: 'UPDATED', phases: [],
+      documents: { DESIGN: { fromVersion: 1, toVersion: 2, fromLabel: 'v1.1', toLabel: 'v1.2' } }
     })
     confirmMock.mockResolvedValue('confirm')
     restoreMock.mockRejectedValue({ response: { status: 409 } })
@@ -90,7 +91,7 @@ describe('AiStudioDocSyncCard', () => {
   it('shows who blocked the update and offers a re-check', async () => {
     const wrapper = mountCard({
       status: 'SKIPPED', phases: ['FORM_DESIGN'],
-      documents: { DESIGN: { fromVersion: 1, toVersion: 2, blockedBy: 'bob' } }
+      documents: { DESIGN: { fromVersion: 1, toVersion: 2, toLabel: 'v1.2', blockedBy: 'bob' } }
     })
 
     expect(wrapper.text()).toContain('bob edited it during the update')
@@ -114,7 +115,8 @@ describe('AiStudioDocSyncCard', () => {
     expect(buttons(unknown)).toEqual(['Retry'])
 
     const updated = mountCard({
-      status: 'UPDATED', phases: [], documents: { DESIGN: { fromVersion: 1, toVersion: 2 } }
+      status: 'UPDATED', phases: [],
+      documents: { DESIGN: { fromVersion: 1, toVersion: 2, fromLabel: 'v1.1', toLabel: 'v1.2' } }
     }, false)
     expect(updated.text()).toContain('Full check')
     expect(buttons(updated)).toEqual(['View changes', 'Open documents'])

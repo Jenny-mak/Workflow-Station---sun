@@ -101,7 +101,8 @@ public class FunctionUnitIconPropertyTest {
                 mock(com.developer.repository.EmailMonitorRuleRepository.class),
                 mock(com.developer.repository.EmailTemplateRepository.class),
                 new com.developer.service.impl.FunctionUnitDocumentService(
-                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class),
+                org.mockito.Mockito.mock(com.developer.repository.AiStudioThreadStateRepository.class)));
         
         // Create function unit with icon
         FunctionUnitRequest request = new FunctionUnitRequest();
@@ -168,7 +169,8 @@ public class FunctionUnitIconPropertyTest {
                 mock(com.developer.repository.EmailMonitorRuleRepository.class),
                 mock(com.developer.repository.EmailTemplateRepository.class),
                 new com.developer.service.impl.FunctionUnitDocumentService(
-                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class),
+                org.mockito.Mockito.mock(com.developer.repository.AiStudioThreadStateRepository.class)));
         
         // Create function unit without icon
         FunctionUnitRequest request = new FunctionUnitRequest();

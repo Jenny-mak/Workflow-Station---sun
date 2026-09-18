@@ -61,7 +61,7 @@ class AiStudioDocumentSyncServiceTest {
 
     private static AiDocument doc(AiDocumentType type, int version, String content, String by) {
         return AiDocument.builder().functionUnitId(1L).documentType(type).version(version).content(content)
-                .createdBy(by).build();
+                .majorVersion(1).minorVersion(version).createdBy(by).build();
     }
 
     @SuppressWarnings("unchecked")
@@ -97,8 +97,10 @@ class AiStudioDocumentSyncServiceTest {
         assertEquals("UPDATED", sync.get("status"));
         assertEquals("Added an open question.", sync.get("changeSummary"));
         Map<String, Object> docs = (Map<String, Object>) sync.get("documents");
-        assertEquals(Map.of("fromVersion", 2, "toVersion", 3), docs.get("REQUIREMENTS"));
-        assertEquals(Map.of("fromVersion", 0, "toVersion", 0), docs.get("DESIGN"));
+        assertEquals(Map.of("fromVersion", 2, "toVersion", 3, "fromLabel", "v1.2", "toLabel", "v1.3"),
+                docs.get("REQUIREMENTS"));
+        assertEquals(Map.of("fromVersion", 0, "toVersion", 0), docs.get("DESIGN"),
+                "no document yet: no version labels either");
         assertEquals(List.of(AiStudioThreadEvent.DOC_SYNC_STARTED, AiStudioThreadEvent.DOC_SYNC_FINISHED),
                 events.stream().map(AiStudioThreadEvent::type).toList());
         assertFalse(service.isRunning(1L));
@@ -129,6 +131,7 @@ class AiStudioDocumentSyncServiceTest {
         assertEquals("SKIPPED", sync.get("status"));
         Map<String, Object> design = (Map<String, Object>) ((Map<String, Object>) sync.get("documents")).get("DESIGN");
         assertEquals("u-bob", design.get("blockedBy"));
+        assertEquals("v1.1", design.get("toLabel"), "the card shows the version the manual save produced");
     }
 
     @Test

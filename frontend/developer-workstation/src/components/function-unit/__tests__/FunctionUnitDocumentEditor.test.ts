@@ -29,8 +29,8 @@ const confirmMock = ElMessageBox.confirm as unknown as ReturnType<typeof vi.fn>
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 
 const doc = (version: number, content: string) => ({
-  documentType: 'REQUIREMENTS', version, content, summary: 'Manual edit', createdBy: 'alice',
-  createdAt: '2026-09-17T00:00:00Z'
+  documentType: 'REQUIREMENTS', version, majorVersion: 1, minorVersion: version, content,
+  summary: 'MANUAL', createdBy: 'alice', createdAt: '2026-09-17T00:00:00Z'
 })
 
 const conflict = { response: { status: 409, data: { error: { message: 'changed' } } } }
@@ -81,7 +81,9 @@ describe('FunctionUnitDocumentEditor', () => {
     await flushPromises()
 
     expect(api.save).toHaveBeenCalledWith(7, 'REQUIREMENTS', 'new', 2)
-    expect(ElMessage.success).toHaveBeenCalledWith('Document saved as v3')
+    expect(ElMessage.success).toHaveBeenCalledWith('Document saved as v1.3')
+    expect(wrapper.text()).toContain('v1.3 · alice')
+    expect(wrapper.text()).toContain('Manual edit')
     expect((wrapper.vm as unknown as { isDirty: boolean }).isDirty).toBe(false)
   })
 

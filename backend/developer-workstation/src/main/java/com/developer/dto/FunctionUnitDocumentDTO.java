@@ -19,7 +19,11 @@ import java.time.Instant;
 public class FunctionUnitDocumentDTO {
 
     private AiDocumentType documentType;
+    /** 内部序号（保存时回传为 baseVersion、恢复与对比都用它） */
     private Integer version;
+    /** 显示用：v{majorVersion}.{minorVersion} */
+    private Integer majorVersion;
+    private Integer minorVersion;
     private String content;
     /** 版本来源代码（MANUAL / AI_SYNC:… / RESTORED:… / ROLLBACK:… / IMPORTED / CLONED），见 FunctionUnitDocumentService */
     private String summary;
@@ -30,6 +34,8 @@ public class FunctionUnitDocumentDTO {
         return FunctionUnitDocumentDTO.builder()
                 .documentType(document.getDocumentType())
                 .version(document.getVersion())
+                .majorVersion(document.getMajorVersion())
+                .minorVersion(document.getMinorVersion())
                 .content(withContent ? document.getContent() : null)
                 .summary(document.getSummary())
                 .createdBy(document.getCreatedBy())

@@ -94,7 +94,8 @@ class FunctionUnitCloneFieldMetadataTest {
                 mock(com.developer.repository.EmailMonitorRuleRepository.class),
                 mock(com.developer.repository.EmailTemplateRepository.class),
                 new com.developer.service.impl.FunctionUnitDocumentService(
-                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class),
+                org.mockito.Mockito.mock(com.developer.repository.AiStudioThreadStateRepository.class)));
     }
 
     @Test

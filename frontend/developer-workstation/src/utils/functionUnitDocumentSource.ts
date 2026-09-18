@@ -1,5 +1,18 @@
 import type { ComposerTranslation } from 'vue-i18n'
+import type { FunctionUnitDocument } from '@/api/functionUnitDocument'
 import { AI_STUDIO_PHASES, aiStudioPhaseLabel, type AiStudioPhase } from './aiStudioDraft'
+
+/**
+ * 文档版本号：v{大版本}.{小版本}。大版本只在"开始新的 AI 设计"后进位，其余保存都只加小版本。
+ * 老接口（没有这两个字段）回落到内部序号。
+ */
+export function documentVersionLabel(
+  doc: Pick<FunctionUnitDocument, 'version' | 'majorVersion' | 'minorVersion'> | null | undefined
+): string {
+  if (!doc) return ''
+  if (doc.majorVersion == null || doc.minorVersion == null) return `v${doc.version}`
+  return `v${doc.majorVersion}.${doc.minorVersion}`
+}
 
 /**
  * 文档版本来源（后端 summary 列，见 FunctionUnitDocumentService.SUMMARY_*）→ 界面文案。

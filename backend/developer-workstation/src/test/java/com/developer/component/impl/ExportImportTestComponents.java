@@ -36,7 +36,8 @@ public final class ExportImportTestComponents {
     /** 没有任何文档的文档服务（仓库全部返回空）。 */
     static com.developer.service.impl.FunctionUnitDocumentService documentService() {
         return new com.developer.service.impl.FunctionUnitDocumentService(
-                Mockito.mock(com.developer.repository.AiDocumentRepository.class));
+                Mockito.mock(com.developer.repository.AiDocumentRepository.class),
+                Mockito.mock(com.developer.repository.AiStudioThreadStateRepository.class));
     }
 
     public static FunctionUnitExporter exporter(

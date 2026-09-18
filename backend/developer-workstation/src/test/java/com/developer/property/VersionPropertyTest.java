@@ -43,7 +43,8 @@ public class VersionPropertyTest {
                 mock(com.developer.repository.ProcessDefinitionRepository.class),
                 mock(jakarta.persistence.EntityManager.class),
                 new com.developer.service.impl.FunctionUnitDocumentService(
-                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class)));
+                org.mockito.Mockito.mock(com.developer.repository.AiDocumentRepository.class),
+                org.mockito.Mockito.mock(com.developer.repository.AiStudioThreadStateRepository.class)));
         
         assertThat(component).isNotNull();
         assertThat(versionNumber).matches("\\d+\\.\\d+\\.\\d+");

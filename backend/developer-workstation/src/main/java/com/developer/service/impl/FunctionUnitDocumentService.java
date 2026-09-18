@@ -1,10 +1,12 @@
 package com.developer.service.impl;
 
 import com.developer.entity.AiDocument;
+import com.developer.entity.AiStudioThreadState;
 import com.developer.enums.AiDocumentType;
 import com.developer.exception.DeveloperBusinessException;
 import com.developer.exception.ResourceNotFoundException;
 import com.developer.repository.AiDocumentRepository;
+import com.developer.repository.AiStudioThreadStateRepository;
 import com.developer.util.PgText;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -42,7 +44,7 @@ public class FunctionUnitDocumentService {
     public static final String SUMMARY_MANUAL = "MANUAL";
     public static final String SUMMARY_IMPORTED = "IMPORTED";
     public static final String SUMMARY_CLONED = "CLONED";
-    /** {@code RESTORED:<文档版本号>} */
+    /** {@code RESTORED:<major>.<minor>} */
     public static final String SUMMARY_RESTORED_PREFIX = "RESTORED:";
     /** {@code ROLLBACK:<功能单元版本号>} */
     public static final String SUMMARY_ROLLBACK_PREFIX = "ROLLBACK:";
@@ -58,9 +60,47 @@ public class FunctionUnitDocumentService {
             AiDocumentType.DESIGN, "documents/design.md");
 
     private final AiDocumentRepository repository;
+    private final AiStudioThreadStateRepository threadStateRepository;
 
-    public FunctionUnitDocumentService(AiDocumentRepository repository) {
+    public FunctionUnitDocumentService(AiDocumentRepository repository,
+                                       AiStudioThreadStateRepository threadStateRepository) {
         this.repository = repository;
+        this.threadStateRepository = threadStateRepository;
+    }
+
+    /** 当前设计轮次（主版本）；没有 AI Studio 进度记录时是第 1 轮。 */
+    @Transactional(readOnly = true)
+    public int currentMajor(Long functionUnitId) {
+        return threadStateRepository.findById(functionUnitId)
+                .map(AiStudioThreadState::getDocumentMajor)
+                .orElse(1);
+    }
+
+    /**
+     * 开始新一轮设计（AI Studio 的 "Start a new AI design"）：主版本 +1，下一次保存就是 v{major}.1。
+     * 还没有任何文档时不进位——否则第一份文档会从 v2.1 开始。
+     *
+     * @return 新的当前轮次
+     */
+    @Transactional
+    public int startNewRound(Long functionUnitId) {
+        int current = currentMajor(functionUnitId);
+        if (latestContents(functionUnitId).isEmpty()) {
+            return current;
+        }
+        AiStudioThreadState state = threadStateRepository.findById(functionUnitId)
+                .orElseGet(() -> AiStudioThreadState.builder().functionUnitId(functionUnitId).build());
+        state.setDocumentMajor(current + 1);
+        state.setUpdatedAt(java.time.Instant.now());
+        threadStateRepository.save(state);
+        log.info("Function unit documents start a new design round: functionUnitId={}, major={}",
+                functionUnitId, current + 1);
+        return current + 1;
+    }
+
+    /** 显示用版本标签 v{major}.{minor}。 */
+    public static String label(AiDocument document) {
+        return "v" + document.getMajorVersion() + "." + document.getMinorVersion();
     }
 
     @Transactional(readOnly = true)
@@ -155,7 +195,7 @@ public class FunctionUnitDocumentService {
     public AiDocument restore(Long functionUnitId, AiDocumentType type, int version, int baseVersion, String userId) {
         AiDocument source = version(functionUnitId, type, version);
         return append(functionUnitId, type, source.getContent(), baseVersion,
-                SUMMARY_RESTORED_PREFIX + version, userId);
+                SUMMARY_RESTORED_PREFIX + source.getMajorVersion() + "." + source.getMinorVersion(), userId);
     }
 
     /**
@@ -181,17 +221,25 @@ public class FunctionUnitDocumentService {
      */
     private AiDocument insert(Long functionUnitId, AiDocumentType type, int version, String content,
                               String summary, String userId) {
+        int major = currentMajor(functionUnitId);
+        // 本轮内的序号：同一轮里上一条 +1，本轮第一条从 1 开始
+        int minor = latest(functionUnitId, type)
+                .filter(previous -> previous.getMajorVersion() == major)
+                .map(previous -> previous.getMinorVersion() + 1)
+                .orElse(1);
         try {
             AiDocument saved = repository.saveAndFlush(AiDocument.builder()
                     .functionUnitId(functionUnitId)
                     .documentType(type)
                     .version(version)
+                    .majorVersion(major)
+                    .minorVersion(minor)
                     .content(content)
                     .summary(summary)
                     .createdBy(userId)
                     .build());
-            log.info("Function unit document saved: functionUnitId={}, type={}, version={}, summary={}",
-                    functionUnitId, type, version, summary);
+            log.info("Function unit document saved: functionUnitId={}, type={}, version={}, label=v{}.{}, summary={}",
+                    functionUnitId, type, version, major, minor, summary);
             return saved;
         } catch (DataIntegrityViolationException e) {
             // uk_ai_document_version：并发保存时后到的一方

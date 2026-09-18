@@ -59,6 +59,12 @@ public class FunctionUnitDocumentComponentImpl implements FunctionUnitDocumentCo
     }
 
     @Override
+    public int startNewRound(Long functionUnitId) {
+        accessService.assertCanAccess(functionUnitId, WorkspaceAccessAction.MODIFY);
+        return documentService.startNewRound(functionUnitId);
+    }
+
+    @Override
     public FunctionUnitDocumentDTO restore(Long functionUnitId, AiDocumentType type, int version, int baseVersion) {
         accessService.assertCanAccess(functionUnitId, WorkspaceAccessAction.MODIFY);
         String userId = AiStudioThreadComponentImpl.currentAuthor(null).userId();

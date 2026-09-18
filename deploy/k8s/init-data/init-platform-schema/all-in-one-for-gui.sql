@@ -4469,3 +4469,18 @@ CREATE INDEX IF NOT EXISTS idx_dw_ai_studio_jobs_status
 
 COMMENT ON TABLE dw_ai_studio_proposal_jobs IS
     'AI Studio copilot proposal jobs (status + result); no credentials are stored';
+
+-- =====================================================
+-- Function unit document major.minor versions (see init-scripts/00-schema/85-*)
+-- =====================================================
+ALTER TABLE dw_ai_documents ADD COLUMN IF NOT EXISTS major_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE dw_ai_documents ADD COLUMN IF NOT EXISTS minor_version INTEGER;
+UPDATE dw_ai_documents SET minor_version = version WHERE minor_version IS NULL;
+ALTER TABLE dw_ai_documents ALTER COLUMN minor_version SET NOT NULL;
+ALTER TABLE dw_ai_documents ALTER COLUMN minor_version SET DEFAULT 1;
+COMMENT ON COLUMN dw_ai_documents.major_version IS 'Design round; advances only when a new AI design is started';
+COMMENT ON COLUMN dw_ai_documents.minor_version IS 'Version within the design round, starting at 1 (shown as v<major>.<minor>)';
+
+ALTER TABLE dw_ai_studio_thread_states ADD COLUMN IF NOT EXISTS document_major INTEGER NOT NULL DEFAULT 1;
+COMMENT ON COLUMN dw_ai_studio_thread_states.document_major IS
+    'Current design round for this function unit''s documents; +1 when a new AI design is started';

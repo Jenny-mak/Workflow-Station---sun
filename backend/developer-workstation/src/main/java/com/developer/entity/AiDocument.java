@@ -33,8 +33,19 @@ public class AiDocument {
     @Column(name = "document_type", nullable = false, length = 20)
     private AiDocumentType documentType;
 
+    /** 内部序号：接口路径、保存时的版本比对都用它 */
     @Column(name = "version", nullable = false)
     private Integer version;
+
+    /** 设计轮次；只有"开始新的 AI 设计"才 +1（界面显示 v{major}.{minor}） */
+    @Column(name = "major_version", nullable = false)
+    @Builder.Default
+    private Integer majorVersion = 1;
+
+    /** 本轮内的序号，从 1 开始 */
+    @Column(name = "minor_version", nullable = false)
+    @Builder.Default
+    private Integer minorVersion = 1;
 
     @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;

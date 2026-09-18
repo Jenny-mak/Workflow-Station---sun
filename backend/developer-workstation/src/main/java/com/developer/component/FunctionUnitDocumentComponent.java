@@ -22,4 +22,11 @@ public interface FunctionUnitDocumentComponent {
     FunctionUnitDocumentDTO save(Long functionUnitId, AiDocumentType type, String content, int baseVersion);
 
     FunctionUnitDocumentDTO restore(Long functionUnitId, AiDocumentType type, int version, int baseVersion);
+
+    /**
+     * 开始新一轮设计（AI Studio 的 "Start a new AI design"）：下一次保存进入新的主版本。
+     *
+     * @return 新的当前轮次
+     */
+    int startNewRound(Long functionUnitId);
 }

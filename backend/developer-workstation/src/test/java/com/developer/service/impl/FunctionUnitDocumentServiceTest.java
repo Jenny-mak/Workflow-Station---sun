@@ -1,9 +1,11 @@
 package com.developer.service.impl;
 
 import com.developer.entity.AiDocument;
+import com.developer.entity.AiStudioThreadState;
 import com.developer.enums.AiDocumentType;
 import com.developer.exception.DeveloperBusinessException;
 import com.developer.repository.AiDocumentRepository;
+import com.developer.repository.AiStudioThreadStateRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -27,6 +29,7 @@ import static org.mockito.Mockito.mock;
 class FunctionUnitDocumentServiceTest {
 
     private final List<AiDocument> rows = new ArrayList<>();
+    private final Map<Long, AiStudioThreadState> states = new java.util.HashMap<>();
     private FunctionUnitDocumentService service;
     private boolean nextInsertCollides;
 
@@ -49,7 +52,15 @@ class FunctionUnitDocumentServiceTest {
             rows.add(d);
             return d;
         });
-        service = new FunctionUnitDocumentService(repo);
+        AiStudioThreadStateRepository stateRepo = mock(AiStudioThreadStateRepository.class);
+        lenient().when(stateRepo.findById(anyLong()))
+                .thenAnswer(inv -> java.util.Optional.ofNullable(states.get(inv.<Long>getArgument(0))));
+        lenient().when(stateRepo.save(any(AiStudioThreadState.class))).thenAnswer(inv -> {
+            AiStudioThreadState state = inv.getArgument(0);
+            states.put(state.getFunctionUnitId(), state);
+            return state;
+        });
+        service = new FunctionUnitDocumentService(repo, stateRepo);
     }
 
     private List<AiDocument> rows(Long fu, AiDocumentType type) {
@@ -69,6 +80,41 @@ class FunctionUnitDocumentServiceTest {
                 .map(AiDocument::getVersion).toList());
         assertEquals(0, service.currentVersion(1L, AiDocumentType.DESIGN));
         assertEquals(Map.of(AiDocumentType.REQUIREMENTS, "v2"), service.latestContents(1L));
+    }
+
+    @Test
+    void versionsAreMinorWithinTheSameDesignRound() {
+        service.append(1L, AiDocumentType.REQUIREMENTS, "a", 0, "MANUAL", "u1");
+        AiDocument second = service.append(1L, AiDocumentType.REQUIREMENTS, "b", 1, "MANUAL", "u1");
+
+        assertEquals("v1.1", FunctionUnitDocumentService.label(service.version(1L, AiDocumentType.REQUIREMENTS, 1)));
+        assertEquals("v1.2", FunctionUnitDocumentService.label(second));
+        assertEquals(2, second.getVersion(), "the internal sequence keeps counting");
+    }
+
+    @Test
+    void aNewDesignRoundStartsTheNextMajorAtMinorOne() {
+        service.append(1L, AiDocumentType.REQUIREMENTS, "a", 0, "MANUAL", "u1");
+        service.append(1L, AiDocumentType.DESIGN, "d", 0, "MANUAL", "u1");
+
+        assertEquals(2, service.startNewRound(1L));
+        assertEquals(2, service.currentMajor(1L));
+
+        assertEquals("v2.1", FunctionUnitDocumentService.label(
+                service.append(1L, AiDocumentType.REQUIREMENTS, "b", 1, "MANUAL", "u1")));
+        assertEquals("v2.2", FunctionUnitDocumentService.label(
+                service.append(1L, AiDocumentType.REQUIREMENTS, "c", 2, "MANUAL", "u1")));
+        // 另一份文档同一轮，独立计小版本
+        assertEquals("v2.1", FunctionUnitDocumentService.label(
+                service.append(1L, AiDocumentType.DESIGN, "d2", 1, "MANUAL", "u1")));
+    }
+
+    @Test
+    void withoutAnyDocumentTheRoundStaysAtOne() {
+        assertEquals(1, service.startNewRound(1L));
+
+        assertEquals("v1.1", FunctionUnitDocumentService.label(
+                service.append(1L, AiDocumentType.REQUIREMENTS, "first", 0, "MANUAL", "u1")));
     }
 
     @Test
@@ -106,7 +152,7 @@ class FunctionUnitDocumentServiceTest {
 
         assertEquals(3, restored.getVersion());
         assertEquals("first", restored.getContent());
-        assertEquals("RESTORED:1", restored.getSummary());
+        assertEquals("RESTORED:1.1", restored.getSummary(), "the source is named by its display label");
         assertThrows(DeveloperBusinessException.class, () -> service.restore(1L, AiDocumentType.DESIGN, 1, 2, "u2"));
     }
 
