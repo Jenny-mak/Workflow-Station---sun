@@ -60,6 +60,7 @@
         name="deployments"
       >
         <FunctionUnitDeploymentsTab
+          v-model:search-keyword="deploymentSearchKeyword"
           :grid="deployGrid"
           :loading="deploymentsLoading"
           @fetch="fetchDeployments"
@@ -227,6 +228,7 @@ const {
   versionList,
   searchKeyword,
   archiveSearchKeyword,
+  deploymentSearchKeyword,
   selectedUnits,
   listGrid,
   archiveGrid,

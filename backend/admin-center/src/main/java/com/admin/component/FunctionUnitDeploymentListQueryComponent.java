@@ -51,6 +51,7 @@ public class FunctionUnitDeploymentListQueryComponent {
         ListFilterSql filterSql = FunctionUnitDeploymentColumnSpec.sql();
         List<Object> params = new ArrayList<>();
         StringBuilder where = new StringBuilder(FROM);
+        appendKeyword(where, params, request.keyword());
         where.append(filterSql.whereClause(request.filters(), params));
 
         ResultSetExtractor<Long> countExtractor = rs -> rs.next() ? rs.getLong(1) : 0L;
@@ -109,6 +110,25 @@ public class FunctionUnitDeploymentListQueryComponent {
                 row.setDeployedBy(userReferenceResolver.resolveWithCache(row.getDeployedBy(), cache));
             }
         }
+    }
+
+    static void appendKeyword(StringBuilder where, List<Object> params, String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return;
+        }
+        String like = "%" + ListFilterSql.escapeLike(keyword.trim()) + "%";
+        where.append("""
+                 AND (
+                   fu.name ILIKE ?
+                   OR fu.code ILIKE ?
+                   OR COALESCE(fu.version, '') ILIKE ?
+                   OR CAST(d.status AS TEXT) ILIKE ?
+                 )
+                """);
+        params.add(like);
+        params.add(like);
+        params.add(like);
+        params.add(like);
     }
 
 

@@ -3,6 +3,28 @@
     v-loading="loading"
     class="permission-shared-list"
   >
+    <div class="list-grid-toolbar">
+      <el-input
+        v-model="permissionKeyword"
+        :placeholder="t('common.search')"
+        clearable
+        style="width: 240px;"
+        @keydown.enter.prevent="runSearch"
+        @clear="runSearch"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
+      <el-button
+        type="primary"
+        :icon="Download"
+        @click="handleExport"
+      >
+        {{ t('common.export') }}
+      </el-button>
+    </div>
+
     <div
       ref="gridScrollRef"
       class="list-data-grid-scroll"
@@ -21,6 +43,7 @@
           :class="{ 'list-data-grid--fit': gridFits }"
           scrollbar-always-on
           :height="gridTableHeight || '100%'"
+          @selection-change="handleGridSelectionChange"
         >
           <template #empty>
             <div
@@ -34,6 +57,10 @@
             </div>
             <span v-else>{{ emptyText }}</span>
           </template>
+          <el-table-column
+            type="selection"
+            :width="selectionColumnWidth"
+          />
           <el-table-column
             v-for="(col, colIndex) in visibleColumns"
             :key="col.field"
@@ -60,7 +87,7 @@
               />
             </template>
             <template #default="{ row }">
-<el-tag
+              <el-tag
                 v-if="col.field === 'requestType'"
                 :type="getRequestTypeTag(row.requestType)"
                 size="small"
@@ -112,31 +139,31 @@
           >
             <template #default="{ row }">
               <div class="row-actions">
+                <el-button
+                  v-if="actionMode === 'cancel' && canCancelAsBeneficiary(row)"
+                  type="danger"
+                  size="small"
+                  link
+                  @click="emit('cancel', row)"
+                >
+                  {{ t('permission.cancelRequest') }}
+                </el-button>
+                <template v-if="actionMode === 'approve'">
                   <el-button
-                    v-if="actionMode === 'cancel' && canCancelAsBeneficiary(row)"
+                    type="success"
+                    size="small"
+                    @click="emit('approve', row)"
+                  >
+                    {{ t('permission.approve') }}
+                  </el-button>
+                  <el-button
                     type="danger"
                     size="small"
-                    link
-                    @click="emit('cancel', row)"
+                    @click="emit('reject', row)"
                   >
-                    {{ t('permission.cancelRequest') }}
+                    {{ t('permission.reject') }}
                   </el-button>
-                  <template v-if="actionMode === 'approve'">
-                    <el-button
-                      type="success"
-                      size="small"
-                      @click="emit('approve', row)"
-                    >
-                      {{ t('permission.approve') }}
-                    </el-button>
-                    <el-button
-                      type="danger"
-                      size="small"
-                      @click="emit('reject', row)"
-                    >
-                      {{ t('permission.reject') }}
-                    </el-button>
-                  </template>
+                </template>
               </div>
             </template>
           </el-table-column>
@@ -167,7 +194,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Download, Loading, Search } from '@element-plus/icons-vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -198,11 +225,6 @@ const SCOPE_FIELDS: Record<PermissionListScope, string[]> = {
   ],
 }
 
-// 目前没有引用点：usePortalListGrid 没有「每列默认宽度」这个入口（to-claim.vue 里
-// 那个 defaultWidthOf 选项同样不存在，见 issue）。这份宽度表是随 PR #127 一起进来的、
-// 等待接线的配置，不是写错的死代码 —— 故保留并显式标注，不删。
-// 待 usePortalListGrid 支持默认宽度后，把它接到 widthOf 的回退上。
-// @ts-expect-error -- 有意保留的未接线配置，见上方说明
 const COL_WIDTHS: Record<string, number> = {
   requestType: 160,
   targetName: 160,
@@ -237,6 +259,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const loading = ref(false)
+const permissionKeyword = ref('')
 const {
   getStatusType,
   getStatusLabel,
@@ -249,7 +272,6 @@ const {
   canCancelAsBeneficiary,
 } = usePermissionFormatters(t)
 
-const actionColumns = computed(() => (props.actionMode === 'none' ? 0 : 1))
 const actionColWidth = computed(() => {
   if (props.actionMode === 'approve') return 180
   if (props.actionMode === 'cancel') return 100
@@ -269,12 +291,16 @@ const {
   gridFits,
   gridTableHeight,
   gridInnerStyle,
+  selectionColumnWidth,
   widthOf,
   setWidth,
   persistWidths,
   beginQuery,
   isCurrentQuery,
   applyPage,
+  handleGridSelectionChange,
+  setQuickFilter,
+  exportGridCsv,
   buildQuery,
   moveColumn,
   openFilter,
@@ -285,6 +311,8 @@ const {
 } = usePortalListGrid<PermissionRequestRecord>({
   storageKey: props.storageKey,
   extraWidth: actionColWidth,
+  selection: true,
+  defaultWidthOf: (field) => COL_WIDTHS[field],
 })
 
 const visibleColumns = computed<ListColumnMeta[]>(() => {
@@ -343,10 +371,20 @@ function onFilterClear() {
   onClearFilter(filterDialog.field)
 }
 
+function runSearch() {
+  setQuickFilter('targetName', permissionKeyword.value)
+  void load()
+}
+
+function handleExport() {
+  exportGridCsv(`permissions-${props.scope.toLowerCase()}`, visibleColumns.value)
+}
+
 watch(
   () => [props.scope, props.enabled] as const,
   () => {
-    pagination.page = 1
+    permissionKeyword.value = ''
+    setQuickFilter('targetName', '')
     load()
   },
 )

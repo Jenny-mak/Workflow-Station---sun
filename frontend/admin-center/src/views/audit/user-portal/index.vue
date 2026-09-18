@@ -151,6 +151,7 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
             <template #empty>
               <el-empty :description="t('upAudit.emptyText')">
@@ -162,6 +163,11 @@
                 </el-button>
               </el-empty>
             </template>
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               v-for="(col, colIndex) in displayColumns"
               :key="col.field"
@@ -315,6 +321,8 @@ const {
   ACTIONS_COL_WIDTH,
   displayColumns,
   displayRows,
+  selectionColumnWidth,
+  handleGridSelectionChange,
   columnFilters,
   sort,
   filterDialog,

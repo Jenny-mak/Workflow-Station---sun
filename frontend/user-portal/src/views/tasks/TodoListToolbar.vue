@@ -55,12 +55,19 @@
     >
       {{ t('common.reset') }}
     </el-button>
+    <el-button
+      :icon="Download"
+      data-test="todo-export-btn"
+      @click="emit('export')"
+    >
+      {{ t('common.export') }}
+    </el-button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Search } from '@element-plus/icons-vue'
+import { Download, Search } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 
 const props = withDefaults(defineProps<{
@@ -77,6 +84,7 @@ const emit = defineEmits<{
   'update:keyword': [value: string]
   search: []
   reset: []
+  export: []
 }>()
 
 const assignmentTypes = computed({

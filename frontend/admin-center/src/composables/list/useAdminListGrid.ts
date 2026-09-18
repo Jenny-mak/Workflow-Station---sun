@@ -1,7 +1,10 @@
-import { computed, reactive, ref, type MaybeRefOrGetter } from 'vue'
+import { computed, reactive, ref, toValue, type MaybeRefOrGetter } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ListColumnFilter, ListColumnMeta } from '@platform-shared/list/columnMeta'
 import { useListColumnLayout } from '@platform-shared/list/useListColumnLayout'
+import { exportTableCsv } from '@platform-shared/list/tableExport'
+
+export const ADMIN_LIST_SELECTION_WIDTH = 48
 
 export interface AdminListPagePayload<T> {
   columns: ListColumnMeta[]
@@ -21,6 +24,7 @@ export function useAdminListGrid<T extends object>(opts: {
   const columns = ref<ListColumnMeta[]>([])
   const columnOrder = ref<string[]>([])
   const rows = ref<T[]>([]) as { value: T[] }
+  const gridSelectedRows = ref<T[]>([]) as { value: T[] }
   const columnFilters = ref<Record<string, ListColumnFilter>>({})
   const sort = reactive<{ field: string | null; direction: 'ASC' | 'DESC' | null }>({
     field: null,
@@ -46,13 +50,16 @@ export function useAdminListGrid<T extends object>(opts: {
   })
 
   const displayRows = computed(() => rows.value)
+  const gridExtraWidth = computed(
+    () => toValue(opts.extraWidth ?? 0) + ADMIN_LIST_SELECTION_WIDTH,
+  )
 
   const layoutFields = computed(() => displayColumns.value.map((col) => col.field))
   const { gridScrollRef, gridFits, gridTableHeight, gridInnerStyle, widthOf, setWidth, persistWidths } =
     useListColumnLayout({
       storageKey: opts.storageKey,
       fields: layoutFields,
-      extraWidth: opts.extraWidth,
+      extraWidth: gridExtraWidth,
       labelOf: (field) => displayColumns.value.find((col) => col.field === field)?.label ?? field,
       kindOf: (field) => displayColumns.value.find((col) => col.field === field)?.kind,
     })
@@ -81,7 +88,29 @@ export function useAdminListGrid<T extends object>(opts: {
     columns.value = page.columns
     syncColumnOrderFromServer(page.columns)
     rows.value = page.content
+    gridSelectedRows.value = []
     pagination.total = page.totalElements
+  }
+
+  function handleGridSelectionChange(selection: T[]): void {
+    gridSelectedRows.value = selection
+  }
+
+  function setQuickFilter(field: string, value: string): void {
+    const next = { ...columnFilters.value }
+    const keyword = value.trim()
+    if (keyword) next[field] = { operator: 'contains', value: keyword }
+    else delete next[field]
+    columnFilters.value = next
+    resetPage()
+  }
+
+  function exportGridCsv(filename: string): void {
+    exportTableCsv({
+      rows: gridSelectedRows.value.length > 0 ? gridSelectedRows.value : rows.value,
+      columns: displayColumns.value,
+      filename,
+    })
   }
 
   function buildQuery(): {
@@ -195,6 +224,8 @@ export function useAdminListGrid<T extends object>(opts: {
     columns,
     displayColumns,
     displayRows,
+    gridSelectedRows,
+    selectionColumnWidth: ADMIN_LIST_SELECTION_WIDTH,
     columnFilters,
     sort,
     filterDialog,
@@ -211,6 +242,9 @@ export function useAdminListGrid<T extends object>(opts: {
     beginQuery,
     isCurrentQuery,
     applyPage,
+    handleGridSelectionChange,
+    setQuickFilter,
+    exportGridCsv,
     buildQuery,
     moveColumn,
     resetPage,

@@ -7,6 +7,9 @@
         clearable
         style="width: 300px;"
       />
+      <el-button @click="exportGridCsv('function-units')">
+        <el-icon><Download /></el-icon>{{ t('common.export') }}
+      </el-button>
       <template v-if="selectedUnits.length > 0">
         <span class="fu-selected">{{ t('functionUnit.selected', { count: selectedUnits.length }) }}</span>
         <el-button
@@ -48,7 +51,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -56,7 +58,7 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
-            @selection-change="handleSelectionChange"
+            @selection-change="onSelectionChange"
           >
             <el-table-column
               type="selection"
@@ -206,6 +208,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import type { ComponentPublicInstance, Ref } from 'vue'
+import { Download } from '@element-plus/icons-vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -255,6 +258,8 @@ const {
   clearSort,
   applyFilter,
   clearFilter,
+  handleGridSelectionChange,
+  exportGridCsv,
 } = props.grid
 
 const emit = defineEmits<{
@@ -275,6 +280,11 @@ const emit = defineEmits<{
 
 const searchKeyword = defineModel<string>('searchKeyword', { required: true })
 
+function onSelectionChange(rows: FunctionUnitRow[]) {
+  handleGridSelectionChange(rows)
+  emit('selection-change', rows)
+}
+
 function bindScrollRef(el: Element | ComponentPublicInstance | null) {
   const node = el instanceof Element ? el : el?.$el ?? null
   ;(props.grid.gridScrollRef as Ref<Element | null>).value =
@@ -283,9 +293,6 @@ function bindScrollRef(el: Element | ComponentPublicInstance | null) {
 
 function fetchRows() {
   emit('fetch')
-}
-function handleSelectionChange(rows: FunctionUnitRow[]) {
-  emit('selection-change', rows)
 }
 function handleBatchEnable() {
   emit('batch-enable')

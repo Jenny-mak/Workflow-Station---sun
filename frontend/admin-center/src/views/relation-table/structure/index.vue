@@ -48,6 +48,26 @@
         v-loading="loading"
         class="table-card"
       >
+        <div class="grid-toolbar">
+          <el-input
+            v-model="structureKeyword"
+            clearable
+            placeholder="Search..."
+            style="width: 240px"
+            @keyup.enter="runStructureSearch"
+            @clear="runStructureSearch"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+          <el-button type="primary" @click="runStructureSearch">
+            {{ t('common.search') }}
+          </el-button>
+          <el-button @click="exportGridCsv('relation-table-structures')">
+            <el-icon><Download /></el-icon>{{ t('common.export') }}
+          </el-button>
+        </div>
         <div
           ref="gridScrollRef"
           class="list-data-grid-scroll"
@@ -59,7 +79,6 @@
             <el-table
               :data="displayRows"
               stripe
-              border
               :fit="false"
               table-layout="fixed"
               scrollbar-always-on
@@ -67,7 +86,13 @@
               :class="{ 'list-data-grid--fit': gridFits }"
               :height="gridTableHeight || '100%'"
               style="width: 100%"
+              @selection-change="handleGridSelectionChange"
             >
+              <el-table-column
+                type="selection"
+                :width="selectionColumnWidth"
+                fixed="left"
+              />
               <el-table-column
                 v-for="(col, colIndex) in displayColumns"
                 :key="col.field"
@@ -241,10 +266,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onActivated } from 'vue'
+import { onMounted, onActivated, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Share, ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, Download, Plus, Search, Share } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { relationTableStatusType as statusTagType, formatDate } from '@/utils/format'
 import VersionDialog from './components/VersionDialog.vue'
@@ -284,6 +309,10 @@ const {
   ACTIONS_COL_WIDTH,
   displayColumns,
   displayRows,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
+  setQuickFilter,
   columnFilters,
   sort,
   filterDialog,
@@ -306,6 +335,13 @@ const {
   applySort,
   clearSort,
 } = useRelationTable()
+
+const structureKeyword = ref('')
+
+function runStructureSearch() {
+  setQuickFilter('displayName', structureKeyword.value)
+  void fetchTableList()
+}
 
 function groupLabel(group: { key: string; label: string | null }): string {
   if (group.key === COMMON_KEY) return t('relationTable.common')
@@ -404,11 +440,16 @@ onActivated(() => {
   flex: 1;
   min-width: 0;
   overflow: auto;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 4px;
   background: var(--el-bg-color);
   display: flex;
   flex-direction: column;
+}
+.grid-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
 }
 .action-cell {
   display: flex;

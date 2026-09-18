@@ -2,6 +2,9 @@
   <div class="page-container">
     <PageHeader :title="t('bi.dataViewAssignment.pageTitle')">
       <template #actions>
+        <el-button @click="exportAssignments">
+          <el-icon><Download /></el-icon>{{ t('common.export') }}
+        </el-button>
         <el-button
           type="primary"
           @click="openCreate"
@@ -63,8 +66,14 @@
       <el-table
         :data="rows"
         stripe
-        border
+        class="list-data-grid"
+        @selection-change="selectedRows = $event"
       >
+        <el-table-column
+          type="selection"
+          width="48"
+          fixed="left"
+        />
         <el-table-column
           prop="dashboardTitle"
           :label="t('bi.dataViewAssignment.colDashboard')"
@@ -154,23 +163,41 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Download, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { biManagementApi, type DataViewAssignmentResponse, type DataViewFunctionUnitOption } from '@/api/biManagement'
 import { notifyConfirm, notifyError, notifySuccess } from '@/utils/notify'
 import DataViewAssignmentFormDialog from './components/DataViewAssignmentFormDialog.vue'
+import { exportTableCsv } from '@platform-shared/list/tableExport'
+import type { ListColumnMeta } from '@platform-shared/list/columnMeta'
 
 const { t } = useI18n()
 const loading = ref(false)
 const rows = ref<DataViewAssignmentResponse[]>([])
+const selectedRows = ref<DataViewAssignmentResponse[]>([])
 const functionUnits = ref<DataViewFunctionUnitOption[]>([])
 const dialogVisible = ref(false)
 const dialogMode = ref<'create' | 'edit'>('create')
 const editingRow = ref<DataViewAssignmentResponse | null>(null)
 const query = reactive({ dashboardTitle: '', functionUnitId: undefined as number | undefined })
 const pagination = reactive({ page: 1, size: 20, total: 0 })
+const exportColumns = computed<ListColumnMeta[]>(() => [
+  { field: 'dashboardTitle', label: t('bi.dataViewAssignment.colDashboard'), kind: 'TEXT', filterable: false, sortable: false, operators: [] },
+  { field: 'functionUnitName', label: t('bi.dataViewAssignment.colTarget'), kind: 'TEXT', filterable: false, sortable: false, operators: [] },
+  { field: 'functionUnitCode', label: 'Function Unit Code', kind: 'TEXT', filterable: false, sortable: false, operators: [] },
+  { field: 'tableDisplayName', label: t('bi.dataViewAssignment.colTable'), kind: 'TEXT', filterable: false, sortable: false, operators: [] },
+  { field: 'tableName', label: 'Table Name', kind: 'TEXT', filterable: false, sortable: false, operators: [] },
+])
+
+function exportAssignments() {
+  exportTableCsv({
+    rows: selectedRows.value.length > 0 ? selectedRows.value : rows.value,
+    columns: exportColumns.value,
+    filename: 'bi-data-view-assignments',
+  })
+}
 
 async function load() {
   loading.value = true

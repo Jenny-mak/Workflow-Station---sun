@@ -1,5 +1,22 @@
 <template>
   <div>
+    <div class="fu-toolbar">
+      <el-input
+        v-model="deploymentKeyword"
+        clearable
+        placeholder="Search by function unit, version or status"
+        style="width: 360px"
+        @keyup.enter="runSearch"
+        @clear="runSearch"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
+      <el-button @click="exportGridCsv('function-unit-deployments')">
+        <el-icon><Download /></el-icon>{{ t('common.export') }}
+      </el-button>
+    </div>
     <el-card
       v-loading="loading"
       class="table-card"
@@ -15,7 +32,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -23,7 +39,13 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               v-for="(col, colIndex) in displayColumns"
               :key="col.field"
@@ -50,7 +72,7 @@
                 />
               </template>
               <template #default="{ row }">
-<el-tag
+                <el-tag
                   v-if="col.field === 'status'"
                   :type="deployStatusType(row.status)"
                 >
@@ -85,7 +107,9 @@
 </template>
 
 <script setup lang="ts">
-import type { ComponentPublicInstance, Ref } from 'vue'
+import { computed, type ComponentPublicInstance, type Ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { Download, Search } from '@element-plus/icons-vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -97,10 +121,23 @@ import type { Deployment } from '@/api/functionUnit'
 
 type ListGrid = ReturnType<typeof useAdminListGrid<Deployment>>
 
+const { t } = useI18n()
+
 const props = defineProps<{
   grid: ListGrid
   loading: boolean
+  searchKeyword: string
 }>()
+
+const emit = defineEmits<{
+  fetch: []
+  'update:searchKeyword': [value: string]
+}>()
+
+const deploymentKeyword = computed({
+  get: () => props.searchKeyword,
+  set: (value: string) => emit('update:searchKeyword', value),
+})
 
 const {
   displayColumns,
@@ -124,9 +161,16 @@ const {
   clearSort,
   applyFilter,
   clearFilter,
+  resetPage,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
 } = props.grid
 
-const emit = defineEmits<{ fetch: [] }>()
+function runSearch() {
+  resetPage()
+  emit('fetch')
+}
 
 function bindScrollRef(el: Element | ComponentPublicInstance | null) {
   const node = el instanceof Element ? el : el?.$el ?? null
@@ -154,3 +198,12 @@ function onFilterClear() {
   onClearFilter(filterDialog.field)
 }
 </script>
+
+<style scoped>
+.fu-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+</style>

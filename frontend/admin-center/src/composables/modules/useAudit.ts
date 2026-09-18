@@ -42,11 +42,11 @@ export function useAudit() {
   // ==================== Local State ====================
 
   const loading = storeLoading // alias for template compatibility
-  const SELECTION_COL_WIDTH = 40
+  const SELECTION_COL_WIDTH = 48
   const ACTIONS_COL_WIDTH = 80
   const grid = useAdminListGrid<AuditListRow>({
     storageKey: 'admin-list-layout:audit',
-    extraWidth: SELECTION_COL_WIDTH + ACTIONS_COL_WIDTH,
+    extraWidth: ACTIONS_COL_WIDTH,
   })
   const page = computed({
     get: () => grid.pagination.page,

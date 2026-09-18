@@ -45,6 +45,31 @@
   height: 100%;
 }
 
+/* Data View table language: horizontal row rules only, including fixed columns. */
+.list-data-grid.el-table {
+  --el-table-fixed-left-column: none;
+  --el-table-fixed-right-column: none;
+}
+
+.list-data-grid.el-table .el-table__cell {
+  border-right: none !important;
+}
+
+.list-data-grid .el-table-fixed-column--left.is-last-column::before,
+.list-data-grid .el-table-fixed-column--right.is-first-column::before {
+  display: none !important;
+  box-shadow: none !important;
+}
+
+.list-grid-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
 .list-data-grid .el-table__header-wrapper th:has(.list-col-header),
 .list-data-grid .el-table__header-wrapper th:has(.col-resize-handle) {
   position: relative;

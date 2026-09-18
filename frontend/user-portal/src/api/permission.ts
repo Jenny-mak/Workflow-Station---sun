@@ -430,7 +430,7 @@ export const permissionApi = {
     sortDirection?: 'ASC' | 'DESC'
     scope: 'MY_PENDING' | 'MY_COMPLETED' | 'APPROVALS_PENDING' | 'APPROVALS_HISTORY'
   }) {
-    return request.post<{ data: import('./task').PortalListPage<PermissionRequestRecord> }>(
+    return request.post<import('./task').PortalListPage<PermissionRequestRecord>>(
       '/permissions/requests/query',
       body,
     )

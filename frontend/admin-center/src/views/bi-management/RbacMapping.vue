@@ -2,6 +2,9 @@
   <div class="page-container">
     <PageHeader :title="t('bi.rbac.pageTitle')">
       <template #actions>
+        <el-button @click="exportGridCsv('bi-rbac-mappings')">
+          <el-icon><Download /></el-icon>{{ t('common.export') }}
+        </el-button>
         <el-button
           type="success"
           @click="showCreateDialog"
@@ -90,7 +93,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -98,7 +100,13 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               v-for="(col, colIndex) in displayColumns"
               :key="col.field"
@@ -230,7 +238,7 @@
 <script setup lang="ts">
 import { onMounted, onActivated } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Search, Refresh, Refresh as RefreshIcon } from '@element-plus/icons-vue'
+import { Download, Plus, Search, Refresh, Refresh as RefreshIcon } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { useBiRbac } from '@/composables/modules/useBiRbac'
 import { roleTypeKey } from '@/utils/format'
@@ -254,6 +262,9 @@ const {
   ACTIONS_COL_WIDTH,
   displayColumns,
   displayRows,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
   columnFilters,
   sort,
   filterDialog,

@@ -45,6 +45,23 @@
   height: 100%;
 }
 
+/* Match the portal Data View: horizontal row rules only. Selection and action
+ * columns may stay fixed, but must not draw a vertical rule or fixed-column shadow. */
+.list-data-grid.el-table {
+  --el-table-fixed-left-column: none;
+  --el-table-fixed-right-column: none;
+}
+
+.list-data-grid.el-table .el-table__cell {
+  border-right: none !important;
+}
+
+.list-data-grid .el-table-fixed-column--left.is-last-column::before,
+.list-data-grid .el-table-fixed-column--right.is-first-column::before {
+  display: none !important;
+  box-shadow: none !important;
+}
+
 .list-data-grid .el-table__header-wrapper th:has(.list-col-header),
 .list-data-grid .el-table__header-wrapper th:has(.col-resize-handle) {
   position: relative;

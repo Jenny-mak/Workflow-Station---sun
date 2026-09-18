@@ -8,6 +8,28 @@
       v-loading="loading"
       class="portal-card"
     >
+      <div class="list-grid-toolbar">
+        <el-input
+          v-model="completedKeyword"
+          :placeholder="t('common.search')"
+          clearable
+          style="width: 240px;"
+          @keydown.enter.prevent="runCompletedSearch"
+          @clear="runCompletedSearch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-button
+          type="primary"
+          :icon="Download"
+          @click="exportGridCsv('completed-tasks')"
+        >
+          {{ t('common.export') }}
+        </el-button>
+      </div>
+
       <div
         ref="gridScrollRef"
         class="list-data-grid-scroll"
@@ -26,6 +48,7 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
             <template #empty>
               <div
@@ -39,6 +62,10 @@
               </div>
               <span v-else>{{ t('task.noCompletedTasks') }}</span>
             </template>
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+            />
             <el-table-column
               v-for="(col, colIndex) in displayColumns"
               :key="col.field"
@@ -113,7 +140,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Download, Loading, Search } from '@element-plus/icons-vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -126,6 +153,7 @@ import { formatDate } from '@/utils/dateFormat'
 const { t } = useI18n()
 const router = useRouter()
 const loading = ref(true)
+const completedKeyword = ref('')
 
 const {
   displayColumns,
@@ -140,12 +168,16 @@ const {
   gridFits,
   gridTableHeight,
   gridInnerStyle,
+  selectionColumnWidth,
   widthOf,
   setWidth,
   persistWidths,
   beginQuery,
   isCurrentQuery,
   applyPage,
+  handleGridSelectionChange,
+  setQuickFilter,
+  exportGridCsv,
   buildQuery,
   moveColumn,
   openFilter,
@@ -155,6 +187,7 @@ const {
   clearSort,
 } = usePortalListGrid<TaskInfo>({
   storageKey: 'portal-list-layout:completed-tasks',
+  selection: true,
 })
 
 const loadTasks = async () => {
@@ -197,6 +230,11 @@ function onFilterApply(filter: ListColumnFilter) {
 
 function onFilterClear() {
   onClearFilter(filterDialog.field)
+}
+
+function runCompletedSearch() {
+  setQuickFilter('taskName', completedKeyword.value)
+  void loadTasks()
 }
 
 const viewTask = (task: TaskInfo) => {

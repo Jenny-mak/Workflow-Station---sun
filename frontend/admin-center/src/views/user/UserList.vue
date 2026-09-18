@@ -1,11 +1,12 @@
 <template>
   <div class="page-container">
     <PageHeader :title="t('menu.userList')">
-      <template
-        v-if="canWriteUser"
-        #actions
-      >
+      <template #actions>
+        <el-button @click="exportGridCsv('users')">
+          <el-icon><Download /></el-icon>{{ t('common.export') }}
+        </el-button>
         <el-button
+          v-if="canWriteUser"
           type="primary"
           @click="showCreateDialog"
         >
@@ -78,7 +79,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -86,7 +86,13 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               v-for="(col, colIndex) in displayColumns"
               :key="col.field"
@@ -252,7 +258,7 @@ import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Plus, Search, Refresh, MoreFilled,
-  CircleCheck, CircleClose, Unlock, Delete
+  CircleCheck, CircleClose, Unlock, Delete, Download
 } from '@element-plus/icons-vue'
 import { statusTagType, userStatusKey } from '@/utils/format'
 import { useUser } from '@/composables/modules/useUser'
@@ -288,6 +294,9 @@ const {
   ACTIONS_COL_WIDTH,
   displayColumns,
   displayRows,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
   columnFilters,
   sort,
   filterDialog,

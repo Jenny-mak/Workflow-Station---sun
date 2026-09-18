@@ -143,6 +143,7 @@ export function useTodoTasksPage() {
 
   const handleSelectionChange = (selection: TaskInfo[]) => {
     selectedTasks.value = selection
+    grid.handleGridSelectionChange(selection)
   }
 
   const selectedClaimableIds = computed(() =>

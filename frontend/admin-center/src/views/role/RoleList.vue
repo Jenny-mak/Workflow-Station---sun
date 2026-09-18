@@ -2,6 +2,9 @@
   <div class="page-container">
     <PageHeader :title="t('menu.roleList')">
       <template #actions>
+        <el-button @click="exportGridCsv('roles')">
+          <el-icon><Download /></el-icon>{{ t('common.export') }}
+        </el-button>
         <el-button
           v-if="canWriteRole && activeTab === 'CUSTOM'"
           type="primary"
@@ -28,6 +31,16 @@
       :model="query"
       class="search-form"
     >
+      <el-form-item>
+        <el-input
+          v-model="roleKeyword"
+          clearable
+          placeholder="Search role name"
+          style="width: 220px"
+          @keyup.enter="runSearch"
+          @clear="runSearch"
+        />
+      </el-form-item>
       <el-form-item :label="t('role.roleType')">
         <el-select
           v-model="query.type"
@@ -59,11 +72,11 @@
       <el-form-item>
         <el-button
           type="primary"
-          @click="handleSearch"
+          @click="runSearch"
         >
           {{ t('common.search') }}
         </el-button>
-        <el-button @click="handleReset">
+        <el-button @click="runReset">
           {{ t('common.reset') }}
         </el-button>
       </el-form-item>
@@ -90,7 +103,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -98,7 +110,13 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               v-for="(col, colIndex) in displayColumns"
               :key="col.field"
@@ -125,7 +143,7 @@
                 />
               </template>
               <template #default="{ row }">
-<el-tooltip
+                <el-tooltip
                   v-if="col.field === 'name'"
                   :content="row.displayName || '-'"
                   placement="top-start"
@@ -233,10 +251,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '@/components/PageHeader.vue'
-import { Lock, Plus } from '@element-plus/icons-vue'
+import { Download, Lock, Plus } from '@element-plus/icons-vue'
 import { roleTypeTagType, roleTypeKey } from '@/utils/format'
 import RoleFormDialog from './components/RoleFormDialog.vue'
 import RoleMembersDialog from './components/RoleMembersDialog.vue'
@@ -268,6 +286,10 @@ const {
   ACTIONS_COL_WIDTH,
   displayColumns,
   displayRows,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
+  setQuickFilter,
   columnFilters,
   sort,
   filterDialog,
@@ -290,6 +312,19 @@ const {
   applySort,
   clearSort,
 } = useRole()
+
+const roleKeyword = ref('')
+
+function runSearch() {
+  setQuickFilter('name', roleKeyword.value)
+  handleSearch()
+}
+
+function runReset() {
+  roleKeyword.value = ''
+  setQuickFilter('name', '')
+  handleReset()
+}
 
 function onSort(field: string, direction: 'ASC' | 'DESC') {
   applySort(field, direction)
@@ -326,6 +361,10 @@ onMounted(() => {
 <style scoped>
 .search-form {
   margin-bottom: 16px;
+}
+
+.search-form :deep(.el-form-item) {
+  margin-bottom: 0;
 }
 
 .row-actions {

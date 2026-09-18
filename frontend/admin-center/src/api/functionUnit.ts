@@ -203,6 +203,7 @@ export interface FunctionUnitListQuery {
 export interface FunctionUnitDeploymentListQuery {
   page: number
   size: number
+  keyword?: string
   filters?: Array<ListColumnFilter & { field: string }>
   sortField?: string
   sortDirection?: 'ASC' | 'DESC'

@@ -10,6 +10,7 @@ import java.util.List;
 public record FunctionUnitDeploymentListQueryRequest(
         int page,
         int size,
+        String keyword,
         List<ListColumnFilter> filters,
         String sortField,
         String sortDirection) {

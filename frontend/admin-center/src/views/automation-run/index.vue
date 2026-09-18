@@ -9,6 +9,9 @@
   <div class="page-container">
     <PageHeader :title="t('automationRun.title')">
       <template #actions>
+        <el-button @click="exportGridCsv('automation-runs')">
+          <el-icon><Download /></el-icon>{{ t('common.export') }}
+        </el-button>
         <el-button @click="loadRuns">
           <el-icon><Refresh /></el-icon>{{ t('common.refresh') }}
         </el-button>
@@ -52,7 +55,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -60,8 +62,14 @@
             :class="{ 'list-data-grid--fit': gridFits && !isCompact }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
-            @row-click="openRunDetail"
+            @row-click="onRowClick"
+            @selection-change="handleGridSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               v-for="(col, colIndex) in tableColumns"
               :key="col.field"
@@ -205,10 +213,12 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { Download, Refresh, Search } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { formatDate } from '@/utils/format'
 import { useAutomationFlowRun } from '@/composables/modules/useAutomationFlowRun'
+import type { AutomationFlowRunSummary } from '@/api/automationFlowRun'
+import type { TableColumnCtx } from 'element-plus'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -232,6 +242,9 @@ const {
   detailJson,
   openRunDetail,
   displayRows,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
   columnFilters,
   sort,
   filterDialog,
@@ -252,6 +265,10 @@ const {
   applySort,
   clearSort,
 } = useAutomationFlowRun()
+
+function onRowClick(row: AutomationFlowRunSummary, column: TableColumnCtx<AutomationFlowRunSummary>) {
+  if (column.type !== 'selection') void openRunDetail(row)
+}
 
 function onSort(field: string, direction: 'ASC' | 'DESC') {
   applySort(field, direction)

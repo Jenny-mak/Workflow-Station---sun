@@ -86,7 +86,7 @@
               v-model="searchKeyword"
               placeholder="Search..."
               clearable
-              style="width: 240px; margin-right: 12px;"
+              style="width: 240px;"
               @keyup.enter="handleSearch"
               @clear="handleSearch"
             >
@@ -102,6 +102,7 @@
               <el-icon><Plus /></el-icon> Add
             </el-button>
             <el-button
+              type="primary"
               :loading="exporting"
               @click="handleExport"
             >
@@ -133,6 +134,12 @@
             >
               <el-icon><Upload /></el-icon> Import
             </el-button>
+            <span
+              v-if="selectedRows.length"
+              class="grid-hint"
+            >
+              {{ t('mainTableView.selectedRows', { count: selectedRows.length }) }}
+            </span>
           </div>
 
           <div
@@ -153,7 +160,12 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="PORTAL_LIST_SELECTION_WIDTH"
+            />
             <el-table-column
               v-for="(col, colIndex) in displayColumns"
               :key="col.field"
@@ -438,6 +450,7 @@ import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
 import type { ListColumnFilter, ListColumnMeta } from '@platform-shared/list/columnMeta'
+import { exportTableCsv } from '@platform-shared/list/tableExport'
 import { relationTableApi, type RelationTableDTO, type RelationFieldDef, type RelationImportResult, type LookupConfig, type RelationTableQueryRequest } from '@/api/relationTable'
 import type { LookupFilterCondition } from '@/utils/lookupFilterConditions'
 import LookupField from '@/components/lookup/LookupField.vue'
@@ -445,6 +458,7 @@ import LookupViewDisplay from '@/components/lookup/LookupViewDisplay.vue'
 import { buildDerivedFilterConditions, resolveDerivedLookup, normalizeLookupValueForSave, formatRelationCellDisplay, type FieldLike } from '@/components/lookup/useLookupBehaviors'
 import { collectComputedColumns, previewComputedRow } from '@/utils/computedFieldRuntime'
 import { useListColumnLayout } from '@platform-shared/list/useListColumnLayout'
+import { PORTAL_LIST_SELECTION_WIDTH } from '@/composables/list/usePortalListGrid'
 import { searchListFilterUsers } from '@/composables/list/searchListFilterUsers'
 
 const SYSTEM_FIELDS = new Set(['created_at', 'created_by', 'updated_at', 'updated_by', 'status'])
@@ -466,6 +480,7 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const totalElements = ref(0)
 const dataRows = ref<Record<string, any>[]>([])
+const selectedRows = ref<typeof dataRows.value>([])
 // 列（含表头标签与可筛选/可排序能力）由查询响应声明，前端不自行推导
 const columns = ref<ListColumnMeta[]>([])
 /** Client-only display order; never sent to the query API. */
@@ -516,7 +531,7 @@ const { gridScrollRef, gridFits, gridTableHeight, gridInnerStyle, widthOf, setWi
 } = useListColumnLayout({
   storageKey: layoutStorageKey,
   fields: layoutFields,
-  extraWidth: computed(() => (canWrite.value ? 200 : 0)),
+  extraWidth: computed(() => PORTAL_LIST_SELECTION_WIDTH + (canWrite.value ? 200 : 0)),
   labelOf: (field) => displayColumns.value.find(c => c.field === field)?.label ?? field,
   kindOf: (field) => displayColumns.value.find(c => c.field === field)?.kind,
 })
@@ -688,6 +703,7 @@ const fetchData = async () => {
     columns.value = page.columns
     syncColumnOrderFromServer(page.columns)
     dataRows.value = page.content
+    selectedRows.value = []
     totalElements.value = page.totalElements
   } catch (e: unknown) {
     if (queryId !== latestQuery) return
@@ -699,6 +715,7 @@ const fetchData = async () => {
     )
     columns.value = []
     dataRows.value = []
+    selectedRows.value = []
     totalElements.value = 0
   } finally {
     if (queryId === latestQuery) {
@@ -710,6 +727,7 @@ const fetchData = async () => {
 /** Column state belongs to one table; carrying it across a switch would query B with A's columns. */
 const resetTableState = () => {
   searchKeyword.value = ''
+  selectedRows.value = []
   currentPage.value = 1
   columns.value = []
   columnOrder.value = []
@@ -808,15 +826,28 @@ const formatHKT = (value: any): string => {
   }
 }
 
+const handleSelectionChange = (selection: typeof dataRows.value) => {
+  selectedRows.value = selection
+}
+
 const handleExport = async () => {
   if (!selectedTableId.value) return
+  const name = selectedTable.value?.displayName || selectedTable.value?.tableName || 'data'
+  if (selectedRows.value.length > 0) {
+    exportTableCsv({
+      rows: selectedRows.value,
+      columns: displayColumns.value,
+      filename: name,
+    })
+    ElMessage.success(`Exported ${selectedRows.value.length} selected row(s)`)
+    return
+  }
   exporting.value = true
   try {
     const blob = await relationTableApi.exportCsv(selectedTableId.value)
     const url = window.URL.createObjectURL(new Blob([blob as any]))
     const link = document.createElement('a')
     link.href = url
-    const name = selectedTable.value?.displayName || selectedTable.value?.tableName || 'data'
     link.setAttribute('download', `${name}.csv`)
     document.body.appendChild(link)
     link.click()
@@ -1112,7 +1143,13 @@ onMounted(fetchTables)
 
 <style scoped>
 .page-container {
-  padding: 20px;
+  padding: 16px 20px;
+  height: 100%;
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .page-header {
@@ -1120,24 +1157,34 @@ onMounted(fetchTables)
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
 }
 
 .data-layout {
   display: flex;
   gap: 16px;
-  height: calc(100vh - 140px);
+  align-items: stretch;
+  flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .table-list-panel {
-  width: 220px;
+  width: 240px;
   flex-shrink: 0;
+  align-self: stretch;
+  min-height: 0;
   border: 1px solid var(--el-border-color-light);
   border-radius: 4px;
+  background: var(--el-bg-color);
   overflow-y: auto;
   transition: width 0.2s ease;
+}
+
+.table-list-panel :deep(.el-menu) {
+  border-right: none;
 }
 
 .table-list-panel.collapsed {
@@ -1174,17 +1221,29 @@ onMounted(fetchTables)
 
 .data-grid-panel {
   flex: 1;
-  min-width: 0;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 4px;
+  padding: 16px;
+  background: var(--el-bg-color);
 }
 
 .grid-toolbar {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
   align-items: center;
-  margin-bottom: 12px;
   flex-shrink: 0;
+}
+
+.grid-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>

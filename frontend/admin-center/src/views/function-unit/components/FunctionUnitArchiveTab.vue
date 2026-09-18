@@ -7,6 +7,9 @@
         clearable
         style="width: 300px;"
       />
+      <el-button @click="exportGridCsv('archived-function-units')">
+        <el-icon><Download /></el-icon>{{ t('common.export') }}
+      </el-button>
     </div>
 
     <el-card
@@ -24,7 +27,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -32,7 +34,13 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               v-for="(col, colIndex) in displayColumns"
               :key="col.field"
@@ -116,6 +124,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import type { ComponentPublicInstance, Ref } from 'vue'
+import { Download } from '@element-plus/icons-vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -158,6 +167,9 @@ const {
   clearSort,
   applyFilter,
   clearFilter,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
 } = props.grid
 
 const emit = defineEmits<{
@@ -197,5 +209,8 @@ function onFilterClear() {
 <style scoped>
 .fu-toolbar {
   margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 </style>

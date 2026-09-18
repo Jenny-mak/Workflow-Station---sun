@@ -27,11 +27,12 @@ export function useFunctionUnitLists() {
   const deploymentsLoading = ref(false)
   const searchKeyword = ref('')
   const archiveSearchKeyword = ref('')
+  const deploymentSearchKeyword = ref('')
   const selectedUnits = ref<FunctionUnitRow[]>([])
 
   const listGrid = useAdminListGrid<FunctionUnitRow>({
     storageKey: 'admin-list-layout:function-units',
-    extraWidth: LIST_SELECTION_WIDTH + LIST_ACTIONS_WIDTH,
+    extraWidth: LIST_ACTIONS_WIDTH,
   })
   const archiveGrid = useAdminListGrid<FunctionUnitRow>({
     storageKey: 'admin-list-layout:function-units-archived',
@@ -93,7 +94,10 @@ export function useFunctionUnitLists() {
     const seq = deployGrid.beginQuery()
     deploymentsLoading.value = true
     try {
-      const page = await functionUnitApi.queryDeployments(deployGrid.buildQuery())
+      const page = await functionUnitApi.queryDeployments({
+        ...deployGrid.buildQuery(),
+        keyword: deploymentSearchKeyword.value || undefined,
+      })
       if (!deployGrid.isCurrentQuery(seq)) return
       deployGrid.applyPage(page, 'function-units/deployments/query response is missing its column declaration')
     } catch (error: unknown) {
@@ -137,6 +141,7 @@ export function useFunctionUnitLists() {
     deploymentsLoading,
     searchKeyword,
     archiveSearchKeyword,
+    deploymentSearchKeyword,
     selectedUnits,
     listGrid,
     archiveGrid,

@@ -48,7 +48,7 @@
           />
         </el-tabs>
 
-        <div class="grid-toolbar">
+        <div class="list-grid-toolbar">
           <el-input
             v-model="searchKeyword"
             :placeholder="t('common.search')"
@@ -62,6 +62,13 @@
               <el-icon><Search /></el-icon>
             </template>
           </el-input>
+          <el-button
+            type="primary"
+            :icon="Download"
+            @click="exportGridCsv('audit-requests')"
+          >
+            {{ t('common.export') }}
+          </el-button>
         </div>
 
         <div
@@ -82,6 +89,7 @@
               :class="{ 'list-data-grid--fit': gridFits }"
               scrollbar-always-on
               :height="gridTableHeight || '100%'"
+              @selection-change="handleGridSelectionChange"
             >
               <template #empty>
                 <div
@@ -95,6 +103,10 @@
                 </div>
                 <span v-else>{{ t('audit.noRequests') }}</span>
               </template>
+              <el-table-column
+                type="selection"
+                :width="selectionColumnWidth"
+              />
               <el-table-column
                 v-for="(col, colIndex) in displayColumns"
                 :key="col.field"
@@ -180,7 +192,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Loading, Search } from '@element-plus/icons-vue'
+import { Download, Loading, Search } from '@element-plus/icons-vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -218,12 +230,15 @@ const {
   gridFits,
   gridTableHeight,
   gridInnerStyle,
+  selectionColumnWidth,
   widthOf,
   setWidth,
   persistWidths,
   beginQuery,
   isCurrentQuery,
   applyPage,
+  handleGridSelectionChange,
+  exportGridCsv,
   buildQuery,
   moveColumn,
   resetPage,
@@ -234,6 +249,7 @@ const {
   clearSort,
 } = usePortalListGrid<ProcessInstance>({
   storageKey: 'portal-list-layout:fu-applications',
+  selection: true,
 })
 
 const functionUnitCode = computed(() => String(route.params.functionUnitCode || ''))
