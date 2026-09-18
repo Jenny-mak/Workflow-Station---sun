@@ -1,7 +1,10 @@
 export const DASHBOARD_ROUTES = {
   todo: '/tasks',
   completedTasks: '/tasks/completed',
-  myRequests: '/my-applications'
+  myRequests: '/my-applications',
+  newRequest: '/processes',
+  delegations: '/delegations',
+  profileSetup: '/permissions'
 } as const
 
 interface TaskRouteIdentity {

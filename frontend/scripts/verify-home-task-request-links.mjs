@@ -26,6 +26,9 @@ try {
   await page.goto(homeUrl, { waitUntil: 'domcontentloaded' })
   await page.locator('.task-overview-card').waitFor({ state: 'visible' })
 
+  check(await page.locator('.command-primary').count() === 0, 'Top New Request button is removed')
+  check(await page.locator('.page-heading-tools .command').count() === 1, 'Refresh is placed in the page heading tools')
+
   const taskOverviewPaths = await page.locator('.task-overview-card a').evaluateAll((links) =>
     links.map((link) => new URL(link.href).pathname))
   check(
@@ -37,12 +40,49 @@ try {
     'Tasks card links stay in To Do routes',
     taskOverviewPaths.join(', '),
   )
+  check(
+    await page.locator('.task-overview-card .task-figure').count() === 2,
+    'Tasks card keeps its two original metric links',
+  )
+  const taskMetricValue = page.locator('.task-overview-card .task-figure-value').first()
+  const requestMetricValue = page.locator('.ledger-half').first().locator('.figure-num').first()
+  const taskMetricSize = await taskMetricValue.evaluate((el) => getComputedStyle(el).fontSize)
+  const requestMetricSize = await requestMetricValue.evaluate((el) => getComputedStyle(el).fontSize)
+  check(taskMetricSize === requestMetricSize, 'Task and My Requests numbers use the same size', taskMetricSize)
+  const taskMetricColor = await taskMetricValue.evaluate((el) => getComputedStyle(el).color)
+  await page.locator('.task-overview-card .task-figure').first().hover()
+  await page.waitForTimeout(200)
+  const taskMetricHoverColor = await taskMetricValue.evaluate((el) => getComputedStyle(el).color)
+  check(taskMetricHoverColor !== taskMetricColor, 'Task number changes color on hover', taskMetricHoverColor)
+
+  const quickActionPaths = await page.locator('.quick-actions-card a').evaluateAll((links) =>
+    links.map((link) => new URL(link.href).pathname))
+  const expectedQuickActionPaths = [
+    '/portal/processes',
+    '/portal/delegations',
+    '/portal/permissions',
+  ]
+  check(
+    JSON.stringify(quickActionPaths) === JSON.stringify(expectedQuickActionPaths),
+    'Quick Actions expose the expected destinations',
+    quickActionPaths.join(', '),
+  )
+
+  for (let index = 0; index < expectedQuickActionPaths.length; index += 1) {
+    const expectedPath = expectedQuickActionPaths[index]
+    await page.locator('.quick-actions-card a').nth(index).click()
+    await page.waitForURL((url) => url.pathname === expectedPath)
+    check(new URL(page.url()).pathname === expectedPath, 'Quick Action navigates correctly', expectedPath)
+    await page.goto(homeUrl, { waitUntil: 'domcontentloaded' })
+    await page.locator('.quick-actions-card').waitFor({ state: 'visible' })
+  }
 
   const recentTaskBlock = page.locator('section.block').first()
   check(
     (await recentTaskBlock.locator('.block-title').textContent())?.trim() === 'Need Your Action',
     'Recent task block uses the action-oriented title',
   )
+  await recentTaskBlock.locator('.task-table').waitFor({ state: 'visible' })
   const recentTaskHeaders = (await recentTaskBlock.locator('th').allTextContents()).map((text) => text.trim())
   check(
     recentTaskHeaders.includes('Function Unit') && !recentTaskHeaders.includes('Priority'),
@@ -51,7 +91,7 @@ try {
   )
   check(
     pathnameOf(await recentTaskBlock.locator('.block-link').getAttribute('href')) === '/portal/tasks',
-    'My Recent Tasks View All opens To Do',
+    'Need Your Action View All opens To Do',
   )
   await recentTaskBlock.locator('.data-row').first().click()
   await page.locator('.task-detail-page').waitFor({ state: 'visible' })

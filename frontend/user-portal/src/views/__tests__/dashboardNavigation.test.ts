@@ -12,6 +12,12 @@ describe('Home task and request navigation', () => {
     expect(DASHBOARD_ROUTES.completedTasks).toBe('/tasks/completed')
   })
 
+  it('routes every Quick Action to its corresponding portal page', () => {
+    expect(DASHBOARD_ROUTES.newRequest).toBe('/processes')
+    expect(DASHBOARD_ROUTES.delegations).toBe('/delegations')
+    expect(DASHBOARD_ROUTES.profileSetup).toBe('/permissions')
+  })
+
   it('opens a recent task with its task id instead of a request route', () => {
     expect(dashboardTaskDetailRoute({ taskId: 'task-123', id: 'legacy-id' }))
       .toBe('/tasks/task-123')

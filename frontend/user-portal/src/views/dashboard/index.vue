@@ -1,44 +1,36 @@
 <template>
   <div class="dashboard-page">
-    <!-- 命令栏：与 admin center 同构的无边框图标命令 -->
-    <div class="command-bar">
-      <button
-        type="button"
-        class="command command-primary"
-        @click="router.push('/processes')"
-      >
-        <el-icon :size="16">
-          <Plus />
-        </el-icon>
-        <span>{{ t('dashboard.startRequest') }}</span>
-      </button>
-      <button
-        type="button"
-        class="command"
-        :disabled="loading"
-        @click="refresh()"
-      >
-        <el-icon
-          :size="16"
-          :class="{ 'is-spinning': loading }"
+    <!-- 标题带：刷新属于页面级工具，放在更新时间旁而不是占据主操作位 -->
+    <div class="page-heading">
+      <div class="page-heading-copy">
+        <h1 class="page-title">
+          {{ greetingText }}
+        </h1>
+        <p class="page-intro">
+          {{ introLine }}
+        </p>
+      </div>
+      <div class="page-heading-tools">
+        <button
+          type="button"
+          class="command"
+          :disabled="loading"
+          @click="refresh()"
         >
-          <Refresh />
-        </el-icon>
-        <span>{{ t('dashboard.refresh') }}</span>
-      </button>
-      <span
-        v-if="loadedAt"
-        class="command-stamp"
-      >{{ t('dashboard.updatedAt', { time: timeOfDay(loadedAt) }) }}</span>
+          <el-icon
+            :size="16"
+            :class="{ 'is-spinning': loading }"
+          >
+            <Refresh />
+          </el-icon>
+          <span>{{ t('dashboard.refresh') }}</span>
+        </button>
+        <span
+          v-if="loadedAt"
+          class="page-updated"
+        >{{ t('dashboard.updatedAt', { time: timeOfDay(loadedAt) }) }}</span>
+      </div>
     </div>
-
-    <!-- 标题带 -->
-    <h1 class="page-title">
-      {{ greetingText }}
-    </h1>
-    <p class="page-intro">
-      {{ introLine }}
-    </p>
 
     <!-- 加载失败要出声，而不是退化成一屏 0 -->
     <div
@@ -59,35 +51,78 @@
       </button>
     </div>
 
-    <!-- ============ 任务：与 My Requests 分流的 To Do 入口 ============ -->
-    <section class="task-overview-card">
-      <header class="block-head">
-        <h2 class="block-title">
-          {{ t('dashboard.tasks') }}
-        </h2>
-        <router-link
-          :to="DASHBOARD_ROUTES.todo"
-          class="block-link"
-        >
-          {{ t('dashboard.viewAll') }} →
-        </router-link>
-      </header>
+    <!-- ============ 任务与快捷操作：左右双卡 ============ -->
+    <section class="home-shortcuts">
+      <div class="task-overview-card">
+        <header class="block-head">
+          <h2 class="block-title">
+            {{ t('dashboard.tasks') }}
+          </h2>
+          <router-link
+            :to="DASHBOARD_ROUTES.todo"
+            class="block-link"
+          >
+            {{ t('dashboard.viewAll') }} →
+          </router-link>
+        </header>
 
-      <div class="task-figures">
-        <router-link
-          :to="DASHBOARD_ROUTES.todo"
-          class="task-figure is-todo"
+        <div class="task-figures">
+          <router-link
+            :to="DASHBOARD_ROUTES.todo"
+            class="task-figure is-todo"
+          >
+            <span class="task-figure-label">{{ t('dashboard.todoTasks') }}</span>
+            <span class="task-figure-value">{{ overviewLoading ? '–' : taskOverview.pendingCount }}</span>
+          </router-link>
+          <router-link
+            :to="DASHBOARD_ROUTES.completedTasks"
+            class="task-figure is-completed"
+          >
+            <span class="task-figure-label">{{ t('dashboard.completedToday') }}</span>
+            <span class="task-figure-value">{{ overviewLoading ? '–' : taskOverview.completedTodayCount }}</span>
+          </router-link>
+        </div>
+      </div>
+
+      <div class="quick-actions-card">
+        <header class="block-head">
+          <h2 class="block-title">
+            {{ t('dashboard.quickActions') }}
+          </h2>
+        </header>
+
+        <nav
+          class="quick-actions"
+          :aria-label="t('dashboard.quickActions')"
         >
-          <span class="task-figure-label">{{ t('dashboard.todoTasks') }}</span>
-          <span class="task-figure-value">{{ overviewLoading ? '–' : taskOverview.pendingCount }}</span>
-        </router-link>
-        <router-link
-          :to="DASHBOARD_ROUTES.completedTasks"
-          class="task-figure is-completed"
-        >
-          <span class="task-figure-label">{{ t('dashboard.completedToday') }}</span>
-          <span class="task-figure-value">{{ overviewLoading ? '–' : taskOverview.completedTodayCount }}</span>
-        </router-link>
+          <router-link
+            :to="DASHBOARD_ROUTES.newRequest"
+            class="quick-action is-new-request"
+          >
+            <el-icon :size="25">
+              <Plus />
+            </el-icon>
+            <span>{{ t('dashboard.startRequest') }}</span>
+          </router-link>
+          <router-link
+            :to="DASHBOARD_ROUTES.delegations"
+            class="quick-action is-delegations"
+          >
+            <el-icon :size="25">
+              <Share />
+            </el-icon>
+            <span>{{ t('menu.delegations') }}</span>
+          </router-link>
+          <router-link
+            :to="DASHBOARD_ROUTES.profileSetup"
+            class="quick-action is-profile-setup"
+          >
+            <el-icon :size="25">
+              <User />
+            </el-icon>
+            <span>{{ t('menu.permissions') }}</span>
+          </router-link>
+        </nav>
       </div>
     </section>
 
@@ -551,7 +586,7 @@
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Refresh, WarningFilled } from '@element-plus/icons-vue'
+import { Plus, Refresh, Share, User, WarningFilled } from '@element-plus/icons-vue'
 import { formatDate } from '@/utils/dateFormat'
 import { getStoredUser } from '@/api/auth'
 import type { RecentTask, TeamRequestItem } from '@/api/dashboard'
@@ -793,13 +828,22 @@ onMounted(() => {
   background: #f6f7f9;
 }
 
-// ==================== 命令栏 ====================
-.command-bar {
+// ==================== 标题与页面工具 ====================
+.page-heading {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.page-heading-copy { min-width: 0; }
+
+.page-heading-tools {
+  display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-  margin: -4px 0 16px;
+  gap: 8px;
+  min-height: 34px;
 }
 
 .command {
@@ -828,28 +872,10 @@ onMounted(() => {
   }
 }
 
-// New request 是这一屏唯一的主动作，用品牌色块把它从图标命令里提出来
-.command-primary {
-  height: 36px;
-  padding: 0 18px;
-  border-radius: 999px;
-  background: var(--hsbc-red);
-  color: #fff;
-  font-weight: 600;
-
-  &:hover:not(:disabled) { background: var(--primary-light); }
-  &:active:not(:disabled) { background: var(--primary-dark); }
-
-  &:focus-visible {
-    outline: 2px solid var(--hsbc-red);
-    outline-offset: 2px;
-  }
-}
-
-.command-stamp {
-  margin-left: auto;
+.page-updated {
   font-size: 12px;
   color: var(--ws-text-muted);
+  white-space: nowrap;
 }
 
 .is-spinning { animation: dash-spin 0.8s linear infinite; }
@@ -901,11 +927,17 @@ onMounted(() => {
   cursor: pointer;
 }
 
-// ==================== 任务概览 ====================
-.task-overview-card {
-  @extend %surface-card;
-
+// ==================== 任务概览 + 快捷操作 ====================
+.home-shortcuts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
   margin-top: 22px;
+}
+
+.task-overview-card,
+.quick-actions-card {
+  @extend %surface-card;
 }
 
 .task-figures {
@@ -939,6 +971,8 @@ onMounted(() => {
 
   &:hover {
     background: var(--background-light);
+
+    .task-figure-value { color: var(--hsbc-red); }
   }
 
   &:focus-visible {
@@ -958,11 +992,50 @@ onMounted(() => {
 .task-figure-value {
   grid-area: value;
   margin-left: 24px;
-  font-size: 42px;
+  font-size: 40px;
   font-weight: 600;
   line-height: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
+  transition: color 0.15s ease;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-height: 112px;
+}
+
+.quick-action {
+  display: flex;
+  min-width: 0;
+  padding: 20px 12px 18px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  border-left: 1px solid var(--ws-line);
+  color: var(--ws-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+
+  &:first-child { border-left: none; }
+
+  &:hover { background: var(--background-light); }
+
+  &:focus-visible {
+    z-index: 1;
+    outline: 2px solid var(--hsbc-red);
+    outline-offset: -2px;
+  }
+
+  .el-icon { color: var(--hsbc-red); }
+
+  &.is-delegations .el-icon { color: var(--warning-orange); }
+  &.is-profile-setup .el-icon { color: var(--success-green); }
 }
 
 // ==================== 主视觉：两本账 ====================
@@ -1321,6 +1394,8 @@ onMounted(() => {
 }
 
 @media (max-width: 900px) {
+  .home-shortcuts { grid-template-columns: 1fr; }
+
   .ledger { grid-template-columns: 1fr; }
 
   .task-figures { grid-template-columns: 1fr; }
@@ -1349,9 +1424,14 @@ onMounted(() => {
 
   .figure-num { font-size: 32px; }
 
-  .command-stamp {
+  .page-heading {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .page-heading-tools {
     width: 100%;
-    margin-left: 0;
+    justify-content: flex-end;
   }
 
   .team-summary { grid-template-columns: repeat(2, 1fr); }
