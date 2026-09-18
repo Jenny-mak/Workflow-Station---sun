@@ -8,13 +8,25 @@ import {
   landingPose,
   pickNextAction,
   pickWalkTarget,
+  rockFlightMs,
+  rockLaunchPoint,
+  rockPosition,
+  rollsRockThrow,
   stepFall,
   xBounds,
-  type HmPose
+  type HmPose,
+  type Point
 } from '@/utils/hermesMasterBehavior'
 
 /** 这些时长必须与 HermesMasterFigure.vue 里同名姿态的 keyframes 时长一致 */
+/** 出场：logo → 探头 → 伸出四肢 */
+const EMERGE_MS = 4600
 const WAKE_MS = 1700
+/** 捡石头 → 抡臂 → 出手 → 收势；石头在 RELEASE 时刻离手（对应 hm-throw-arm 的 56%） */
+const THROW_MS = 2600
+const THROW_RELEASE_MS = 1450
+/** 石头砸到目标后的小烟尘停留多久 */
+const ROCK_HIT_MS = 420
 const JUMP_MS = 900
 const LAND_MS = 450
 const DIZZY_MS = 2600
@@ -22,8 +34,6 @@ const STARTLED_MS = 900
 const GIGGLE_MS = 1400
 const WAVE_MS = 1800
 const PEEK_MS = 2200
-/** 刚打开 DW 时先睡一小会儿再醒 */
-const INITIAL_SLEEP_MS = 1400
 /** 按下后移动超过这个距离才算拖拽，否则算点击 */
 const DRAG_THRESHOLD = 5
 /** 在身上来回蹭的累计路程超过它 → 挠痒反应 */
@@ -31,6 +41,13 @@ const TICKLE_DISTANCE = 260
 /** 停留超过它 → 挥手；不到它就划走 → 被吓一跳 */
 const HOVER_DWELL_MS = 320
 const REACTION_COOLDOWN_MS = 1600
+
+/** 飞行中的石头（页面坐标）；hit = 已砸到目标，正在冒烟尘 */
+export interface HmRock extends Point {
+  hit: boolean
+  /** 自转角度（deg） */
+  spin: number
+}
 
 export interface HermesMasterBehaviorOptions {
   /** 聊天气泡打开时原地待命、不再随机走动：返回此刻该摆的姿态；气泡关着返回 null */
@@ -40,12 +57,14 @@ export interface HermesMasterBehaviorOptions {
 }
 
 export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: HermesMasterBehaviorOptions) {
-  const pose = ref<HmPose>('sleep')
+  /** 打开 DW 时是一块未激活的 logo，被点击后才出场并开始活动 */
+  const pose = ref<HmPose>('dormant')
   const x = ref(0)
   /** 离地高度（px） */
   const y = ref(0)
   /** 用户让它去休息：睡到被点醒为止 */
   const resting = ref(false)
+  const rock = ref<HmRock | null>(null)
 
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 
@@ -65,6 +84,7 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
   let grabDx = 0
   let grabDy = 0
   let dragging = false
+  let pressCancelled = false
   let lastMoveX = 0
   let lastMoveAt = 0
 
@@ -75,6 +95,11 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
   let hoverLastY = 0
   let hoverTimer: ReturnType<typeof setTimeout> | null = null
   let peekTimer: ReturnType<typeof setTimeout> | null = null
+  let throwTimer: ReturnType<typeof setTimeout> | null = null
+  let rockTimer: ReturnType<typeof setTimeout> | null = null
+  let rockFrame = 0
+  /** 鼠标最后出现的位置：扔石头的目标 */
+  let lastPointer: Point | null = null
   let lastReactionAt = 0
 
   function clearPoseTimer() {
@@ -106,6 +131,10 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
       pose.value = chatPose
       return
     }
+    if (rollsRockThrow(Math.random, reducedMotion)) {
+      throwRock()
+      return
+    }
     const action = pickNextAction(pose.value, Math.random, reducedMotion)
     if (action.pose === 'walk') {
       walkTarget = pickWalkTarget(x.value, window.innerWidth)
@@ -115,6 +144,38 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
       return
     }
     hold(action.pose, action.durationMs, action.pose === 'sleep' ? wakeUp : scheduleNext)
+  }
+
+  // ---------- 彩蛋：捡起地上的石头扔向鼠标 ----------
+  function throwRock() {
+    hold('throw', THROW_MS)
+    if (throwTimer) clearTimeout(throwTimer)
+    throwTimer = setTimeout(launchRock, THROW_RELEASE_MS)
+  }
+
+  function launchRock() {
+    throwTimer = null
+    // 出手前被拎走了：这一下就不扔了
+    if (pose.value !== 'throw') return
+    const from = rockLaunchPoint({ x: x.value, y: y.value }, window.innerHeight)
+    // 鼠标还没在页面上动过：朝页面上方正中扔
+    const to = lastPointer ?? { x: window.innerWidth / 2, y: window.innerHeight * 0.3 }
+    const duration = rockFlightMs(from, to)
+    const startedAt = performance.now()
+    if (rockTimer) clearTimeout(rockTimer)
+    cancelAnimationFrame(rockFrame)
+    const fly = (now: number) => {
+      const t = (now - startedAt) / duration
+      if (t < 1) {
+        rock.value = { ...rockPosition(from, to, t), hit: false, spin: t * 540 }
+        rockFrame = requestAnimationFrame(fly)
+        return
+      }
+      rockFrame = 0
+      rock.value = { ...to, hit: true, spin: 0 }
+      rockTimer = setTimeout(() => (rock.value = null), ROCK_HIT_MS)
+    }
+    rockFrame = requestAnimationFrame(fly)
   }
 
   function wakeUp(then: () => void = scheduleNext) {
@@ -178,6 +239,7 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
     grabDx = e.clientX - rect.left
     grabDy = e.clientY - rect.top
     dragging = false
+    pressCancelled = false
     // 按下即不再算"划过"：别在点开聊天的同时挥手 / 被吓到
     cancelHoverTimer()
     hoverStartedAt = 0
@@ -191,6 +253,11 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
     }
     if (!dragging) {
       if (Math.hypot(e.clientX - pressX, e.clientY - pressY) < DRAG_THRESHOLD) return
+      // 未激活时拎不起来，拖过的这一下也不算点击：只有干净的点击能激活它
+      if (pose.value === 'dormant') {
+        pressCancelled = true
+        return
+      }
       dragging = true
       clearPoseTimer()
       cancelHoverTimer()
@@ -220,7 +287,7 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
     el.value?.releasePointerCapture(e.pointerId)
     pointerId = null
     if (!dragging) {
-      options.onClick()
+      if (!pressCancelled) press()
       return
     }
     dragging = false
@@ -233,6 +300,12 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
     vy = 0
     pose.value = 'fall'
     ensureLoop()
+  }
+
+  /** 单击 / 键盘触发：未激活时是激活（出场），之后才是外层的点击行为（开关聊天） */
+  function press() {
+    if (pose.value === 'dormant') hold('emerge', EMERGE_MS)
+    else options.onClick()
   }
 
   // ---------- 鼠标划过（不点击） ----------
@@ -297,6 +370,7 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
   // ---------- 眼睛跟随鼠标 ----------
   let lookFrame = 0
   function onWindowPointerMove(e: PointerEvent) {
+    lastPointer = { x: e.clientX, y: e.clientY }
     if (lookFrame || !el.value) return
     lookFrame = requestAnimationFrame(() => {
       lookFrame = 0
@@ -342,13 +416,15 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
     x.value = xBounds(window.innerWidth)[1] - 16
     window.addEventListener('pointermove', onWindowPointerMove, { passive: true })
     window.addEventListener('resize', onResize)
-    poseTimer = setTimeout(() => wakeUp(), INITIAL_SLEEP_MS)
   })
 
   onBeforeUnmount(() => {
     clearPoseTimer()
     cancelHoverTimer()
     if (peekTimer) clearTimeout(peekTimer)
+    if (throwTimer) clearTimeout(throwTimer)
+    if (rockTimer) clearTimeout(rockTimer)
+    if (rockFrame) cancelAnimationFrame(rockFrame)
     if (frame) cancelAnimationFrame(frame)
     if (lookFrame) cancelAnimationFrame(lookFrame)
     window.removeEventListener('pointermove', onWindowPointerMove)
@@ -360,11 +436,13 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
     x,
     y,
     resting,
+    rock,
     onPointerDown,
     onPointerMove,
     onPointerUp,
     onPointerEnter,
     onPointerLeave,
+    press,
     settle,
     talk,
     rest

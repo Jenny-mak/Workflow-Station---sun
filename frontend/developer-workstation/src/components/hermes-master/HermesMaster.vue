@@ -4,11 +4,11 @@
     <div
       ref="robotEl"
       class="hm-robot"
-      :class="{ 'is-dragging': pose === 'dragged' }"
+      :class="{ 'is-dragging': pose === 'dragged', 'is-dormant': pose === 'dormant' }"
       :style="robotStyle"
       role="button"
       tabindex="0"
-      :aria-label="t('hermesMaster.ariaLabel')"
+      :aria-label="t(pose === 'dormant' ? 'hermesMaster.ariaLabelDormant' : 'hermesMaster.ariaLabel')"
       :aria-expanded="chatOpen"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
@@ -16,14 +16,39 @@
       @pointercancel="onPointerUp"
       @pointerenter="onPointerEnter"
       @pointerleave="onPointerLeave"
-      @keydown.enter.prevent="toggleChat"
-      @keydown.space.prevent="toggleChat"
+      @keydown.enter.prevent="press"
+      @keydown.space.prevent="press"
       @dragstart.prevent
     >
       <HermesMasterFigure
         :pose="pose"
         :airborne="y > 0"
       />
+    </div>
+
+    <!-- 彩蛋：飞向鼠标的石头；砸到后换成一小团烟尘 -->
+    <div
+      v-if="rock"
+      class="hm-rock"
+      :class="{ 'is-hit': rock.hit }"
+      :style="{ transform: `translate3d(${rock.x}px, ${rock.y}px, 0)` }"
+      aria-hidden="true"
+    >
+      <svg
+        v-if="!rock.hit"
+        viewBox="-8 -8 16 16"
+        :style="{ transform: `rotate(${rock.spin}deg)` }"
+      >
+        <polygon points="-6,1 -4,-4.5 1.5,-6 6,-2 5.5,3.5 0.5,6 -4.5,4.5" />
+        <path d="M-2.5 -2 L0.5 -3.2 M1.5 1.5 L3.4 0.6" />
+      </svg>
+      <svg
+        v-else
+        class="hm-rock__puff"
+        viewBox="-16 -16 32 32"
+      >
+        <path d="M0 -7 V-14 M6 -4 L12 -9 M7 3 L14 5 M0 8 V14 M-6 -4 L-12 -9 M-7 3 L-14 5" />
+      </svg>
     </div>
 
     <Transition name="hm-bubble">
@@ -81,9 +106,9 @@ const { messages, loading, send, stop, clear } = useHermesMasterChat({
 })
 
 const {
-  pose, x, y,
+  pose, x, y, rock,
   onPointerDown, onPointerMove, onPointerUp, onPointerEnter, onPointerLeave,
-  settle, talk, rest
+  press, settle, talk, rest
 } = useHermesMasterBehavior(robotEl, {
   chatPose: () => (chatOpen.value ? (loading.value ? 'think' : 'idle') : null),
   onClick: toggleChat
@@ -160,11 +185,68 @@ $hm-z: 1990;
     cursor: grabbing;
   }
 
+  // 未激活时不能拖，只能点
+  &.is-dormant {
+    cursor: pointer;
+  }
+
   &:focus-visible {
     outline: 2px solid #db0011;
     outline-offset: 2px;
     border-radius: 12px;
   }
+}
+
+// 以自身中心对准坐标点；不挡鼠标事件
+.hm-rock {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: $hm-z;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  will-change: transform;
+
+  svg {
+    position: absolute;
+    left: -9px;
+    top: -9px;
+    width: 18px;
+    height: 18px;
+    overflow: visible;
+  }
+
+  polygon {
+    fill: #9aa1ab;
+    stroke: #0b0b0b;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+  }
+
+  path {
+    fill: none;
+    stroke: #0b0b0b;
+    stroke-width: 1.2;
+    stroke-linecap: round;
+  }
+
+  .hm-rock__puff {
+    left: -18px;
+    top: -18px;
+    width: 36px;
+    height: 36px;
+    animation: hm-rock-puff 0.42s ease-out both;
+
+    path {
+      stroke-width: 2;
+    }
+  }
+}
+
+@keyframes hm-rock-puff {
+  from { opacity: 1; transform: scale(0.3); }
+  to { opacity: 0; transform: scale(1.25); }
 }
 
 :deep(.hm-chat) {

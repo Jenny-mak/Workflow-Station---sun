@@ -3,12 +3,17 @@ import {
   HM_EDGE_GAP,
   HM_FAINT_HEIGHT,
   HM_HEIGHT,
+  HM_THROW_CHANCE,
   HM_WIDTH,
   isInterruptible,
   landingPose,
   pickNextAction,
   pickWalkTarget,
   placeBubble,
+  rockFlightMs,
+  rockLaunchPoint,
+  rockPosition,
+  rollsRockThrow,
   stepFall,
   xBounds
 } from '../hermesMasterBehavior'
@@ -98,7 +103,7 @@ describe('falling', () => {
 
 describe('isInterruptible', () => {
   it('protects the physical sequence from hover reactions', () => {
-    for (const pose of ['fall', 'dizzy', 'jump', 'land', 'wake', 'dragged'] as const) {
+    for (const pose of ['dormant', 'emerge', 'throw', 'fall', 'dizzy', 'jump', 'land', 'wake', 'dragged'] as const) {
       expect(isInterruptible(pose)).toBe(false)
     }
     expect(isInterruptible('walk')).toBe(true)
@@ -124,5 +129,44 @@ describe('placeBubble', () => {
   it('does not run off the top while the robot is held high', () => {
     const placed = placeBubble({ x: 600, y: 800 }, bubble, viewport)
     expect(placed.bottom + bubble.height).toBeLessThanOrEqual(900 - 8)
+  })
+})
+
+describe('rock throw', () => {
+  it('happens once in a thousand picks', () => {
+    expect(HM_THROW_CHANCE).toBe(0.001)
+    expect(rollsRockThrow(() => 0.0009)).toBe(true)
+    expect(rollsRockThrow(() => 0.001)).toBe(false)
+    expect(rollsRockThrow(() => 0.5)).toBe(false)
+  })
+
+  it('never happens when motion is reduced', () => {
+    expect(rollsRockThrow(() => 0, true)).toBe(false)
+  })
+
+  it('flies from the raised hand and lands exactly on the target', () => {
+    const from = rockLaunchPoint({ x: 1000, y: 0 }, 900)
+    const to = { x: 300, y: 200 }
+    expect(from.x).toBeGreaterThan(1000 + HM_WIDTH / 2)
+    expect(from.y).toBeLessThan(900 - HM_HEIGHT / 2)
+    expect(rockPosition(from, to, 0)).toEqual(from)
+    expect(rockPosition(from, to, 1)).toEqual(to)
+    expect(rockPosition(from, to, 2)).toEqual(to)
+  })
+
+  it('arcs above the straight line mid-flight', () => {
+    const from = { x: 1000, y: 800 }
+    const to = { x: 200, y: 800 }
+    const mid = rockPosition(from, to, 0.5)
+    expect(mid.x).toBe(600)
+    expect(mid.y).toBe(800 - 160)
+    // 近距离只拱一点点
+    expect(rockPosition(from, { x: 900, y: 800 }, 0.5).y).toBe(800 - 35)
+  })
+
+  it('scales the flight time with distance inside sane bounds', () => {
+    expect(rockFlightMs({ x: 0, y: 0 }, { x: 50, y: 0 })).toBe(420)
+    expect(rockFlightMs({ x: 0, y: 0 }, { x: 600, y: 0 })).toBe(540)
+    expect(rockFlightMs({ x: 0, y: 0 }, { x: 3000, y: 0 })).toBe(900)
   })
 })

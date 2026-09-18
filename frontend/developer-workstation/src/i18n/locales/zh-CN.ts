@@ -2790,6 +2790,7 @@ export default {
     name: 'Hermes Master',
     shortName: 'HM',
     ariaLabel: 'Hermes Master 助手，点击聊天，拖拽移动',
+    ariaLabelDormant: 'Hermes Master 助手，点击唤醒',
     contextGeneral: '你的 Developer Workstation 向导',
     contextFunctionUnit: '正在看这个功能单元',
     greeting: '你好，我是 Hermes Master，叫我 HM 就行。可以问我 Developer Workstation 怎么用，让我帮你看看功能单元的设计，或者告诉我你想做什么，我一步步带你操作。',

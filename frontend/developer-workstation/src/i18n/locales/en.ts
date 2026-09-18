@@ -2797,6 +2797,7 @@ export default {
     name: 'Hermes Master',
     shortName: 'HM',
     ariaLabel: 'Hermes Master assistant. Click to chat, drag to move.',
+    ariaLabelDormant: 'Hermes Master assistant. Click to wake it up.',
     contextGeneral: 'Your Developer Workstation guide',
     contextFunctionUnit: 'Looking at this function unit',
     greeting: "Hi, I'm Hermes Master, HM for short. Ask me how things work in Developer Workstation, let me review your function unit design, or tell me what you want to do and I'll walk you through it.",

@@ -9,7 +9,10 @@ export type HmAutonomousPose = 'idle' | 'walk' | 'think' | 'sit' | 'handstand' |
 /** 全部姿态 = 自主动作 + 交互/物理触发的姿态 */
 export type HmPose =
   | HmAutonomousPose
+  | 'dormant'
+  | 'emerge'
   | 'wake'
+  | 'throw'
   | 'giggle'
   | 'startled'
   | 'peek'
@@ -151,4 +154,40 @@ export function placeBubble(
   const bottom = clamp(robot.y + HM_HEIGHT + 12, margin, viewport.height - bubble.height - margin)
   const tailLeft = clamp(centerX - left, 24, bubble.width - 24)
   return { left, bottom, tailLeft }
+}
+
+/** 每次挑下一个动作时，有这么大的概率改成"捡起石头扔向鼠标" */
+export const HM_THROW_CHANCE = 1 / 1000
+
+/** 这一次要不要扔石头；减少动态效果时不扔 */
+export function rollsRockThrow(rand: () => number = Math.random, calm = false): boolean {
+  return !calm && rand() < HM_THROW_CHANCE
+}
+
+export interface Point {
+  x: number
+  y: number
+}
+
+/** 石头出手时在机器人盒子里的位置（hm-throw-arm 56% 那一帧右手所在处），换算成页面坐标 */
+export function rockLaunchPoint(robot: { x: number; y: number }, viewportHeight: number): Point {
+  return { x: robot.x + HM_WIDTH * 0.84, y: viewportHeight - robot.y - HM_HEIGHT * 0.76 }
+}
+
+/** 飞行时长随距离变化，近处不至于一闪而过，远处不至于慢吞吞 */
+export function rockFlightMs(from: Point, to: Point): number {
+  return Math.round(clamp(Math.hypot(to.x - from.x, to.y - from.y) * 0.9, 420, 900))
+}
+
+/**
+ * 石头在 t∈[0,1] 时的位置：直线插值上叠一个向上拱的抛物线，t=0 在出手点、t=1 正好落在目标上。
+ * 拱高随距离增长，封顶 160px，免得扔很近也划一个大弧。
+ */
+export function rockPosition(from: Point, to: Point, t: number): Point {
+  const p = clamp(t, 0, 1)
+  const arc = Math.min(Math.hypot(to.x - from.x, to.y - from.y) * 0.35, 160)
+  return {
+    x: from.x + (to.x - from.x) * p,
+    y: from.y + (to.y - from.y) * p - arc * 4 * p * (1 - p)
+  }
 }

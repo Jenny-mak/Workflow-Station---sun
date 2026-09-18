@@ -185,9 +185,18 @@
             class="hm-line hm-line--thin"
             d="M95.4 64.4 q0.4 2.6 -1.8 2.2"
           />
+          <polygon
+            class="hm-stone hm-stone--held"
+            points="93.4,68.6 94.6,65 98.2,64 101.2,66.6 100.8,70.2 97.6,71.8 94.4,70.8"
+          />
         </g>
       </g>
     </g>
+
+    <polygon
+      class="hm-stone hm-stone--ground"
+      points="101,94.6 102.2,91 105.8,90 108.8,92.6 108.4,95.4 101.6,95.6"
+    />
 
     <g class="hm-fx hm-fx--zzz">
       <text
@@ -330,6 +339,14 @@ $squat: 25px;
 .hm-eye,
 .hm-mouth--o {
   fill: $hm-ink;
+}
+
+.hm-stone {
+  fill: #9aa1ab;
+  stroke: $hm-ink;
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+  opacity: 0;
 }
 
 .hm-logo-red {
@@ -641,6 +658,87 @@ $squat: 25px;
   transform: translateY(1px) rotate(-4deg);
 }
 
+// 未激活：打开 DW 时只是右下角地上的一块 logo，被点击后才出场。
+// 各关节的值就是 emerge 动画的第 0 帧，切过去不会跳。
+[data-pose='dormant'] {
+  .hm-upper {
+    transform: translateY($squat);
+  }
+
+  .hm-head {
+    transform: translateY(25px);
+  }
+
+  .hm-leg {
+    transform: translateY(6px) scaleY(0.02);
+  }
+
+  .hm-arm {
+    transform: scale(0.02);
+  }
+}
+
+// 出场（被点击激活后）：先是地上的一块 logo → 试探着慢慢探出脑袋左右张望、缩回去一下 → 整个头出来 →
+// 依次伸出双臂 → 伸腿站起（总时长与 useHermesMasterBehavior 的 EMERGE_MS 一致）
+[data-pose='emerge'] {
+  .hm-upper {
+    animation: hm-emerge-upper 4.6s ease-in-out both;
+  }
+
+  .hm-leg {
+    animation: hm-emerge-leg 4.6s ease-in-out both;
+  }
+
+  .hm-head {
+    animation: hm-emerge-head 4.6s ease-in-out both;
+  }
+
+  .hm-face {
+    animation: hm-emerge-look 4.6s ease-in-out both;
+  }
+
+  .hm-arm--l {
+    animation: hm-emerge-arm-l 4.6s ease-out both;
+  }
+
+  .hm-arm--r {
+    animation: hm-emerge-arm-r 4.6s ease-out both;
+  }
+}
+
+// 彩蛋（1/1000）：发现脚边的石头 → 蹲下捡起 → 抡臂 → 朝鼠标扔出去 → 小跳收势。
+// 总时长与 useHermesMasterBehavior 的 THROW_MS 一致；手里的石头在 56% 消失，
+// 同一时刻（THROW_RELEASE_MS）外层把飞行的石头接上。
+[data-pose='throw'] {
+  .hm-upper {
+    animation: hm-throw-upper 2.6s ease-in-out both;
+  }
+
+  .hm-leg {
+    animation: hm-throw-leg 2.6s ease-in-out both;
+  }
+
+  .hm-arm--r {
+    animation: hm-throw-arm 2.6s ease-in-out both;
+  }
+
+  .hm-arm--l {
+    animation: hm-throw-balance 2.6s ease-in-out both;
+  }
+
+  .hm-face {
+    animation: hm-throw-look 2.6s ease-in-out both;
+  }
+
+  .hm-stone--ground {
+    animation: hm-stone-ground 2.6s linear both;
+  }
+
+  .hm-stone--held {
+    animation: hm-stone-held 2.6s linear both;
+  }
+}
+
 // 醒来：睁眼 → 伸懒腰站起 → 小跳一下（时长与 useHermesMasterBehavior 的 WAKE_MS 一致）
 [data-pose='wake'] {
   .hm-upper {
@@ -912,6 +1010,102 @@ $squat: 25px;
 @keyframes hm-snore {
   0%, 100% { transform: translateY($squat) scale(1); }
   50% { transform: translateY($squat - 0.8px) scale(1.015, 1.02); }
+}
+
+@keyframes hm-emerge-upper {
+  0%, 85% { transform: translateY($squat); }
+  94% { transform: translateY(-5px); }
+  98% { transform: translateY(1px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes hm-emerge-leg {
+  0%, 85% { transform: translateY(6px) scaleY(0.02); }
+  94% { transform: translateY(-5px) scaleY(1); }
+  98%, 100% { transform: translateY(0) scaleY(1); }
+}
+
+@keyframes hm-emerge-head {
+  0%, 12% { transform: translateY(25px); }
+  // 慢慢探到只露出眼睛
+  32%, 46% { transform: translateY(9px); }
+  // 不放心，缩回去一点
+  52%, 58% { transform: translateY(16px); }
+  66% { transform: translateY(-1.5px); }
+  70%, 100% { transform: translateY(0); }
+}
+
+@keyframes hm-emerge-look {
+  0%, 33% { transform: translate(0, 0); }
+  37%, 39% { transform: translate(-2.6px, 0); }
+  43%, 45% { transform: translate(2.6px, 0); }
+  49%, 100% { transform: translate(0, 0); }
+}
+
+@keyframes hm-emerge-arm-l {
+  0%, 70% { transform: scale(0.02); }
+  76% { transform: scale(1.15); }
+  80%, 100% { transform: scale(1); }
+}
+
+@keyframes hm-emerge-arm-r {
+  0%, 75% { transform: scale(0.02); }
+  81% { transform: scale(1.15); }
+  85%, 100% { transform: scale(1); }
+}
+
+@keyframes hm-throw-upper {
+  0%, 12% { transform: translateY(0) rotate(0); }
+  24%, 32% { transform: translateY(12px) rotate(16deg); }
+  44% { transform: translateY(0) rotate(-6deg); }
+  52% { transform: translateY(0) rotate(-11deg); }
+  58% { transform: translateY(0) rotate(11deg); }
+  70% { transform: translateY(-5px) rotate(0); }
+  80%, 100% { transform: translateY(0) rotate(0); }
+}
+
+@keyframes hm-throw-leg {
+  0%, 12% { transform: translateY(0) scaleY(1); }
+  24%, 32% { transform: translateY(12px) scaleY(0.5); }
+  44%, 60% { transform: translateY(0) scaleY(1); }
+  70% { transform: translateY(-5px) scaleY(0.9); }
+  80%, 100% { transform: translateY(0) scaleY(1); }
+}
+
+@keyframes hm-throw-arm {
+  0%, 12% { transform: rotate(0); }
+  24%, 32% { transform: rotate(-8deg); }
+  44% { transform: rotate(-165deg); }
+  52% { transform: rotate(-208deg); }
+  56% { transform: rotate(-120deg); }
+  63% { transform: rotate(-35deg); }
+  80%, 100% { transform: rotate(0); }
+}
+
+@keyframes hm-throw-balance {
+  0%, 32% { transform: rotate(0); }
+  48%, 54% { transform: rotate(48deg); }
+  64% { transform: rotate(-12deg); }
+  80%, 100% { transform: rotate(0); }
+}
+
+// 先低头盯着脚边的石头，捡起来之后视线回到鼠标上
+@keyframes hm-throw-look {
+  0% { transform: translate(calc(var(--hm-look-x, 0) * 2.2px), calc(var(--hm-look-y, 0) * 1.4px)); }
+  8%, 30% { transform: translate(2.4px, 1.8px); }
+  40%, 100% { transform: translate(calc(var(--hm-look-x, 0) * 2.2px), calc(var(--hm-look-y, 0) * 1.4px)); }
+}
+
+@keyframes hm-stone-ground {
+  0% { opacity: 0; }
+  6%, 27% { opacity: 1; }
+  28%, 100% { opacity: 0; }
+}
+
+@keyframes hm-stone-held {
+  0%, 27% { opacity: 0; }
+  28%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0; }
 }
 
 @keyframes hm-wake-upper {
