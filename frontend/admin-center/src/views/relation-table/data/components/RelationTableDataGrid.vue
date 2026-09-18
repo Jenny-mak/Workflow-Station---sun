@@ -12,7 +12,6 @@
           v-loading="loading"
           :data="displayRows"
           stripe
-          border
           :fit="false"
           table-layout="fixed"
           scrollbar-always-on
@@ -20,7 +19,13 @@
           :class="{ 'list-data-grid--fit': gridFits }"
           :height="gridTableHeight || '100%'"
           style="width: 100%"
+          @selection-change="handleGridSelectionChange"
         >
+          <el-table-column
+            type="selection"
+            :width="selectionColumnWidth"
+            fixed="left"
+          />
           <el-table-column
             v-for="(col, colIndex) in displayColumns"
             :key="col.field"
@@ -187,6 +192,8 @@ const {
   clearSort,
   applyFilter,
   clearFilter,
+  selectionColumnWidth,
+  handleGridSelectionChange,
 } = props.grid
 
 function bindScrollRef(el: Element | ComponentPublicInstance | null) {

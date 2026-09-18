@@ -3,6 +3,28 @@
     v-loading="loading"
     class="portal-card list-tab-card"
   >
+    <div class="list-grid-toolbar">
+      <el-input
+        v-model="auditKeyword"
+        :placeholder="t('common.search')"
+        clearable
+        style="width: 240px;"
+        @keydown.enter.prevent="runSearch"
+        @clear="runSearch"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
+      <el-button
+        type="primary"
+        :icon="Download"
+        @click="exportGridCsv('delegation-audit')"
+      >
+        {{ t('common.export') }}
+      </el-button>
+    </div>
+
     <div
       ref="gridScrollRef"
       class="list-data-grid-scroll"
@@ -21,6 +43,7 @@
           :class="{ 'list-data-grid--fit': gridFits }"
           scrollbar-always-on
           :height="gridTableHeight || '100%'"
+          @selection-change="handleGridSelectionChange"
         >
           <template #empty>
             <div
@@ -34,6 +57,10 @@
             </div>
             <span v-else>{{ t('delegation.noAudit') }}</span>
           </template>
+          <el-table-column
+            type="selection"
+            :width="selectionColumnWidth"
+          />
           <el-table-column
             v-for="(col, colIndex) in displayColumns"
             :key="col.field"
@@ -60,7 +87,7 @@
               />
             </template>
             <template #default="{ row }">
-<span
+              <span
                 v-if="col.field === 'createdAt'"
                 style="white-space: nowrap;"
               >{{ formatDate(row.createdAt) }}</span>
@@ -94,7 +121,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Download, Loading, Search } from '@element-plus/icons-vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -111,6 +138,7 @@ import { formatDate } from '@/utils/dateFormat'
 const { t } = useI18n()
 const loading = ref(false)
 const loaded = ref(false)
+const auditKeyword = ref('')
 
 const {
   displayColumns,
@@ -125,12 +153,16 @@ const {
   gridFits,
   gridTableHeight,
   gridInnerStyle,
+  selectionColumnWidth,
   widthOf,
   setWidth,
   persistWidths,
   beginQuery,
   isCurrentQuery,
   applyPage,
+  handleGridSelectionChange,
+  setQuickFilter,
+  exportGridCsv,
   buildQuery,
   moveColumn,
   openFilter,
@@ -140,6 +172,7 @@ const {
   clearSort,
 } = usePortalListGrid<DelegationAudit>({
   storageKey: 'portal-list-layout:delegation-audit',
+  selection: true,
 })
 
 async function load() {
@@ -189,6 +222,11 @@ function onFilterApply(filter: ListColumnFilter) {
 
 function onFilterClear() {
   onClearFilter(filterDialog.field)
+}
+
+function runSearch() {
+  setQuickFilter('operationType', auditKeyword.value)
+  void load()
 }
 
 defineExpose({ ensureLoaded, reload: load })

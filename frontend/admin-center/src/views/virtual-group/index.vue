@@ -2,6 +2,9 @@
   <div class="page-container">
     <PageHeader :title="t('menu.virtualGroup')">
       <template #actions>
+        <el-button @click="exportGridCsv('virtual-groups')">
+          <el-icon><Download /></el-icon>{{ t('common.export') }}
+        </el-button>
         <el-button
           v-if="!readOnly"
           type="primary"
@@ -65,7 +68,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -73,7 +75,13 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               v-for="(col, colIndex) in displayColumns"
               :key="col.field"
@@ -236,7 +244,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus } from '@element-plus/icons-vue'
+import { Download, Plus } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import VirtualGroupFormDialog from './components/VirtualGroupFormDialog.vue'
 import VirtualGroupMembersDialog from './components/VirtualGroupMembersDialog.vue'
@@ -272,6 +280,9 @@ const {
   ACTIONS_COL_WIDTH,
   displayColumns,
   displayRows,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
   columnFilters,
   sort,
   filterDialog,

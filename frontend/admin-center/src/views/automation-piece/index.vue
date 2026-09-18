@@ -2,6 +2,9 @@
   <div class="page-container">
     <PageHeader :title="t('automationPiece.title')">
       <template #actions>
+        <el-button @click="exportGridCsv('automation-pieces')">
+          <el-icon><Download /></el-icon>{{ t('common.export') }}
+        </el-button>
         <el-button @click="loadPieces">
           <el-icon><Refresh /></el-icon>{{ t('common.refresh') }}
         </el-button>
@@ -58,7 +61,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -66,7 +68,13 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               type="expand"
               :width="EXPAND_COL_WIDTH"
@@ -255,7 +263,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Refresh, Search, Upload } from '@element-plus/icons-vue'
+import { Download, Refresh, Search, Upload } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { formatDate } from '@/utils/format'
 import { useAutomationPiece } from '@/composables/modules/useAutomationPiece'
@@ -285,6 +293,9 @@ const {
   ACTIONS_COL_WIDTH,
   displayColumns,
   displayRows,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
   columnFilters,
   sort,
   filterDialog,

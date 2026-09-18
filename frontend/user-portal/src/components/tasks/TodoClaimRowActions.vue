@@ -3,7 +3,6 @@
     <template v-if="task.claimable">
       <el-button
         type="primary"
-        size="small"
         :loading="loading"
         data-test="todo-claim-btn"
         @click="$emit('claim', task)"
@@ -13,7 +12,6 @@
     </template>
     <el-button
       v-else-if="task.claimedByCurrentUser"
-      size="small"
       :loading="loading"
       data-test="todo-unclaim-btn"
       @click="$emit('unclaim', task)"
@@ -23,7 +21,7 @@
     <el-button
       v-else-if="task.canForceUnclaim"
       type="warning"
-      size="small"
+      plain
       :loading="loading"
       data-test="todo-force-unclaim-btn"
       @click="$emit('force-unclaim', task)"
@@ -39,7 +37,6 @@
       v-if="task.canReassign"
       type="primary"
       plain
-      size="small"
       :loading="loading"
       data-test="todo-reassign-btn"
       @click="$emit('reassign', task)"
@@ -72,8 +69,15 @@ const { t } = useI18n()
 .todo-claim-row-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.todo-claim-row-actions :deep(.el-button) {
+  flex: 0 0 104px;
+  width: 104px;
+  height: 32px;
+  margin-left: 0;
 }
 
 .todo-held {

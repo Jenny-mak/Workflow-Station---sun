@@ -2,6 +2,9 @@
   <div class="page-container">
     <PageHeader :title="t('bi.assignment.pageTitle')">
       <template #actions>
+        <el-button @click="exportGridCsv('bi-dashboard-assignments')">
+          <el-icon><Download /></el-icon>{{ t('common.export') }}
+        </el-button>
         <el-button
           type="primary"
           @click="showCreateDialog"
@@ -69,7 +72,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -77,7 +79,13 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               v-for="(col, colIndex) in displayColumns"
               :key="col.field"
@@ -201,7 +209,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Search, Refresh as RefreshIcon } from '@element-plus/icons-vue'
+import { Download, Plus, Search, Refresh as RefreshIcon } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { useBiAssignment } from '@/composables/modules/useBiAssignment'
 import AssignmentFormDialog from './components/AssignmentFormDialog.vue'
@@ -229,6 +237,9 @@ const {
   ACTIONS_COL_WIDTH,
   displayColumns,
   displayRows,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
   columnFilters,
   sort,
   filterDialog,

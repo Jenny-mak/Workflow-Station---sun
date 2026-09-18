@@ -253,7 +253,9 @@ export function useUserPortalAudit() {
 
     exporting.value = true
     try {
-      const dataToExport = await store.fetchAllLogsForExport()
+      const dataToExport = grid.gridSelectedRows.value.length > 0
+        ? [...grid.gridSelectedRows.value]
+        : await store.fetchAllLogsForExport()
       const { headers, rows } = buildExportRows(dataToExport, fieldLabels)
       const dateSuffix = new Date().toISOString().slice(0, 10)
 

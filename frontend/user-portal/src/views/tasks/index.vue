@@ -21,6 +21,7 @@
         v-model:keyword="filterForm.keyword"
         @search="handleSearch"
         @reset="handleReset"
+        @export="exportGridCsv('todo-tasks')"
       />
       <div
         ref="gridScrollRef"
@@ -329,6 +330,7 @@ const {
   onFilterApply,
   onFilterClear,
   handleSelectionChange,
+  exportGridCsv,
   viewTask,
   handleClaim,
   handleUnclaim,

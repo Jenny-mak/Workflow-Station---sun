@@ -4,7 +4,10 @@
       <h1>{{ t('application.title') }}</h1>
     </div>
 
-    <div v-loading="loading" class="portal-card">
+    <div
+      v-loading="loading"
+      class="portal-card"
+    >
       <el-tabs
         v-model="activeTab"
         @tab-change="handleTabChange"
@@ -42,69 +45,103 @@
         </el-tab-pane>
       </el-tabs>
 
-      <template v-if="activeTab === 'DRAFT'">
-        <el-table
-          :data="draftList"
-          stripe
+      <div class="list-grid-toolbar">
+        <el-input
+          v-model="applicationKeyword"
+          :placeholder="t('common.search')"
+          clearable
+          style="width: 240px;"
+          @keydown.enter.prevent="runApplicationSearch"
+          @clear="runApplicationSearch"
         >
-          <template #empty>
-            <div
-              v-if="loading"
-              class="table-empty-loading"
-            >
-              <el-icon class="table-empty-loading__icon is-loading">
-                <Loading />
-              </el-icon>
-              <span>{{ t('common.loading') }}</span>
-            </div>
-            <span v-else>{{ t('application.noDrafts') }}</span>
+          <template #prefix>
+            <el-icon><Search /></el-icon>
           </template>
-          <el-table-column
-            prop="processDefinitionName"
-            :label="t('application.processType')"
-            min-width="200"
-          >
-            <template #default="{ row }">
-              <el-link
-                type="primary"
-                @click="continueDraft(row)"
+        </el-input>
+        <el-button
+          type="primary"
+          :icon="Download"
+          @click="handleExport"
+        >
+          {{ t('common.export') }}
+        </el-button>
+      </div>
+
+      <template v-if="activeTab === 'DRAFT'">
+        <div class="list-data-grid-scroll">
+          <div class="list-data-grid-inner">
+            <el-table
+              :data="filteredDraftList"
+              stripe
+              class="list-data-grid"
+              scrollbar-always-on
+              height="100%"
+              @selection-change="handleDraftSelectionChange"
+            >
+              <template #empty>
+                <div
+                  v-if="loading"
+                  class="table-empty-loading"
+                >
+                  <el-icon class="table-empty-loading__icon is-loading">
+                    <Loading />
+                  </el-icon>
+                  <span>{{ t('common.loading') }}</span>
+                </div>
+                <span v-else>{{ t('application.noDrafts') }}</span>
+              </template>
+              <el-table-column
+                type="selection"
+                :width="selectionColumnWidth"
+              />
+              <el-table-column
+                prop="processDefinitionName"
+                :label="t('application.processType')"
+                min-width="200"
               >
-                {{ row.processDefinitionName }}
-              </el-link>
-            </template>
-          </el-table-column>
-          <el-table-column
-            prop="updatedAt"
-            :label="t('application.saveTime')"
-            width="180"
-          >
-            <template #default="{ row }">
-              {{ formatDate(row.updatedAt) }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            :label="t('common.actions')"
-            width="180"
-            fixed="right"
-          >
-            <template #default="{ row }">
-              <el-button
-                type="primary"
-                size="small"
-                @click="continueDraft(row)"
+                <template #default="{ row }">
+                  <el-link
+                    type="primary"
+                    @click="continueDraft(row)"
+                  >
+                    {{ row.processDefinitionName }}
+                  </el-link>
+                </template>
+              </el-table-column>
+              <el-table-column
+                prop="updatedAt"
+                :label="t('application.saveTime')"
+                width="180"
               >
-                {{ t('application.continueFilling') }}
-              </el-button>
-              <el-button
-                type="danger"
-                size="small"
-                @click="handleDeleteDraft(row)"
+                <template #default="{ row }">
+                  {{ formatDate(row.updatedAt) }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                :label="t('common.actions')"
+                width="180"
+                fixed="right"
               >
-                {{ t('common.delete') }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+                <template #default="{ row }">
+                  <el-button
+                    type="primary"
+                    size="small"
+                    @click="continueDraft(row)"
+                  >
+                    {{ t('application.continueFilling') }}
+                  </el-button>
+                  <el-button
+                    type="danger"
+                    size="small"
+                    @click="handleDeleteDraft(row)"
+                  >
+                    {{ t('common.delete') }}
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
       </template>
 
       <template v-else>
@@ -126,6 +163,7 @@
               :class="{ 'list-data-grid--fit': gridFits }"
               scrollbar-always-on
               :height="gridTableHeight || '100%'"
+              @selection-change="handleGridSelectionChange"
             >
               <template #empty>
                 <div
@@ -139,6 +177,10 @@
                 </div>
                 <span v-else>{{ t('application.noApplications') }}</span>
               </template>
+              <el-table-column
+                type="selection"
+                :width="selectionColumnWidth"
+              />
               <el-table-column
                 v-for="(col, colIndex) in displayColumns"
                 :key="col.field"
@@ -262,15 +304,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Download, Loading, Search } from '@element-plus/icons-vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
-import type { ListColumnFilter } from '@platform-shared/list/columnMeta'
+import type { ListColumnFilter, ListColumnMeta } from '@platform-shared/list/columnMeta'
+import { exportTableCsv } from '@platform-shared/list/tableExport'
 import { processApi, type ProcessInstance } from '@/api/process'
 import { usePortalListGrid } from '@/composables/list/usePortalListGrid'
 import { searchListFilterUsers } from '@/composables/list/searchListFilterUsers'
@@ -301,7 +344,34 @@ function tabFromQuery(): string {
 const activeTab = ref(tabFromQuery())
 const loading = ref(true)
 const draftList = ref<DraftRow[]>([])
+const draftSelectedRows = ref<DraftRow[]>([])
 const draftCount = ref(0)
+const applicationKeyword = ref('')
+
+const filteredDraftList = computed(() => {
+  const keyword = applicationKeyword.value.trim().toLowerCase()
+  if (!keyword) return draftList.value
+  return draftList.value.filter((row) => row.processDefinitionName.toLowerCase().includes(keyword))
+})
+
+const draftExportColumns = computed<ListColumnMeta[]>(() => [
+  {
+    field: 'processDefinitionName',
+    label: t('application.processType'),
+    kind: 'TEXT',
+    filterable: false,
+    sortable: false,
+    operators: [],
+  },
+  {
+    field: 'updatedAt',
+    label: t('application.saveTime'),
+    kind: 'DATETIME',
+    filterable: false,
+    sortable: false,
+    operators: [],
+  },
+])
 
 const {
   displayColumns,
@@ -316,12 +386,16 @@ const {
   gridFits,
   gridTableHeight,
   gridInnerStyle,
+  selectionColumnWidth,
   widthOf,
   setWidth,
   persistWidths,
   beginQuery,
   isCurrentQuery,
   applyPage,
+  handleGridSelectionChange,
+  setQuickFilter,
+  exportGridCsv,
   buildQuery,
   moveColumn,
   resetPage,
@@ -333,6 +407,7 @@ const {
 } = usePortalListGrid<ProcessInstance>({
   storageKey: 'portal-list-layout:my-applications',
   extraWidth: ACTIONS_COL_WIDTH,
+  selection: true,
 })
 
 const getStatusType = (status: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' => {
@@ -379,6 +454,7 @@ const loadDrafts = async () => {
     const response = await processApi.getDraftList()
     const data = response.data || response
     draftList.value = Array.isArray(data) ? data : []
+    draftSelectedRows.value = []
     draftCount.value = draftList.value.length
   } catch (error) {
     if (!(error as { response?: unknown })?.response) {
@@ -428,12 +504,37 @@ const handleTabChange = () => {
   // Keep ?status= in step with the visible tab, so a refresh or a shared link reopens it.
   const status = activeTab.value === 'all' ? undefined : activeTab.value
   void router.replace({ path: '/my-applications', query: status ? { status } : {} })
+  applicationKeyword.value = ''
+  draftSelectedRows.value = []
+  setQuickFilter('businessKey', '')
   resetPage()
   if (activeTab.value === 'DRAFT') {
     loadDrafts()
   } else {
     loadApplications()
   }
+}
+
+function runApplicationSearch() {
+  if (activeTab.value === 'DRAFT') return
+  setQuickFilter('businessKey', applicationKeyword.value)
+  void loadApplications()
+}
+
+function handleDraftSelectionChange(selection: DraftRow[]) {
+  draftSelectedRows.value = selection
+}
+
+function handleExport() {
+  if (activeTab.value !== 'DRAFT') {
+    exportGridCsv('my-applications')
+    return
+  }
+  exportTableCsv({
+    rows: draftSelectedRows.value.length > 0 ? draftSelectedRows.value : filteredDraftList.value,
+    columns: draftExportColumns.value,
+    filename: 'my-application-drafts',
+  })
 }
 
 const viewDetail = (row: ProcessInstance) => {

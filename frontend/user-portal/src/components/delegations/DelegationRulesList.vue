@@ -3,6 +3,28 @@
     v-loading="loading"
     class="portal-card list-tab-card"
   >
+    <div class="list-grid-toolbar">
+      <el-input
+        v-model="ruleKeyword"
+        :placeholder="t('common.search')"
+        clearable
+        style="width: 240px;"
+        @keydown.enter.prevent="runSearch"
+        @clear="runSearch"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
+      <el-button
+        type="primary"
+        :icon="Download"
+        @click="exportGridCsv('delegation-rules')"
+      >
+        {{ t('common.export') }}
+      </el-button>
+    </div>
+
     <div
       ref="gridScrollRef"
       class="list-data-grid-scroll"
@@ -21,6 +43,7 @@
           :class="{ 'list-data-grid--fit': gridFits }"
           scrollbar-always-on
           :height="gridTableHeight || '100%'"
+          @selection-change="handleGridSelectionChange"
         >
           <template #empty>
             <div
@@ -34,6 +57,10 @@
             </div>
             <span v-else>{{ t('delegation.noRules') }}</span>
           </template>
+          <el-table-column
+            type="selection"
+            :width="selectionColumnWidth"
+          />
           <el-table-column
             v-for="(col, colIndex) in displayColumns"
             :key="col.field"
@@ -60,7 +87,7 @@
               />
             </template>
             <template #default="{ row }">
-<el-tag
+              <el-tag
                 v-if="col.field === 'status'"
                 :type="getStatusType(row.status)"
                 size="small"
@@ -87,27 +114,27 @@
           >
             <template #default="{ row }">
               <div class="row-actions">
-                  <el-button
-                    v-if="row.status === 'ACTIVE'"
-                    size="small"
-                    @click="handleSuspend(row)"
-                  >
-                    {{ t('delegation.suspend') }}
-                  </el-button>
-                  <el-button
-                    v-if="row.status === 'SUSPENDED'"
-                    size="small"
-                    @click="handleResume(row)"
-                  >
-                    {{ t('delegation.resume') }}
-                  </el-button>
-                  <el-button
-                    type="danger"
-                    size="small"
-                    @click="handleDelete(row)"
-                  >
-                    {{ t('common.delete') }}
-                  </el-button>
+                <el-button
+                  v-if="row.status === 'ACTIVE'"
+                  size="small"
+                  @click="handleSuspend(row)"
+                >
+                  {{ t('delegation.suspend') }}
+                </el-button>
+                <el-button
+                  v-if="row.status === 'SUSPENDED'"
+                  size="small"
+                  @click="handleResume(row)"
+                >
+                  {{ t('delegation.resume') }}
+                </el-button>
+                <el-button
+                  type="danger"
+                  size="small"
+                  @click="handleDelete(row)"
+                >
+                  {{ t('common.delete') }}
+                </el-button>
               </div>
             </template>
           </el-table-column>
@@ -136,7 +163,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Download, Loading, Search } from '@element-plus/icons-vue'
 import ListColumnHeader from '@platform-shared/list/ListColumnHeader.vue'
 import ListFilterDialog from '@platform-shared/list/ListFilterDialog.vue'
 import ListPagination from '@platform-shared/list/ListPagination.vue'
@@ -157,6 +184,7 @@ const ACTIONS_COL_WIDTH = 200
 
 const { t } = useI18n()
 const loading = ref(true)
+const ruleKeyword = ref('')
 
 const {
   displayColumns,
@@ -171,12 +199,16 @@ const {
   gridFits,
   gridTableHeight,
   gridInnerStyle,
+  selectionColumnWidth,
   widthOf,
   setWidth,
   persistWidths,
   beginQuery,
   isCurrentQuery,
   applyPage,
+  handleGridSelectionChange,
+  setQuickFilter,
+  exportGridCsv,
   buildQuery,
   moveColumn,
   openFilter,
@@ -187,6 +219,7 @@ const {
 } = usePortalListGrid<DelegationRule>({
   storageKey: 'portal-list-layout:delegation-rules',
   extraWidth: ACTIONS_COL_WIDTH,
+  selection: true,
 })
 
 function getStatusType(status: string): 'success' | 'info' | 'warning' {
@@ -253,6 +286,11 @@ function onFilterApply(filter: ListColumnFilter) {
 
 function onFilterClear() {
   onClearFilter(filterDialog.field)
+}
+
+function runSearch() {
+  setQuickFilter('reason', ruleKeyword.value)
+  void load()
 }
 
 async function handleSuspend(row: DelegationRule) {

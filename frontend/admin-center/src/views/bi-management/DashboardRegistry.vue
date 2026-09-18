@@ -2,6 +2,9 @@
   <div class="page-container">
     <PageHeader :title="t('bi.dashboard.pageTitle')">
       <template #actions>
+        <el-button @click="exportGridCsv('bi-dashboard-registry')">
+          <el-icon><Download /></el-icon>{{ t('common.export') }}
+        </el-button>
         <el-button
           type="primary"
           :loading="syncing"
@@ -84,7 +87,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -92,7 +94,13 @@
             :class="{ 'list-data-grid--fit': gridFits }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               v-for="(col, colIndex) in displayColumns"
               :key="col.field"
@@ -249,7 +257,7 @@
 <script setup lang="ts">
 import { onMounted, onActivated } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Refresh, Search, Refresh as RefreshIcon } from '@element-plus/icons-vue'
+import { Download, Refresh, Search, Refresh as RefreshIcon } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { useBiDashboard } from '@/composables/modules/useBiDashboard'
 import { biDashboardStatusKey, biDashboardStatusTagType, formatDateTime } from '@/utils/format'
@@ -269,6 +277,9 @@ const {
   ACTIONS_COL_WIDTH,
   displayColumns,
   displayRows,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
   columnFilters,
   sort,
   filterDialog,

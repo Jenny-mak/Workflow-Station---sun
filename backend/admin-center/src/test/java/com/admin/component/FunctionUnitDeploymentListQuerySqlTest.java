@@ -75,8 +75,19 @@ class FunctionUnitDeploymentListQuerySqlTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void keywordSearchCoversFunctionUnitVersionAndStatus() {
+        component.query(new FunctionUnitDeploymentListQueryRequest(0, 20, "approved", List.of(), null, null));
+
+        assertThat(preparedSql.get(0))
+                .contains("fu.name ILIKE ?")
+                .contains("fu.code ILIKE ?")
+                .contains("COALESCE(fu.version, '') ILIKE ?")
+                .contains("CAST(d.status AS TEXT) ILIKE ?");
+    }
+
     private static FunctionUnitDeploymentListQueryRequest request(List<ListColumnFilter> filters) {
-        return new FunctionUnitDeploymentListQueryRequest(0, 20, filters, null, null);
+        return new FunctionUnitDeploymentListQueryRequest(0, 20, null, filters, null, null);
     }
 
     private String pageSql() {

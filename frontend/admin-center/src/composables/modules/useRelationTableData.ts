@@ -12,6 +12,7 @@ import { notifySuccess, notifyError, notifyConfirm } from '@/utils/notify'
 import { relationTableDataApi, type RelationTableResponse, type RelationTableDataRow, type FieldDefinitionResponse, type RelationImportResult, type LookupConfig, type LookupFilterCondition } from '@/api/relationTable'
 import { buildDerivedFilterConditions, resolveDerivedLookup, normalizeLookupValueForSave, type FieldLike } from '@/components/lookup/useLookupBehaviors'
 import { useAdminListGrid } from '@/composables/list/useAdminListGrid'
+import { exportTableCsv } from '@platform-shared/list/tableExport'
 
 export const RT_DATA_STATUS_COL_WIDTH = 100
 export const RT_DATA_ACTIONS_COL_WIDTH = 240
@@ -352,6 +353,15 @@ export function useRelationTableData() {
 
   const handleExport = async () => {
     if (!selectedTableId.value) return
+    if (grid.gridSelectedRows.value.length > 0) {
+      exportTableCsv({
+        rows: grid.gridSelectedRows.value,
+        columns: grid.displayColumns.value,
+        filename: selectedTable.value?.displayName || selectedTable.value?.tableName || 'data',
+      })
+      notifySuccess('Export completed')
+      return
+    }
     exporting.value = true
     try {
       const blob = await relationTableDataApi.exportCsv(selectedTableId.value)

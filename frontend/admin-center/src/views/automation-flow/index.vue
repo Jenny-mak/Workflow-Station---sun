@@ -2,6 +2,9 @@
   <div class="page-container">
     <PageHeader :title="t('automationFlow.title')">
       <template #actions>
+        <el-button @click="exportGridCsv('automation-flows')">
+          <el-icon><Download /></el-icon>{{ t('common.export') }}
+        </el-button>
         <el-button @click="loadFlows">
           <el-icon><Refresh /></el-icon>{{ t('common.refresh') }}
         </el-button>
@@ -51,7 +54,6 @@
           <el-table
             :data="displayRows"
             stripe
-            border
             :fit="false"
             table-layout="fixed"
             style="width: 100%"
@@ -59,7 +61,13 @@
             :class="{ 'list-data-grid--fit': gridFits && !isCompact }"
             scrollbar-always-on
             :height="gridTableHeight || '100%'"
+            @selection-change="handleGridSelectionChange"
           >
+            <el-table-column
+              type="selection"
+              :width="selectionColumnWidth"
+              fixed="left"
+            />
             <el-table-column
               v-for="(col, colIndex) in tableColumns"
               :key="col.field"
@@ -343,7 +351,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MoreFilled, Refresh, Search, Upload } from '@element-plus/icons-vue'
+import { Download, MoreFilled, Refresh, Search, Upload } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import FlowStructureDialog from '@/components/automation-flow/FlowStructureDialog.vue'
 import { formatDate } from '@/utils/format'
@@ -389,6 +397,9 @@ const {
   handleImport,
   ACTIONS_COL_WIDTH,
   displayRows,
+  selectionColumnWidth,
+  handleGridSelectionChange,
+  exportGridCsv,
   columnFilters,
   sort,
   filterDialog,
