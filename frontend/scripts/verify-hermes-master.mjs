@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Hermes Master（DW 全局助手机器人）端到端验证：
- * 未激活的 logo（只有点击能激活）→ 出场 → 划过反应 → 点击聊天 → 跨页面常驻 → 高处拖拽摔晕再跳起 → 低处轻放 → 1/1000 扔石头彩蛋（强制触发）。
+ * 未激活的 logo（只有点击能激活）→ 出场 → 划过反应 → 点击聊天 → 跨页面常驻 → 高处拖拽摔晕再跳起 → 低处轻放 → 双手举双筒望远镜盯鼠标 → 1/1000 扔石头彩蛋（后两项钉住 Math.random 强制触发）。
  *
  *   cd frontend && node scripts/verify-hermes-master.mjs
  *
@@ -205,7 +205,51 @@ await page.waitForTimeout(1500)
 const lowTail = (await poses()).slice(beforeLow).join('>')
 check('put down near the ground → soft landing, no fainting', lowTail.startsWith('fall>land') && !lowTail.includes('dizzy'), lowTail)
 
-// 9. 彩蛋：每次挑动作有 1/1000 的概率捡石头扔向鼠标。钉住 Math.random 强制命中，不改产品代码
+// 9. 双手举双筒望远镜盯着鼠标：钉住 Math.random 选中动作表最后一项（spy），再核对两只镜筒确实指向鼠标
+await waitUntilCalm()
+await page.mouse.move(300, 200)
+await page.evaluate(() => {
+  window.__realRandom = Math.random
+  Math.random = () => 0.999
+})
+await waitForPose('spy', 45000).catch(() => {})
+await page.evaluate(() => {
+  Math.random = window.__realRandom
+})
+check('picks up the binoculars', (await pose()) === 'spy', await pose())
+/** 镜筒实际转角 vs 从两眼中点指向鼠标的角度（deg），以及双手 / 常规手臂的状态 */
+async function spyState(mouse) {
+  await page.mouse.move(mouse.x, mouse.y, { steps: 4 })
+  await page.waitForTimeout(200)
+  return page.evaluate(m => {
+    const svg = document.querySelector('.hm-robot svg')
+    const barrels = [...svg.querySelectorAll('.hm-spy__barrel')]
+    if (!barrels.length) return null
+    const angles = barrels.map(g => Number(/rotate\(([-\d.]+)\)/.exec(g.getAttribute('transform'))[1]))
+    const box = svg.getBoundingClientRect()
+    const unit = box.width / 120
+    const expected = (Math.atan2(m.y - (box.top + 18 * unit), m.x - (box.left + 59.5 * unit)) * 180) / Math.PI
+    return {
+      angles,
+      expected: Math.round(expected * 10) / 10,
+      hands: svg.querySelectorAll('.hm-spy > circle').length,
+      arms: svg.querySelectorAll('.hm-spy > path.hm-limb').length,
+      restArmsHidden: [...svg.querySelectorAll('.hm-arm')].every(a => getComputedStyle(a).opacity === '0')
+    }
+  }, mouse)
+}
+const aimed = st => st && st.angles.every(a => Math.abs(a - st.expected) < 1.5)
+b = await box()
+const spyLeft = await spyState({ x: b.x - 300, y: b.y - 160 })
+check('both barrels point at a mouse on the upper left', aimed(spyLeft), JSON.stringify(spyLeft))
+check('held with both hands; the resting arms are hidden', spyLeft?.hands === 2 && spyLeft?.arms === 2 && spyLeft?.restArmsHidden, JSON.stringify(spyLeft))
+await shot('13-binoculars-left', await robotClip(140))
+const spyRight = await spyState({ x: b.x + b.width + 60, y: b.y - 260 })
+check('and follow it to the upper right', aimed(spyRight) && spyRight.expected > -90, JSON.stringify(spyRight))
+await shot('14-binoculars-right', await robotClip(140))
+await page.mouse.move(10, 10)
+
+// 10. 彩蛋：每次挑动作有 1/1000 的概率捡石头扔向鼠标。钉住 Math.random 强制命中，不改产品代码
 await waitUntilCalm()
 await page.mouse.move(400, 300)
 await page.evaluate(() => {

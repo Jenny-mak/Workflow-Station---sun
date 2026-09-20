@@ -79,6 +79,16 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
             Map.entry("VIEWS", Set.of("mainTableViews")),
             Map.entry("SERVICE_TASK_BINDINGS", Set.of("serviceTaskBindings")));
 
+    /** 一键生成的写入范围（AiWriteService 的全量替换） */
+    public static final String SCOPE_ALL = "ALL";
+
+    /**
+     * 一键生成产出的切片：六类核心设计。视图、邮件与 service task 绑定不在内——连接要人工补凭证、
+     * 监控依赖连接、绑定依赖已发布的 Automation flow，一次生成里带上它们只会让整份结果过不了引用校验。
+     */
+    public static final Set<String> ONE_CLICK_SLICES = Set.of("tableDefinitions", "tableRelations",
+            "formDefinitions", "actionDefinitions", "decisionDefinitions", "processDefinition");
+
     /** scope 允许的切片 key；ALL 返回全部。供本类与 Apply 编排（component）共用。 */
     public static Set<String> allowedSlices(String scope) {
         if ("ALL".equalsIgnoreCase(scope)) {
@@ -143,6 +153,19 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
                 buildProposalMessage(request, scope), context, mode, documents);
     }
 
+    @Override
+    public ProposalDraft prepareOneClick(AiStudioChatRequest request) {
+        FunctionUnitContextDTO context =
+                aiGenerationService.serializeFunctionUnitContext(request.getFunctionUnitId());
+        AiMode mode = aiGenerationService.determineMode(request.getFunctionUnitId());
+        List<Map<String, String>> documents = documentService.latestContents(request.getFunctionUnitId())
+                .entrySet().stream()
+                .map(e -> Map.of("documentType", e.getKey().name(), "content", e.getValue()))
+                .toList();
+        return new ProposalDraft(request.getFunctionUnitId(), request.getPhase(), SCOPE_ALL,
+                buildOneClickMessage(request), context, mode, documents);
+    }
+
     /**
      * 提案第二步：复用 AI Generate 的 GENERATION 管线（{@code callAiModel} 自带上下文序列化时的
      * 提示词模板、schema 元数据、校验失败自动修复重试）。sessionId 用随机 UUID——
@@ -162,7 +185,7 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
                 ? new java.util.LinkedHashMap<>((Map<String, Object>) m)
                 : null;
         if (proposal != null) {
-            proposal.keySet().retainAll(allowedSlices(scope));
+            proposal.keySet().retainAll(SCOPE_ALL.equals(scope) ? ONE_CLICK_SLICES : allowedSlices(scope));
             if (proposal.isEmpty()) proposal = null;
         }
         if (proposal == null && (!(reply instanceof String r) || r.isBlank())) {
@@ -200,6 +223,24 @@ public class AiStudioChatServiceImpl implements AiStudioChatService {
                 + "Do NOT output any other slice (no process, forms, actions, decisions or tables outside the "
                 + "scope), do NOT rename the function unit, and do NOT include an icon.\n"
                 + "========== End of scoped change request ==========";
+    }
+
+    /**
+     * 一键生成的用户消息 = 对话转写（含本轮需求描述）+ 整体生成指令。Requirements / Design 文档由管线另行带上。
+     */
+    private String buildOneClickMessage(AiStudioChatRequest request) {
+        return buildTranscript(request) + "\n\n"
+                + "========== One-click generation request (system-provided, highest priority) ==========\n"
+                + "Generate the COMPLETE function unit design in a single pass from the user's requirements above "
+                + "and the Requirements / Function Unit Design documents (when provided). It REPLACES the whole "
+                + "existing design, so every slice must be complete and consistent with the others "
+                + "(forms bind existing tables and fields, the process references existing forms and actions).\n"
+                + "The GENERATED_DATA block must contain exactly these keys and nothing else: "
+                + new java.util.TreeSet<>(ONE_CLICK_SLICES) + ". Use an empty array for a slice the requirements "
+                + "do not call for.\n"
+                + "Do NOT output email templates, connections, email monitors, main table views or service task "
+                + "bindings, do NOT rename the function unit, and do NOT include an icon.\n"
+                + "========== End of one-click generation request ==========";
     }
 
     private String advisoryChat(AiStudioChatRequest request, String amToken) {

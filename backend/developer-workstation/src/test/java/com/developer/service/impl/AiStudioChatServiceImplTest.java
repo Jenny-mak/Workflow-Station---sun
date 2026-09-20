@@ -281,6 +281,39 @@ class AiStudioChatServiceImplTest {
     }
 
     @Test
+    void oneClickGeneratesTheWholeCoreDesignAndDropsTheSlicesItMustNotProduce() {
+        AiStudioChatRequest req = request("PROCESS_DESIGN", "leave request with manager approval", null);
+        FunctionUnitContextDTO context = new FunctionUnitContextDTO();
+        List<Map<String, Object>> tables = List.of(Map.of("tableName", "leave_request"));
+        Map<String, Object> process = Map.of("bpmnXml", "<bpmn/>");
+        Map<String, Object> generated = Map.of(
+                "name", "Renamed by the model",
+                "tableDefinitions", tables,
+                "processDefinition", process,
+                "emailConnections", List.of(Map.of("name", "hr@example.com")),
+                "mainTableViews", List.of(Map.of("viewName", "All")));
+        when(aiGenerationService.serializeFunctionUnitContext(1L)).thenReturn(context);
+        when(aiGenerationService.determineMode(1L)).thenReturn(AiMode.NEW);
+        when(documentService.latestContents(1L)).thenReturn(Map.of());
+        when(aiGenerationService.callAiModel(any(),
+                org.mockito.ArgumentMatchers.argThat((String msg) -> msg != null
+                        && msg.startsWith("User: leave request with manager approval")
+                        && msg.contains("Generate the COMPLETE function unit design")
+                        && msg.contains("processDefinition")),
+                eq(AiPhase.GENERATION), eq(AiMode.NEW), eq(context), eq(1L), eq(List.of()),
+                eq("ALL"), eq("tok")))
+                .thenReturn(Map.of("reply", "Generated.", "generatedData", generated));
+
+        AiStudioChatService.ProposalDraft draft = service.prepareOneClick(req);
+        StudioChatResult result = service.runProposal(draft, "tok");
+
+        assertEquals("ALL", draft.scope());
+        assertEquals("PROCESS_DESIGN", draft.phase());
+        assertEquals(Map.of("tableDefinitions", tables, "processDefinition", process), result.proposal());
+        assertEquals("ALL", result.proposalScope());
+    }
+
+    @Test
     void proposeOnEmailPhaseUsesUpsertScopeAndKeepsOnlyItsSlice() {
         AiStudioChatRequest req = request("EMAIL_TEMPLATES", "add an approval notification", null);
         req.setPropose(true);

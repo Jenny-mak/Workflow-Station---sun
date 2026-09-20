@@ -11,11 +11,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -30,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -174,5 +177,61 @@ class AiStudioProposalJobPersistenceTest {
         doThrow(new IllegalStateException("db down")).when(store).save(any(), anyString(), anyString());
         AiStudioProposalJobResponse s = service.submit(request(1L, "k1"), () -> new StudioChatResult("ok", null, null), null);
         assertEquals(Status.SUCCEEDED, await(s.getJobId()).getStatus());
+    }
+
+    /**
+     * 库里的 save 对自带 id 的实体是"先查后插"。提交线程与工作线程同时首写同一个作业时，
+     * 两边都查不到行、都去插，后到的撞 {@code dw_ai_studio_proposal_jobs_pkey}。
+     */
+    @Test
+    void concurrentFirstSavesOfOneJobNeverCollideOnThePrimaryKey() throws Exception {
+        Map<String, Status> rows = new ConcurrentHashMap<>();
+        List<String> failures = new CopyOnWriteArrayList<>();
+        CountDownLatch twoWritersInside = new CountDownLatch(2);
+        doAnswer(inv -> {
+            AiStudioProposalJobResponse snapshot = inv.getArgument(0);
+            boolean exists = rows.containsKey(snapshot.getJobId());
+            twoWritersInside.countDown();
+            if (!exists) {
+                // 查完还没插：给另一个写入方留出同样"查不到"的窗口
+                twoWritersInside.await(300, TimeUnit.MILLISECONDS);
+                if (rows.putIfAbsent(snapshot.getJobId(), snapshot.getStatus()) != null) {
+                    failures.add("duplicate key on " + snapshot.getStatus());
+                    throw new DataIntegrityViolationException("duplicate key value violates unique constraint");
+                }
+                return null;
+            }
+            rows.put(snapshot.getJobId(), snapshot.getStatus());
+            return null;
+        }).when(store).save(any(), anyString(), anyString());
+
+        AiStudioProposalJobResponse submitted = service.submit(request(1L, "k1"),
+                () -> new StudioChatResult("ok", null, null), null);
+        await(submitted.getJobId());
+
+        assertEquals(List.of(), failures, "the first insert and the next update never run side by side");
+        assertEquals(Status.SUCCEEDED, rows.get(submitted.getJobId()));
+    }
+
+    /** 早拍的快照晚写完，不能把更新的状态盖回去：否则库里留下一条永远"未完成"的幽灵作业。 */
+    @Test
+    void aSlowEarlierSaveNeverOverwritesANewerSnapshot() throws Exception {
+        Map<String, Status> rows = new ConcurrentHashMap<>();
+        CountDownLatch terminalSaved = new CountDownLatch(1);
+        doAnswer(inv -> {
+            AiStudioProposalJobResponse snapshot = inv.getArgument(0);
+            if (snapshot.getStatus() == Status.PENDING) {
+                terminalSaved.await(300, TimeUnit.MILLISECONDS); // 提交线程的这次写库特别慢
+            }
+            rows.put(snapshot.getJobId(), snapshot.getStatus());
+            if (snapshot.getStatus() == Status.SUCCEEDED) terminalSaved.countDown();
+            return null;
+        }).when(store).save(any(), anyString(), anyString());
+
+        AiStudioProposalJobResponse submitted = service.submit(request(1L, "k1"),
+                () -> new StudioChatResult("ok", null, null), null);
+        await(submitted.getJobId());
+
+        assertEquals(Status.SUCCEEDED, rows.get(submitted.getJobId()), "the row ends on the newest state");
     }
 }

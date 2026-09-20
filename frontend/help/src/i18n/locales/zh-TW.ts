@@ -2,6 +2,8 @@ import formEventMessages from './formEvents.zh-TW'
 import formCtlMessages from './formCtl.zh-TW'
 import tableDesignMessages from './tableDesign.zh-TW'
 import viewDesignMessages from './viewDesign.zh-TW'
+import fuDocumentsMessages from './fuDocuments.zh-TW'
+import aiStudioMessages from './aiStudio.zh-TW'
 
 export default {
   app: {
@@ -107,6 +109,8 @@ export default {
     emailMonitors: '郵件監聽',
     decisionDesign: '決策設計',
     versionManagement: '版本管理',
+    functionUnitSettings: 'Function Unit Settings',
+    aiStudio: 'AI Studio',
     automation: '自動化',
     admin: '管理中心',
     acDashboard: '儀表板',
@@ -149,6 +153,14 @@ export default {
     upProfileSetup: '用戶檔案設置',
   },
   guides: {
+    fuDocuments: {
+      title: 'Requirements 與 Function Unit Design',
+      summary: '功能單元的兩份 Markdown 文件：編輯、匯入、下載、版本，以及 AI Studio 在哪裡寫入它們。',
+    },
+    aiStudio: {
+      title: 'Build with AI（AI Studio）',
+      summary: '進入 AI Studio 的三種方式，以及 One-click generate：會寫什麼、不寫什麼、失敗時怎麼辦。',
+    },
     computedFields: {
       title: '計算欄位公式',
       summary: '計算欄如何自動填值、可用函數，以及公式失敗時的處理方式。',
@@ -672,4 +684,6 @@ export default {
   ...formCtlMessages,
   ...tableDesignMessages,
   ...viewDesignMessages,
+  ...fuDocumentsMessages,
+  ...aiStudioMessages,
 }

@@ -15,6 +15,11 @@
         v-else
         class="document-editor__meta"
       >{{ t('functionUnit.documents.empty') }}</span>
+      <DesignerHelpLink
+        path="/fu-documents"
+        :aria-label="t('functionUnit.documents.guideLinkAria')"
+        test-id="fu-documents-guide-link"
+      />
       <el-tag
         v-if="isDirty"
         size="small"
@@ -36,6 +41,22 @@
           </el-radio-button>
         </el-radio-group>
         <el-button
+          v-if="!readonly"
+          size="small"
+          :icon="Upload"
+          @click="fileInput?.click()"
+        >
+          {{ t('functionUnit.documents.import') }}
+        </el-button>
+        <el-button
+          size="small"
+          :icon="Download"
+          :disabled="!draft"
+          @click="download"
+        >
+          {{ t('functionUnit.documents.download') }}
+        </el-button>
+        <el-button
           size="small"
           :disabled="!saved"
           @click="historyVisible = true"
@@ -54,6 +75,14 @@
         </el-button>
       </div>
     </div>
+
+    <input
+      ref="fileInput"
+      type="file"
+      class="document-editor__file"
+      :accept="DOCUMENT_FILE_ACCEPT"
+      @change="onFileSelected"
+    >
 
     <div
       class="document-editor__body"
@@ -96,8 +125,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Download, Upload } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import MarkdownRenderer from '@/components/ai/MarkdownRenderer.vue'
+import DesignerHelpLink from '@/components/designer/DesignerHelpLink.vue'
 import FunctionUnitDocumentHistory from './FunctionUnitDocumentHistory.vue'
 import {
   functionUnitDocumentApi,
@@ -107,9 +138,18 @@ import {
 } from '@/api/functionUnitDocument'
 import { pickHttpErrorCode, resolveUserFacingHttpMessage } from '@/utils/httpErrorMessage'
 import { documentVersionLabel, formatDocumentSource } from '@/utils/functionUnitDocumentSource'
+import {
+  DOCUMENT_FILE_ACCEPT,
+  DocumentFileRejected,
+  documentFileName,
+  downloadDocumentFile,
+  readDocumentFile
+} from '@/utils/functionUnitDocumentFile'
 
 const props = defineProps<{
   functionUnitId: number
+  /** 只用于下载文件名 */
+  functionUnitName?: string
   type: FunctionUnitDocumentType
   readonly: boolean
 }>()
@@ -122,6 +162,7 @@ const saved = ref<FunctionUnitDocument | null>(null)
 const draft = ref('')
 const mode = ref<'edit' | 'preview'>('edit')
 const historyVisible = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
 
 const showEditor = computed(() => !props.readonly && mode.value === 'edit')
 const isDirty = computed(() => draft.value !== (saved.value?.content ?? ''))
@@ -200,6 +241,45 @@ async function save() {
   }
 }
 
+/** 下载的是编辑器里看到的内容：有未保存修改时就是草稿，文件名仍带它所基于的版本号。 */
+function download() {
+  downloadDocumentFile(documentFileName(props.functionUnitName, props.type, saved.value), draft.value)
+}
+
+/**
+ * 导入只替换编辑器草稿，不直接落库：用户在预览里看过再点保存，版本比对与冲突处理走同一条链路。
+ * 已保存的内容在版本历史里，覆盖无损；只有未保存的修改会丢，所以只在这种情况下确认。
+ */
+async function onFileSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  // 清空 value：否则再次选择同一个文件不会触发 change
+  input.value = ''
+  if (!file) return
+  let content: string
+  try {
+    content = await readDocumentFile(file)
+  } catch (e) {
+    if (!(e instanceof DocumentFileRejected)) throw e
+    ElMessage.error(t(`functionUnit.documents.importRejected.${e.reason}`))
+    return
+  }
+  if (isDirty.value) {
+    try {
+      await ElMessageBox.confirm(
+        t('functionUnit.documents.importReplaceConfirm', { file: file.name }),
+        t('functionUnit.documents.unsavedTitle'),
+        { type: 'warning', confirmButtonText: t('functionUnit.documents.importReplace') }
+      )
+    } catch {
+      return
+    }
+  }
+  draft.value = content
+  mode.value = 'edit'
+  ElMessage.success(t('functionUnit.documents.imported', { file: file.name }))
+}
+
 onMounted(load)
 
 defineExpose({ isDirty, reload: load })
@@ -227,6 +307,10 @@ defineExpose({ isDirty, reload: load })
   gap: 8px;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.document-editor__file {
+  display: none;
 }
 
 .document-editor__body {

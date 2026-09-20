@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * AI Studio Copilot 提案作业注册表：把分钟级的模型调用从 HTTP 请求线程上摘下来。
@@ -36,8 +37,23 @@ public interface AiStudioProposalJobService {
      * @param onSucceeded 作业确实以 SUCCEEDED 落定后在后台线程回调一次（已取消/超时的迟到结果不会触发）；
      *                    回调抛错只记日志，不改变作业状态
      */
+    default AiStudioProposalJobResponse submit(JobRequest request,
+                                               Supplier<AiStudioChatService.StudioChatResult> work,
+                                               Consumer<AiStudioChatService.StudioChatResult> onSucceeded) {
+        return submit(request, work, null, onSucceeded);
+    }
+
+    /**
+     * 带"落定前提交"步骤的作业（一键生成的自动 Apply）。
+     *
+     * @param commit 模型结果回来后、作业落定为 SUCCEEDED 之前在后台线程执行，返回值取代模型结果成为作业结果；
+     *               与取消互斥：作业已被取消/超时则不会执行，一旦开始执行，取消请求要等它结束
+     *               （此时作业已是 SUCCEEDED，取消幂等返回）——不会出现"用户点了 Stop、设计却被改掉"。
+     *               抛出的异常与 {@code work} 同样记为作业失败。可空
+     */
     AiStudioProposalJobResponse submit(JobRequest request,
                                        Supplier<AiStudioChatService.StudioChatResult> work,
+                                       UnaryOperator<AiStudioChatService.StudioChatResult> commit,
                                        Consumer<AiStudioChatService.StudioChatResult> onSucceeded);
 
     /** 无原始消息、无完成回调的提交。 */

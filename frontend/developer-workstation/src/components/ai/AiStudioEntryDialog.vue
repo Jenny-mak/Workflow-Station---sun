@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="visible"
     class="ai-studio-entry-dialog"
-    width="min(860px, 94vw)"
+    width="min(1000px, 94vw)"
     align-center
     @update:model-value="emit('update:visible', $event)"
   >
@@ -10,6 +10,11 @@
       <div class="entry-header">
         <h2 class="entry-header__title">
           {{ t('ai.studio.title') }}
+          <DesignerHelpLink
+            path="/ai-studio"
+            :aria-label="t('ai.studio.guideLinkAria')"
+            test-id="ai-studio-guide-link"
+          />
         </h2>
         <p class="entry-header__subtitle">
           {{ t('ai.studio.subtitle') }}
@@ -92,14 +97,78 @@
           </div>
         </div>
       </div>
+      <div
+        class="mode-card"
+        :class="{ 'is-selected': mode === 'generate', 'is-disabled': !canGenerate }"
+        role="radio"
+        :aria-checked="mode === 'generate'"
+        :aria-disabled="!canGenerate"
+        :tabindex="canGenerate ? 0 : -1"
+        data-testid="ai-studio-mode-generate"
+        @click="canGenerate && (mode = 'generate')"
+        @keydown.enter.prevent="canGenerate && (mode = 'generate')"
+        @keydown.space.prevent="canGenerate && (mode = 'generate')"
+      >
+        <span
+          class="mode-card__radio"
+          :class="{ 'is-checked': mode === 'generate' }"
+        />
+        <div class="mode-card__body">
+          <span class="mode-card__icon-tile mode-card__icon-tile--generate">
+            <el-icon :size="24">
+              <Lightning />
+            </el-icon>
+          </span>
+          <div>
+            <div class="mode-card__title">
+              {{ t('ai.studio.oneClick.title') }}
+            </div>
+            <div class="mode-card__desc">
+              {{ canGenerate ? t('ai.studio.oneClick.desc') : t('ai.studio.oneClick.readOnly') }}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="guide-title">
+    <template v-if="mode === 'generate'">
+      <div class="guide-title">
+        {{ t('ai.studio.oneClick.inputTitle') }}
+      </div>
+      <el-input
+        v-model="requirements"
+        type="textarea"
+        class="generate-input"
+        :rows="7"
+        :maxlength="ONE_CLICK_MAX_CHARS"
+        show-word-limit
+        resize="none"
+        :placeholder="t('ai.studio.oneClick.placeholder')"
+        data-testid="ai-studio-one-click-input"
+      />
+      <ul class="generate-notes">
+        <li>
+          {{ hasRequirementsDocument
+            ? t('ai.studio.oneClick.noteDocsPresent')
+            : t('ai.studio.oneClick.noteDocsAbsent') }}
+        </li>
+        <li>{{ t('ai.studio.oneClick.noteScope') }}</li>
+        <li>{{ t('ai.studio.oneClick.noteDuration') }}</li>
+      </ul>
+    </template>
+
+    <div
+      v-if="mode !== 'generate'"
+      class="guide-title"
+    >
       {{ t('ai.studio.guideTitle') }}
     </div>
     <!-- 引导条画成迷你流程链：编号节点 + 连接线，首节点细环、Review 粗环，
          呼应 BPMN 开始/结束事件——步骤即流程，这是工作流平台自己的语言 -->
-    <div class="guide-steps">
+    <div
+      v-if="mode !== 'generate'"
+      class="guide-steps"
+    >
       <div
         v-for="(phase, idx) in AI_STUDIO_PHASES"
         :key="phase"
@@ -123,9 +192,12 @@
           </el-button>
           <el-button
             type="primary"
+            :loading="submitting"
+            :disabled="mode === 'generate' && !canSubmitGenerate"
+            data-testid="ai-studio-entry-confirm"
             @click="handleConfirm"
           >
-            {{ t('ai.studio.openButton') }}
+            {{ mode === 'generate' ? t('ai.studio.oneClick.button') : t('ai.studio.openButton') }}
           </el-button>
         </div>
       </div>
@@ -134,25 +206,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MagicStick, RefreshLeft, Lock } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { MagicStick, RefreshLeft, Lock, Lightning } from '@element-plus/icons-vue'
 import {
+  AI_STUDIO_ONE_CLICK_PHASE,
   AI_STUDIO_PHASES,
   aiStudioPhaseLabel,
   loadAiStudioDraft,
+  saveAiStudioPendingProposal,
   type AiStudioDraft,
   type AiStudioEntryMode,
   type AiStudioOpenPayload,
   type AiStudioPhase
 } from '@/utils/aiStudioDraft'
 import { aiStudioThreadApi } from '@/api/aiStudioThread'
+import DesignerHelpLink from '@/components/designer/DesignerHelpLink.vue'
+import { aiGenerationApi } from '@/api/aiGeneration'
+import { functionUnitDocumentApi } from '@/api/functionUnitDocument'
+import { resolveUserFacingHttpMessage } from '@/utils/httpErrorMessage'
+
+/** 与后端 AiStudioOneClickRequest.requirements 的 @Size 一致 */
+const ONE_CLICK_MAX_CHARS = 4000
 
 const props = defineProps<{
   visible: boolean
   functionUnitId: number
   /** 本浏览器没有草稿、但团队已在 AI Studio 里推进过时，用它当草稿名 */
   functionUnitName?: string
+  /** 只读成员不能一键生成（会改写整个设计）；引导式工作台本身对只读成员仍可打开 */
+  canGenerate?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -164,6 +248,11 @@ const { t } = useI18n()
 
 const mode = ref<AiStudioEntryMode>('new')
 const draft = ref<AiStudioDraft | null>(null)
+const requirements = ref('')
+const submitting = ref(false)
+/** 已有 Requirements 文档时描述可以留空——文档本身就是输入 */
+const hasRequirementsDocument = ref(false)
+const canSubmitGenerate = computed(() => !!requirements.value.trim() || hasRequirementsDocument.value)
 
 // 每次打开重新读草稿：工作台可能在两次打开之间更新过 localStorage。
 // 没有草稿时选中态强制回到 new，避免 continue 卡片禁用后仍处于选中。
@@ -172,8 +261,10 @@ watch(
   (visible) => {
     if (!visible) return
     draft.value = loadAiStudioDraft(props.functionUnitId)
-    if (!draft.value) mode.value = 'new'
+    if (!draft.value && mode.value === 'continue') mode.value = 'new'
+    if (!props.canGenerate && mode.value === 'generate') mode.value = 'new'
     void loadSharedDraft()
+    void loadRequirementsDocument()
   },
   { immediate: true }
 )
@@ -203,7 +294,61 @@ async function loadSharedDraft() {
   }
 }
 
+async function loadRequirementsDocument() {
+  const functionUnitId = props.functionUnitId
+  try {
+    const { data } = await functionUnitDocumentApi.current(functionUnitId)
+    if (functionUnitId === props.functionUnitId) {
+      hasRequirementsDocument.value = !!data.REQUIREMENTS?.content?.trim()
+    }
+  } catch (e) {
+    // 查不到就当没有：只影响"描述可否留空"，后端仍会按真实状态校验
+    console.warn('[ai-studio] requirements document lookup failed for the entry dialog', e)
+    hasRequirementsDocument.value = false
+  }
+}
+
+/**
+ * 一键生成：确认（整套设计会被替换）→ 提交作业 → 记下待办作业 → 进工作台接着等。
+ * 作业在这里提交而不是进工作台后再提交：开关没开、缺令牌、无权限这类错误当场就能看到，不用白跳一次页面。
+ */
+async function startOneClick() {
+  if (!canSubmitGenerate.value || submitting.value) return
+  try {
+    await ElMessageBox.confirm(
+      t('ai.studio.oneClick.confirmMsg'),
+      t('ai.studio.oneClick.confirmTitle'),
+      { type: 'warning', confirmButtonText: t('ai.studio.oneClick.button') }
+    )
+  } catch {
+    return
+  }
+  submitting.value = true
+  try {
+    const { data: job } = await aiGenerationApi.studioStartOneClick({
+      functionUnitId: props.functionUnitId,
+      requirements: requirements.value.trim()
+    })
+    saveAiStudioPendingProposal(props.functionUnitId, {
+      jobId: job.jobId,
+      phase: AI_STUDIO_ONE_CLICK_PHASE,
+      submittedAt: Date.now()
+    })
+    requirements.value = ''
+    emit('open', { mode: 'generate', draft: null })
+    emit('update:visible', false)
+  } catch (e) {
+    ElMessage.error({ message: resolveUserFacingHttpMessage(e, t), duration: 8000, showClose: true })
+  } finally {
+    submitting.value = false
+  }
+}
+
 function handleConfirm() {
+  if (mode.value === 'generate') {
+    void startOneClick()
+    return
+  }
   emit('open', {
     mode: mode.value,
     draft: mode.value === 'continue' ? draft.value : null
@@ -234,7 +379,7 @@ function handleConfirm() {
 
 .mode-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-top: 10px;
 }
@@ -322,6 +467,11 @@ function handleConfirm() {
     background-color: var(--el-fill-color-light);
     color: var(--el-text-color-secondary);
 
+    &--generate {
+      background-color: var(--el-color-primary-light-9);
+      color: var(--el-color-primary);
+    }
+
     &--new {
       background-color: #fdf4e5;
       color: #e6a23c;
@@ -373,6 +523,18 @@ function handleConfirm() {
     height: 1px;
     background-color: var(--el-border-color-lighter);
   }
+}
+
+.generate-input {
+  margin-top: 16px;
+}
+
+.generate-notes {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--el-text-color-secondary);
 }
 
 // 迷你流程链：6 列网格，节点间以连接线相连；行首节点不画进线
@@ -470,10 +632,13 @@ function handleConfirm() {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .mode-cards {
     grid-template-columns: 1fr;
   }
+}
+
+@media (max-width: 640px) {
 
   .guide-steps {
     grid-template-columns: repeat(3, minmax(0, 1fr));

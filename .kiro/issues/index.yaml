@@ -4056,3 +4056,20 @@
     _dw-no-default-role-check.mjs 8/8（登录与 /auth/me 无 DEVELOPER、chat/proposals 403 WORKSPACE_FORBIDDEN、
     thread canModify=false、AI Studio 只读打开）；developer（SYS_ADMIN）对照 canModify=true。
     截图 2026-09-17_dw-no-default-role.png。
+
+- id: "1637"
+  status: fixed
+  fixed_at: "2026-09-20"
+  severity: minor
+  category: bug
+  summary: "AI Studio proposal job snapshots raced on first save: duplicate key on dw_ai_studio_proposal_jobs_pkey, PENDING/RUNNING row could be lost or go stale"
+  file: "backend/developer-workstation/src/main/java/com/developer/service/impl/AiStudioProposalJobServiceImpl.java"
+  note: |
+    submit() 在请求线程 persist，run() 在工作线程一翻 RUNNING 就 persist；store 的 repository.save 对自带 String id 是先查后插，
+    两边同时首写 → 后到的撞主键，只记 WARN "snapshot not persisted"（dev 上每个作业必现）。同一竞态的另一面：
+    早拍的快照晚写完会把更新的状态盖回去，库里留下永远未完成的行（findUnfinished 会把它当成进行中）。
+    修复：每个作业一把 persistLock，快照在锁内现拍再写库；submit() 把 executor.submit 与首次落库放在同一把锁内。
+    不用作业锁，轮询与取消不必等写库；失败仍只 WARN；表与 store 不变。
+    验证：AiStudioProposalJobPersistenceTest 新增两条先红（duplicate key on PENDING / 行停在 PENDING）后绿，相关 5 个测试类 34 条 ×3 轮全绿（JDK17）；
+    dev 重建 developer-workstation 后 _ai-studio-job-persist-race-check.mjs 提交 4 个作业（取消 + supersede）：
+    日志 "snapshot not persisted" 0 次（旧容器 1 个作业 1 次），库里 4 行均为 CANCELLED 终态。

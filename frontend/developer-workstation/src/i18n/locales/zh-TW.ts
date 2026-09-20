@@ -236,6 +236,7 @@ export default {
     hiddenByStatusFilter: '另有 {count} 個被狀態篩選隱藏（如回滾後的 Draft）',
     settings: '功能單元設定',
     documents: {
+      guideLinkAria: '開啟 Requirements 與 Function Unit Design 指南',
       tabBasic: '基本資訊',
       type: {
         REQUIREMENTS: 'Requirements',
@@ -266,12 +267,23 @@ export default {
       diffTitle: '{doc}：{from} → {to}',
       noChanges: '沒有差異',
       tooLarge: '文件超過 200 KB',
+      import: '匯入',
+      download: '下載',
+      imported: '已將 {file} 載入編輯器，確認內容後點擊儲存即產生新版本。',
+      importReplaceConfirm: '用 {file} 的內容取代尚未儲存的修改？',
+      importReplace: '取代',
+      importRejected: {
+        UNSUPPORTED_TYPE: '只能匯入 Markdown 或純文字檔案（.md、.markdown、.txt）',
+        TOO_LARGE: '檔案超過 200 KB',
+        EMPTY: '檔案內容為空'
+      },
       source: {
         MANUAL: '手動編輯',
         IMPORTED: '匯入',
         CLONED: '複製',
         RESTORED: '從 v{version} 還原',
         ROLLBACK: '回滾到版本 {version}',
+        AI_ONE_CLICK: 'AI Studio · 一鍵產生',
         AI_SYNC: 'AI Studio · 確認「{phases}」',
         AI_SYNC_FULL: 'AI Studio · 完整檢查'
       }
@@ -2384,6 +2396,7 @@ export default {
       AI_WEBHOOK_TIMEOUT: 'AI 服務逾時，請重試',
       AI_WEBHOOK_CALL_FAILED: 'AI 服務呼叫失敗，請重試',
       AI_GATEWAY_NOT_CONFIGURED: 'AI 服務未設定，請聯絡管理員',
+      AI_STUDIO_ONE_CLICK_NO_INPUT: '請填寫需求描述，或先新增 Requirements 文件',
       AI_STUDIO_DOC_SYNC_QUEUE_FULL: '正在更新的文件過多，請稍後重試',
       AI_STUDIO_DOC_SYNC_BAD_OUTPUT: 'AI 未依約定格式傳回文件，請重試',
       AI_STUDIO_DOC_SYNC_DOCUMENT_TOO_LARGE: '文件過長，AI 無法更新；請先在設定中精簡',
@@ -2548,6 +2561,21 @@ export default {
       success: '已成功復原更改'
     },
     studio: {
+      guideLinkAria: '開啟 Build with AI 指南',
+      oneClick: {
+        title: '一鍵產生',
+        desc: '寫下需求，由 AI 一次產生整個功能單元：流程、資料表、表單、動作和決策。',
+        readOnly: '你對該功能單元只有唯讀權限，無法使用一鍵產生。',
+        inputTitle: '這個功能單元要做什麼？',
+        placeholder: '例如：員工提交請假申請，填寫起訖日期和事由；直屬主管核准或駁回；超過 5 天的申請還需要 HR 核准……',
+        noteDocsPresent: '已有的 Requirements 與 Function Unit Design 文件也會作為輸入，因此描述可以留空。',
+        noteDocsAbsent: '需求較長時，可先在「設定 → Requirements」匯入文件，文件同樣會作為輸入。',
+        noteScope: '不會產生檢視、郵件和自動化綁定，請在之後的引導階段中補齊。',
+        noteDuration: '產生通常需要 7–15 分鐘。可以離開頁面，結果會保留在 AI Studio 中。',
+        button: '產生',
+        confirmTitle: '取代目前設計？',
+        confirmMsg: '一鍵產生的結果通過驗證後會立即取代該功能單元的整套設計（流程、資料表、表單、動作和決策），並重設 AI Studio 的階段進度。此處無法復原，如需回退請使用版本管理。是否繼續？'
+      },
       docSync: {
         finishedElsewhere: '文件檢查已完成，結果見「{phase}」階段，或開啟文件查看',
         documentsButton: '文件',

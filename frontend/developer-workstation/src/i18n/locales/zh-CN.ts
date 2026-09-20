@@ -236,6 +236,7 @@ export default {
     hiddenByStatusFilter: '另有 {count} 个被状态筛选隐藏（如回滚后的 Draft）',
     settings: '功能单元设置',
     documents: {
+      guideLinkAria: '打开 Requirements 与 Function Unit Design 指南',
       tabBasic: '基本信息',
       type: {
         REQUIREMENTS: 'Requirements',
@@ -266,12 +267,23 @@ export default {
       diffTitle: '{doc}：{from} → {to}',
       noChanges: '没有差异',
       tooLarge: '文档超过 200 KB',
+      import: '导入',
+      download: '下载',
+      imported: '已将 {file} 载入编辑器，确认内容后点击保存即生成新版本。',
+      importReplaceConfirm: '用 {file} 的内容替换尚未保存的修改？',
+      importReplace: '替换',
+      importRejected: {
+        UNSUPPORTED_TYPE: '只能导入 Markdown 或纯文本文件（.md、.markdown、.txt）',
+        TOO_LARGE: '文件超过 200 KB',
+        EMPTY: '文件内容为空'
+      },
       source: {
         MANUAL: '手动编辑',
         IMPORTED: '导入',
         CLONED: '克隆',
         RESTORED: '从 v{version} 恢复',
         ROLLBACK: '回滚到版本 {version}',
+        AI_ONE_CLICK: 'AI Studio · 一键生成',
         AI_SYNC: 'AI Studio · 确认「{phases}」',
         AI_SYNC_FULL: 'AI Studio · 全量检查'
       }
@@ -2383,6 +2395,7 @@ export default {
       AI_WEBHOOK_TIMEOUT: 'AI 服务超时，请重试',
       AI_WEBHOOK_CALL_FAILED: 'AI 服务调用失败，请重试',
       AI_GATEWAY_NOT_CONFIGURED: 'AI 服务未配置，请联系管理员',
+      AI_STUDIO_ONE_CLICK_NO_INPUT: '请填写需求描述，或先添加 Requirements 文档',
       AI_STUDIO_DOC_SYNC_QUEUE_FULL: '正在更新的文档过多，请稍后重试',
       AI_STUDIO_DOC_SYNC_BAD_OUTPUT: 'AI 未按约定格式返回文档，请重试',
       AI_STUDIO_DOC_SYNC_DOCUMENT_TOO_LARGE: '文档过长，AI 无法更新；请先在设置中精简',
@@ -2547,6 +2560,21 @@ export default {
       success: '已成功撤销更改'
     },
     studio: {
+      guideLinkAria: '打开 Build with AI 指南',
+      oneClick: {
+        title: '一键生成',
+        desc: '写下需求，由 AI 一次生成整个功能单元：流程、表、表单、动作和决策。',
+        readOnly: '你对该功能单元只有只读权限，无法使用一键生成。',
+        inputTitle: '这个功能单元要做什么？',
+        placeholder: '例如：员工提交请假申请，填写起止日期和事由；直属主管审批通过或驳回；超过 5 天的申请还需要 HR 审批……',
+        noteDocsPresent: '已有的 Requirements 与 Function Unit Design 文档也会作为输入，因此描述可以留空。',
+        noteDocsAbsent: '需求较长时，可先在「设置 → Requirements」导入文档，文档同样会作为输入。',
+        noteScope: '不会生成视图、邮件和自动化绑定，请在之后的引导阶段中补全。',
+        noteDuration: '生成通常需要 7–15 分钟。可以离开页面，结果会保留在 AI Studio 中。',
+        button: '生成',
+        confirmTitle: '替换当前设计？',
+        confirmMsg: '一键生成的结果通过校验后会立即替换该功能单元的整套设计（流程、表、表单、动作和决策），并重置 AI Studio 的阶段进度。此处无法撤销，如需回退请使用版本管理。是否继续？'
+      },
       docSync: {
         finishedElsewhere: '文档检查已完成，结果见「{phase}」阶段，或打开文档查看',
         documentsButton: '文档',

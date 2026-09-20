@@ -163,6 +163,11 @@ public class AiStudioChatComponentImpl implements AiStudioChatComponent {
 
     /** 与 Apply 同款的 convert + normalize：预览与真正写入看到的是同一份数据。 */
     private AiGeneratedData normalizedData(Map<String, Object> proposal) {
+        return normalizedData(objectMapper, proposal);
+    }
+
+    /** 一键生成（{@link AiStudioOneClickComponentImpl}）的预览也走这一份，别另写一套归一化。 */
+    static AiGeneratedData normalizedData(ObjectMapper objectMapper, Map<String, Object> proposal) {
         AiGeneratedData data = objectMapper.convertValue(proposal, AiGeneratedData.class);
         AiGenerationComponentImpl.normalizeTableRelations(data.getTableRelations());
         AiGenerationComponentImpl.normalizeCrossFieldRules(data.getFormDefinitions());

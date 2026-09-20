@@ -678,6 +678,8 @@ import ServiceTaskBindingsPanel from '@/components/ai/ServiceTaskBindingsPanel.v
 import AiStudioDocSyncCard from '@/components/ai/AiStudioDocSyncCard.vue'
 import AiStudioDocumentsDrawer from '@/components/ai/AiStudioDocumentsDrawer.vue'
 import {
+  AI_STUDIO_ONE_CLICK_PHASE,
+  AI_STUDIO_ONE_CLICK_SCOPE,
   AI_STUDIO_PHASES,
   aiStudioPhaseLabel,
   loadAiStudioDraft,
@@ -1181,11 +1183,12 @@ const proposalSupported = computed(() => PROPOSAL_PHASES.includes(currentPhase.v
 /**
  * @param overrideText 由按钮（如"让 AI 修正"）发起时用它当消息，输入框里的草稿原样保留
  */
-async function sendCopilotMessage(propose = false, overrideText?: string) {
+async function sendCopilotMessage(propose = false, overrideText?: string, oneClickFollowUp = false) {
   const text = (overrideText ?? copilotInput.value).trim()
   if (!text || copilotReplying.value || !canModifyThread.value) return
-  // 锁定发送时所在的阶段线程：等待期间切走，回复也落回这个线程
-  const phase = currentPhase.value
+  // 锁定发送时所在的阶段线程：等待期间切走，回复也落回这个线程。
+  // 一键生成的修正轮固定落在它自己的线程（后端也只往那里写）
+  const phase = oneClickFollowUp ? AI_STUDIO_ONE_CLICK_PHASE : currentPhase.value
   const thread = copilotThread(phase)
   const history = copilotHistory(phase)
   // 共享模式下这条提问先作为本地乐观消息显示，后端落库后被后端版本取代；
@@ -1195,12 +1198,14 @@ async function sendCopilotMessage(propose = false, overrideText?: string) {
   beginCopilotWait(phase)
   try {
     if (propose) {
-      const { data: job } = await aiGenerationApi.studioStartProposal({
-        functionUnitId: fuId.value,
-        phase,
-        message: text,
-        history
-      })
+      const { data: job } = oneClickFollowUp
+        ? await aiGenerationApi.studioStartOneClick({ functionUnitId: fuId.value, requirements: text, followUp: true })
+        : await aiGenerationApi.studioStartProposal({
+          functionUnitId: fuId.value,
+          phase,
+          message: text,
+          history
+        })
       // 先落盘再轮询：刷新/离开页面后 onMounted 能凭这条记录接着等同一个作业
       saveAiStudioPendingProposal(fuId.value, { jobId: job.jobId, phase, submittedAt: Date.now() })
       copilotProposalJobId.value = job.jobId
@@ -1367,6 +1372,13 @@ async function pollProposal(jobId: string): Promise<AiStudioProposalJob | null> 
  * 失败/取消只是发起人自己的临时说明。
  */
 async function landProposalResult(phase: AiStudioPhase, job: AiStudioProposalJob) {
+  if (job.status === 'SUCCEEDED' && job.proposalScope === AI_STUDIO_ONE_CLICK_SCOPE) {
+    // 一键生成：预校验通过时后端已经把整套设计写进去了，设计器必须重新加载
+    // （没写入时重载也无害；卡片上的"已应用"状态以线程里的为准）
+    await store.refreshAll(fuId.value)
+    stageReloadKey.value++
+    if (currentPhase.value === 'FORM_DESIGN') void store.fetchTables(fuId.value)
+  }
   if (job.status === 'SUCCEEDED' && await refreshThreadIncremental(phase)) {
     if (!job.proposal) {
       pushLocal(copilotThread(phase), { role: 'assistant', text: t('ai.studio.workspace.proposalNone'), isPhaseNote: true })
@@ -1546,7 +1558,8 @@ async function syncApplied(msg: CopilotMessage, applied: boolean) {
 function requestAiFix(msg: CopilotMessage) {
   const request = buildFixRequest(msg.proposal?.preview, (k: string) => t(k))
   if (!request) return
-  void sendCopilotMessage(true, request)
+  // 整套设计的卡片要整套重来：按阶段的提案只会改一个切片，修不了跨切片的引用问题
+  void sendCopilotMessage(true, request, msg.proposal?.scope === AI_STUDIO_ONE_CLICK_SCOPE)
 }
 
 /** 撤销一次 Apply：后端逐项逆操作，回来后重载设计器并把卡片还原成可 Apply。 */
@@ -1635,6 +1648,20 @@ onMounted(async () => {
       currentPhase.value = draft.phase
       completedPhases.value = draftCompleted()
     }
+  } else if (mode === 'generate') {
+    // 一键生成：入口弹窗已确认"整套设计会被替换"并提交了作业（待办作业记录在 localStorage，下面接着等）。
+    // 旧进度对新设计不再成立，从第一个阶段开始逐项复核；讨论线程保留
+    const hadProgress = draftCompleted().length > 0
+    completedPhases.value = []
+    currentPhase.value = AI_STUDIO_PHASES[0]
+    if (hadProgress) {
+      void saveSharedCompletedPhases()
+      // 新一轮设计：两份文档的下一次保存进入新的主版本
+      void functionUnitDocumentApi.startNewRound(fuId.value)
+        .catch(e => console.warn('[ai-studio] could not start a new document round', e))
+    }
+    // 刷新页面不能再重置一次进度
+    void router.replace({ query: { ...route.query, mode: 'continue' } })
   } else if (draft && mode !== 'new') {
     // 直接进入（刷新/收藏链接）：默认续用草稿进度
     currentPhase.value = draft.phase

@@ -39,11 +39,18 @@ export interface AiStudioDraft {
   updatedAt?: string
 }
 
-export type AiStudioEntryMode = 'new' | 'continue'
+/** generate = 一键生成：入口弹窗已提交生成作业，工作台重置进度后接着等这份作业 */
+export type AiStudioEntryMode = 'new' | 'continue' | 'generate'
+
+/** 一键生成的结果卡片与等待状态所在的阶段线程（与后端 AiStudioOneClickComponentImpl.THREAD_PHASE 一致） */
+export const AI_STUDIO_ONE_CLICK_PHASE: AiStudioPhase = 'PROCESS_DESIGN'
+
+/** 一键生成提案的 scope（整套核心设计，全量替换） */
+export const AI_STUDIO_ONE_CLICK_SCOPE = 'ALL'
 
 export interface AiStudioOpenPayload {
   mode: AiStudioEntryMode
-  /** mode 为 continue 时必有；new 时为 null */
+  /** mode 为 continue 时必有；new / generate 时为 null */
   draft: AiStudioDraft | null
 }
 

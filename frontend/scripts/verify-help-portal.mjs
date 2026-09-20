@@ -149,6 +149,24 @@ try {
   await page.screenshot({ path: viewShot, fullPage: true })
   console.log(`screenshot ${viewShot}`)
 
+  for (const [path, testId, mustInclude] of [
+    ['fu-documents', 'fu-documents-guide-page', ['Import', 'Version History', 'Purchase_Request-requirements-v1.2.md']],
+    ['ai-studio', 'ai-studio-guide-page', ['One-click generate', 'Replace the current design?', 'Let AI fix it']],
+  ]) {
+    await page.goto(`http://localhost:3000/help/${path}`, { waitUntil: 'domcontentloaded' })
+    const article = page.getByTestId(testId)
+    await article.waitFor({ state: 'visible', timeout: 15000 })
+    const text = (await article.textContent()) ?? ''
+    rec(`${path} guideline is visible`, await article.isVisible())
+    rec(`${path} names the real controls`, mustInclude.every((label) => text.includes(label)))
+    rec(`${path} figures load`, await article.locator('img').evaluateAll(
+      (imgs) => imgs.length > 0 && imgs.every((img) => img.complete && img.naturalWidth > 0),
+    ))
+    const shotPath = resolve(DW_SHOTS, `${DATE}_help-portal-${path}.png`)
+    await page.screenshot({ path: shotPath, fullPage: true })
+    console.log(`screenshot ${shotPath}`)
+  }
+
   await page.goto('http://localhost:3000/help/email-send', { waitUntil: 'domcontentloaded' })
   const sendArticle = page.getByTestId('email-send-guide-page')
   await sendArticle.waitFor({ state: 'visible', timeout: 15000 })
@@ -311,6 +329,8 @@ try {
   rec('llms.txt lists task-delegate', llmsText.includes('/help/task-delegate'))
   rec('llms.txt lists table-design', llmsText.includes('/help/table-design'))
   rec('llms.txt lists view-design', llmsText.includes('/help/view-design'))
+  rec('llms.txt lists fu-documents', llmsText.includes('/help/fu-documents'))
+  rec('llms.txt lists ai-studio', llmsText.includes('/help/ai-studio'))
   rec('llms.txt lists form-events', llmsText.includes('/help/form-events'))
   rec('llms.txt lists form-events-basic', llmsText.includes('/help/form-events-basic'))
   rec('llms.txt lists form-ctl-input', llmsText.includes('/help/form-ctl-input'))

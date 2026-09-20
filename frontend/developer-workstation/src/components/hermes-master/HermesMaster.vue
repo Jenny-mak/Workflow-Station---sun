@@ -23,6 +23,7 @@
       <HermesMasterFigure
         :pose="pose"
         :airborne="y > 0"
+        :aim="aim"
       />
     </div>
 
@@ -106,7 +107,7 @@ const { messages, loading, send, stop, clear } = useHermesMasterChat({
 })
 
 const {
-  pose, x, y, rock,
+  pose, x, y, rock, aim,
   onPointerDown, onPointerMove, onPointerUp, onPointerEnter, onPointerLeave,
   press, settle, talk, rest
 } = useHermesMasterBehavior(robotEl, {

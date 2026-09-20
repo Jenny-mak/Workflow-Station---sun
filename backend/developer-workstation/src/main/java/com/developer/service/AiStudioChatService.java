@@ -65,4 +65,11 @@ public interface AiStudioChatService {
      * 推理模型跑一份 PROCESS 切片实测 7 分钟上下，所以调用方不应在 HTTP 请求线程上同步等它。
      */
     StudioChatResult runProposal(ProposalDraft draft, String amToken);
+
+    /**
+     * 一键生成第一步（请求线程）：与 {@link #prepareProposal} 同样序列化上下文，但写入范围是整套核心设计
+     * （scope {@code ALL}），消息尾追加"一次产出全部核心切片"的指令。{@code request.phase} 只决定结果落在
+     * 哪个阶段线程，不限定范围。第二步直接用 {@link #runProposal}。
+     */
+    ProposalDraft prepareOneClick(AiStudioChatRequest request);
 }

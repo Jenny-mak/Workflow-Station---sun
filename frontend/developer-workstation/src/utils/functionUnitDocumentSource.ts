@@ -16,12 +16,12 @@ export function documentVersionLabel(
 
 /**
  * 文档版本来源（后端 summary 列，见 FunctionUnitDocumentService.SUMMARY_*）→ 界面文案。
- * MANUAL / IMPORTED / CLONED / RESTORED:<v> / ROLLBACK:<version> / AI_SYNC:<阶段,…>（空 = 全量核对）；
+ * MANUAL / IMPORTED / CLONED / AI_ONE_CLICK / RESTORED:<v> / ROLLBACK:<version> / AI_SYNC:<阶段,…>（空 = 全量核对）；
  * 认不出的是旧 AI Generate 写入的自由文本，原样显示。
  */
 export function formatDocumentSource(t: ComposerTranslation, summary: string | null | undefined): string {
   if (!summary) return ''
-  if (summary === 'MANUAL' || summary === 'IMPORTED' || summary === 'CLONED') {
+  if (summary === 'MANUAL' || summary === 'IMPORTED' || summary === 'CLONED' || summary === 'AI_ONE_CLICK') {
     return t(`functionUnit.documents.source.${summary}`)
   }
   const [kind, ...rest] = summary.split(':')

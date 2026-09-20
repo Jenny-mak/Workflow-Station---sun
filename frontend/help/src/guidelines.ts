@@ -59,6 +59,20 @@ export const GUIDELINES: Guideline[] = [
     load: () => import('@/views/ViewDesignGuide.vue'),
   },
   {
+    id: 'fu-documents',
+    path: '/fu-documents',
+    titleKey: 'guides.fuDocuments.title',
+    summaryKey: 'guides.fuDocuments.summary',
+    load: () => import('@/views/FuDocumentsGuide.vue'),
+  },
+  {
+    id: 'ai-studio',
+    path: '/ai-studio',
+    titleKey: 'guides.aiStudio.title',
+    summaryKey: 'guides.aiStudio.summary',
+    load: () => import('@/views/AiStudioGuide.vue'),
+  },
+  {
     id: 'email-send',
     path: '/email-send',
     titleKey: 'guides.emailSend.title',
@@ -250,6 +264,8 @@ export const NAV_TREE: NavNode[] = [
         titleKey: 'nav.functionUnits',
         open: true,
         children: [
+          { kind: 'leaf', id: 'dw-ai-studio', titleKey: 'nav.aiStudio', to: '/ai-studio' },
+          { kind: 'leaf', id: 'dw-fu-settings', titleKey: 'nav.functionUnitSettings', to: '/fu-documents' },
           { kind: 'leaf', id: 'dw-process', titleKey: 'nav.processDesign' },
           {
             kind: 'group',

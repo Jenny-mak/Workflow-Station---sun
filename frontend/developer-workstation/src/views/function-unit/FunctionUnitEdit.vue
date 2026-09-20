@@ -277,6 +277,7 @@
             v-if="showEditDialog"
             :ref="(el) => setDocumentEditor(docType, el)"
             :function-unit-id="functionUnitId"
+            :function-unit-name="store.current?.name"
             :type="docType"
             :readonly="isReadOnly"
           />
@@ -367,6 +368,7 @@
       v-if="AI_STUDIO_ENABLED"
       :function-unit-id="functionUnitId"
       :function-unit-name="store.current?.name"
+      :can-generate="!isReadOnly"
       :visible="showAiStudioDialog"
       @update:visible="showAiStudioDialog = $event"
       @open="handleOpenAiStudio"

@@ -29,6 +29,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * 进程内提案作业注册表 + 落库快照。
@@ -106,6 +107,7 @@ public class AiStudioProposalJobServiceImpl implements AiStudioProposalJobServic
     @Override
     public AiStudioProposalJobResponse submit(JobRequest request,
                                               Supplier<StudioChatResult> work,
+                                              UnaryOperator<StudioChatResult> commit,
                                               Consumer<StudioChatResult> onSucceeded) {
         sweep();
         Long functionUnitId = request.functionUnitId();
@@ -133,21 +135,25 @@ public class AiStudioProposalJobServiceImpl implements AiStudioProposalJobServic
 
         Job job = new Job(UUID.randomUUID().toString(), request);
         jobs.put(job.jobId, job);
-        try {
-            job.future = executor.submit(() -> run(job, work, onSucceeded));
-        } catch (RejectedExecutionException e) {
-            jobs.remove(job.jobId);
-            throw new AiGenerationException("AI_STUDIO_PROPOSAL_QUEUE_FULL",
-                    "Proposal workers are busy; retry later");
+        // 首次落库与交给线程池在同一把落库锁内：工作线程的 RUNNING 快照只能排在这次插入之后
+        synchronized (job.persistLock) {
+            try {
+                job.future = executor.submit(() -> run(job, work, commit, onSucceeded));
+            } catch (RejectedExecutionException e) {
+                jobs.remove(job.jobId);
+                throw new AiGenerationException("AI_STUDIO_PROPOSAL_QUEUE_FULL",
+                        "Proposal workers are busy; retry later");
+            }
+            persist(job);
         }
-        persist(job);
         publish(job, AiStudioThreadEvent.PROPOSAL_STARTED);
         log.info("AI Studio proposal job submitted: jobId={}, functionUnitId={}, phase={}, userId={}",
                 job.jobId, functionUnitId, job.phase, userId);
         return job.snapshot();
     }
 
-    private void run(Job job, Supplier<StudioChatResult> work, Consumer<StudioChatResult> onSucceeded) {
+    private void run(Job job, Supplier<StudioChatResult> work, UnaryOperator<StudioChatResult> commit,
+                     Consumer<StudioChatResult> onSucceeded) {
         synchronized (job) {
             if (job.isTerminal()) return; // 已被判超时/清理
             job.status = Status.RUNNING;
@@ -158,6 +164,8 @@ public class AiStudioProposalJobServiceImpl implements AiStudioProposalJobServic
             StudioChatResult result = work.get();
             synchronized (job) {
                 if (job.isTerminal()) return;
+                // commit 在作业锁内执行：cancelJob 也要这把锁，所以"已取消"与"已写入"不会同时成立
+                if (commit != null) result = commit.apply(result);
                 job.result = result;
                 job.status = Status.SUCCEEDED;
                 job.finishedAt = Instant.now();
@@ -286,12 +294,19 @@ public class AiStudioProposalJobServiceImpl implements AiStudioProposalJobServic
         }
     }
 
+    /**
+     * 同一作业的落库逐个进行，快照在锁内现拍：库里的 save 对自带 id 的实体是先查后插，两个线程同时首写会撞主键；
+     * 后写的一定不比先写的旧，所以慢的一次写库不会把更新的状态盖回去。
+     * 用独立的锁而不是作业锁：写库期间轮询（snapshot）与取消不必等。调用方不得持有作业锁。
+     */
     private void persist(Job job) {
         if (store == null) return;
-        try {
-            store.save(job.snapshot(), job.userId, job.requestKey);
-        } catch (RuntimeException e) {
-            log.warn("AI Studio proposal job snapshot not persisted: jobId={}: {}", job.jobId, e.getMessage());
+        synchronized (job.persistLock) {
+            try {
+                store.save(job.snapshot(), job.userId, job.requestKey);
+            } catch (RuntimeException e) {
+                log.warn("AI Studio proposal job snapshot not persisted: jobId={}: {}", job.jobId, e.getMessage());
+            }
         }
     }
 
@@ -357,6 +372,8 @@ public class AiStudioProposalJobServiceImpl implements AiStudioProposalJobServic
         final String requestKey;
         final String message;
         final Instant submittedAt = Instant.now();
+        /** 串行化本作业的落库，见 {@code persist} */
+        final Object persistLock = new Object();
         volatile Status status = Status.PENDING;
         Instant startedAt;
         Instant finishedAt;

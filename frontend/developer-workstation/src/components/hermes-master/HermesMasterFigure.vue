@@ -9,6 +9,7 @@
     :data-pose="pose"
     :data-eyes="face.eyes"
     :data-mouth="face.mouth"
+    :style="pose === 'spy' ? { '--hm-spy-tilt': `${spy.headTilt}deg` } : undefined"
     :class="{ 'is-airborne': airborne }"
     viewBox="0 0 120 98"
     aria-hidden="true"
@@ -190,6 +191,80 @@
             points="93.4,68.6 94.6,65 98.2,64 101.2,66.6 100.8,70.2 97.6,71.8 94.4,70.8"
           />
         </g>
+
+        <!-- 双筒望远镜（仅 spy 姿态）：两只镜筒各绕自己那只眼睛转向鼠标，黑色线条风格；
+             两只手臂直接从肩画到握点。离目标近的那只镜筒要盖在另一只上面（见 BARREL_EYES）。 -->
+        <g
+          v-if="pose === 'spy'"
+          class="hm-spy"
+        >
+          <path
+            class="hm-limb"
+            :d="spy.armLeft"
+          />
+          <path
+            class="hm-limb"
+            :d="spy.armRight"
+          />
+          <path
+            class="hm-spy__bridge"
+            :d="spy.bridge"
+          />
+          <g
+            v-for="(eyeX, i) in BARREL_EYES"
+            :key="i"
+            class="hm-spy__barrel"
+            :opacity="i === 2 && !spy.leftOnTop ? 0 : 1"
+            :transform="`translate(${eyeX} 18) rotate(${spy.angle})`"
+          >
+            <g class="hm-spy__tube">
+              <rect
+                class="hm-spy__shell"
+                x="9.5"
+                y="-4.2"
+                width="13.5"
+                height="8.4"
+                rx="1.6"
+              />
+              <rect
+                class="hm-spy__shell"
+                x="2"
+                y="-3"
+                width="8.5"
+                height="6"
+                rx="1"
+              />
+              <rect
+                class="hm-spy__cup"
+                x="-2.6"
+                y="-3.4"
+                width="5.2"
+                height="6.8"
+                rx="1.8"
+              />
+              <path
+                class="hm-spy__ring"
+                d="M20 -4.2 V4.2"
+              />
+              <path
+                class="hm-line hm-line--thin"
+                d="M12.5 -1.8 H17.5"
+              />
+            </g>
+          </g>
+          <circle
+            class="hm-paw"
+            :cx="spy.gripLeft.x"
+            :cy="spy.gripLeft.y"
+            r="4.8"
+          />
+          <circle
+            class="hm-paw"
+            :cx="spy.gripRight.x"
+            :cy="spy.gripRight.y"
+            r="4.8"
+          />
+        </g>
       </g>
     </g>
 
@@ -255,15 +330,27 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { HmPose } from '@/utils/hermesMasterBehavior'
+import { binocularsGeometry, type HmPose, type Point } from '@/utils/hermesMasterBehavior'
 
 const props = defineProps<{
   pose: HmPose
   /** 离地（被拎着 / 下落中）：隐藏脚下的影子 */
   airborne?: boolean
+  /** spy 姿态下望远镜要对准的点（viewBox 坐标） */
+  aim?: Point | null
 }>()
 
-type Eyes = 'open' | 'closed' | 'happy' | 'dizzy' | 'wide' | 'wink'
+/** 还没有目标时朝左上方张望 */
+const spy = computed(() => binocularsGeometry(props.aim ?? { x: -140, y: -120 }))
+
+/**
+ * 镜筒所在眼睛的 x（viewBox 单位），按绘制顺序：左、右、再一只左。
+ * 第三只只在目标位于左侧时显示，用来把左镜筒盖到右镜筒上面——
+ * 不用重排 DOM 的办法换层级，是因为节点一移动 CSS 动画就会重播（镜筒会缩回去再抽出来一次）。
+ */
+const BARREL_EYES = [52.2, 66.8, 52.2]
+
+type Eyes = 'open' | 'closed' | 'happy' | 'dizzy' | 'wide' | 'wink' | 'none'
 type Mouth = 'smile' | 'o' | 'wavy' | 'talk'
 
 const FACES: Partial<Record<HmPose, { eyes: Eyes; mouth: Mouth }>> = {
@@ -277,7 +364,9 @@ const FACES: Partial<Record<HmPose, { eyes: Eyes; mouth: Mouth }>> = {
   fall: { eyes: 'wide', mouth: 'o' },
   land: { eyes: 'closed', mouth: 'smile' },
   dizzy: { eyes: 'dizzy', mouth: 'wavy' },
-  talk: { eyes: 'open', mouth: 'talk' }
+  talk: { eyes: 'open', mouth: 'talk' },
+  // 两只眼睛都贴在目镜眼罩后面
+  spy: { eyes: 'none', mouth: 'smile' }
 }
 
 const face = computed(() => FACES[props.pose] ?? { eyes: 'open', mouth: 'smile' })
@@ -706,6 +795,51 @@ $squat: 25px;
   }
 }
 
+// 双手举双筒望远镜盯着鼠标：两只常规手臂都藏起来，换成 .hm-spy 里直接画到握点的手臂
+[data-pose='spy'] {
+  .hm-arm {
+    opacity: 0;
+  }
+
+  .hm-head {
+    transform: rotate(var(--hm-spy-tilt, 0deg));
+  }
+}
+
+// 与头、手、脚同一套线条：白底黑描边的镜筒，实心黑的目镜眼罩与中梁
+.hm-spy__shell {
+  fill: #fff;
+  stroke: $hm-ink;
+  stroke-width: 1.9;
+  stroke-linejoin: round;
+}
+
+.hm-spy__cup {
+  fill: $hm-ink;
+  stroke: $hm-ink;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.hm-spy__ring {
+  fill: none;
+  stroke: $hm-ink;
+  stroke-width: 1.9;
+}
+
+.hm-spy__bridge {
+  fill: none;
+  stroke: $hm-ink;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+}
+
+// 镜筒从目镜处抽出来，之后时不时伸缩一下调焦
+.hm-spy__tube {
+  transform-origin: 0 0;
+  animation: hm-spy-extend 0.45s cubic-bezier(0.34, 1.4, 0.64, 1) both, hm-spy-focus 2.4s ease-in-out 0.6s infinite;
+}
+
 // 彩蛋（1/1000）：发现脚边的石头 → 蹲下捡起 → 抡臂 → 朝鼠标扔出去 → 小跳收势。
 // 总时长与 useHermesMasterBehavior 的 THROW_MS 一致；手里的石头在 56% 消失，
 // 同一时刻（THROW_RELEASE_MS）外层把飞行的石头接上。
@@ -1052,6 +1186,17 @@ $squat: 25px;
   0%, 75% { transform: scale(0.02); }
   81% { transform: scale(1.15); }
   85%, 100% { transform: scale(1); }
+}
+
+@keyframes hm-spy-extend {
+  from { transform: scaleX(0.25); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes hm-spy-focus {
+  0%, 70%, 100% { transform: scaleX(1); }
+  80% { transform: scaleX(0.9); }
+  90% { transform: scaleX(1.04); }
 }
 
 @keyframes hm-throw-upper {

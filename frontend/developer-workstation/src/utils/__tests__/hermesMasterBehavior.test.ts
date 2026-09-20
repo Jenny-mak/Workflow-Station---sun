@@ -5,6 +5,7 @@ import {
   HM_HEIGHT,
   HM_THROW_CHANCE,
   HM_WIDTH,
+  binocularsGeometry,
   isInterruptible,
   landingPose,
   pickNextAction,
@@ -15,6 +16,7 @@ import {
   rockPosition,
   rollsRockThrow,
   stepFall,
+  toFigurePoint,
   xBounds
 } from '../hermesMasterBehavior'
 
@@ -37,7 +39,7 @@ describe('pickNextAction', () => {
   it('covers every autonomous action across the roll range', () => {
     const seen = new Set<string>()
     for (let i = 0; i < 1000; i++) seen.add(pickNextAction(null, sequence(i / 1000, 0.5)).pose)
-    expect([...seen].sort()).toEqual(['handstand', 'hide', 'idle', 'sit', 'sleep', 'think', 'walk', 'wave'])
+    expect([...seen].sort()).toEqual(['handstand', 'hide', 'idle', 'sit', 'sleep', 'spy', 'think', 'walk', 'wave'])
   })
 
   it('keeps durations inside the configured range', () => {
@@ -168,5 +170,53 @@ describe('rock throw', () => {
     expect(rockFlightMs({ x: 0, y: 0 }, { x: 50, y: 0 })).toBe(420)
     expect(rockFlightMs({ x: 0, y: 0 }, { x: 600, y: 0 })).toBe(540)
     expect(rockFlightMs({ x: 0, y: 0 }, { x: 3000, y: 0 })).toBe(900)
+  })
+})
+
+describe('binoculars', () => {
+  it('maps page coordinates into the figure viewBox', () => {
+    // 机器人站在地上、左边缘 x=1000，视口高 900：盒子左上角是 (1000, 900 - HM_HEIGHT)
+    expect(toFigurePoint({ x: 1000, y: 900 - HM_HEIGHT }, { x: 1000, y: 0 }, 900)).toEqual({ x: 0, y: 0 })
+    const bottomRight = toFigurePoint({ x: 1000 + HM_WIDTH, y: 900 }, { x: 1000, y: 0 }, 900)
+    expect(bottomRight.x).toBeCloseTo(120)
+    expect(bottomRight.y).toBeCloseTo(HM_HEIGHT / (HM_WIDTH / 120))
+    // 被拎高 200px：同一个页面点在盒子里就低了 200px
+    expect(toFigurePoint({ x: 1000, y: 900 - HM_HEIGHT }, { x: 1000, y: 200 }, 900).y).toBeCloseTo(200 / 0.9)
+  })
+
+  it('points both barrels straight at the target', () => {
+    // 两眼中点是 (59.5, 18)
+    expect(binocularsGeometry({ x: 59.5, y: -200 }).angle).toBe(-90)
+    expect(binocularsGeometry({ x: 300, y: 18 }).angle).toBe(0)
+    expect(binocularsGeometry({ x: -300, y: 18 }).angle).toBe(180)
+    expect(binocularsGeometry({ x: 159.5, y: -82 }).angle).toBe(-45)
+  })
+
+  it('holds the barrels symmetrically when looking straight up', () => {
+    const g = binocularsGeometry({ x: 59.5, y: -200 })
+    expect(g.gripLeft).toEqual({ x: 52.2, y: 7.5 })
+    expect(g.gripRight).toEqual({ x: 66.8, y: 7.5 })
+    expect(g.headTilt).toBeCloseTo(0)
+    expect(g.bridge).toBe('M52.2 10 L66.8 10')
+  })
+
+  it('reaches further along the barrel with the hand nearer the target', () => {
+    const left = binocularsGeometry({ x: -200, y: -80 })
+    const right = binocularsGeometry({ x: 319, y: -80 })
+    const reach = (eyeX: number, grip: { x: number; y: number }) => Math.hypot(grip.x - eyeX, grip.y - 18)
+    expect(reach(52.2, left.gripLeft)).toBeGreaterThan(reach(66.8, left.gripRight))
+    expect(reach(66.8, right.gripRight)).toBeGreaterThan(reach(52.2, right.gripLeft))
+    // 左右对称的目标 → 互为镜像
+    expect(reach(52.2, left.gripLeft)).toBeCloseTo(reach(66.8, right.gripRight), 1)
+    expect(left.leftOnTop).toBe(true)
+    expect(right.leftOnTop).toBe(false)
+    expect(left.headTilt).toBeGreaterThan(0)
+    expect(right.headTilt).toBeLessThan(0)
+  })
+
+  it('draws each arm from its shoulder to its grip with the elbow raised outwards', () => {
+    const g = binocularsGeometry({ x: 59.5, y: -200 })
+    expect(g.armLeft).toBe('M32.5 44 Q28.5 14.5 52.2 7.5')
+    expect(g.armRight).toBe('M87.5 44 Q91.5 14.5 66.8 7.5')
   })
 })

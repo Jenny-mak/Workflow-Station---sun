@@ -236,6 +236,7 @@ export default {
     hiddenByStatusFilter: '{count} hidden by status filter (e.g. Draft after rollback)',
     settings: 'Function Unit Settings',
     documents: {
+      guideLinkAria: 'Open the Requirements and Function Unit Design guideline',
       tabBasic: 'Basic Info',
       type: {
         REQUIREMENTS: 'Requirements',
@@ -266,12 +267,23 @@ export default {
       diffTitle: '{doc}: {from} → {to}',
       noChanges: 'No differences',
       tooLarge: 'The document is larger than 200 KB',
+      import: 'Import',
+      download: 'Download',
+      imported: 'Loaded {file} into the editor. Review it, then Save to keep it as a new version.',
+      importReplaceConfirm: 'Replace your unsaved changes with the content of {file}?',
+      importReplace: 'Replace',
+      importRejected: {
+        UNSUPPORTED_TYPE: 'Only Markdown or plain text files (.md, .markdown, .txt) can be imported',
+        TOO_LARGE: 'The file is larger than 200 KB',
+        EMPTY: 'The file is empty'
+      },
       source: {
         MANUAL: 'Manual edit',
         IMPORTED: 'Imported',
         CLONED: 'Cloned',
         RESTORED: 'Restored from v{version}',
         ROLLBACK: 'Rolled back to version {version}',
+        AI_ONE_CLICK: 'AI Studio · one-click generation',
         AI_SYNC: 'AI Studio · {phases} confirmed',
         AI_SYNC_FULL: 'AI Studio · full check'
       }
@@ -2390,6 +2402,7 @@ export default {
       AI_WEBHOOK_TIMEOUT: 'AI service timed out, please retry',
       AI_WEBHOOK_CALL_FAILED: 'AI service call failed, please retry',
       AI_GATEWAY_NOT_CONFIGURED: 'AI service is not configured, please contact your administrator',
+      AI_STUDIO_ONE_CLICK_NO_INPUT: 'Describe the requirements, or add a Requirements document first',
       AI_STUDIO_DOC_SYNC_QUEUE_FULL: 'Too many document updates are running, please try again later',
       AI_STUDIO_DOC_SYNC_BAD_OUTPUT: 'AI did not return the documents in the expected format, please retry',
       AI_STUDIO_DOC_SYNC_DOCUMENT_TOO_LARGE: 'A document is too long for AI to update; shorten it in Settings first',
@@ -2554,6 +2567,21 @@ export default {
       success: 'Changes undone successfully'
     },
     studio: {
+      guideLinkAria: 'Open the Build with AI guideline',
+      oneClick: {
+        title: 'One-click generate',
+        desc: 'Describe the requirements and let AI build the whole function unit in one go: process, tables, forms, actions and decisions.',
+        readOnly: 'You have read-only access to this function unit, so one-click generation is not available.',
+        inputTitle: 'What should this function unit do?',
+        placeholder: 'For example: employees submit a leave request with dates and a reason; the line manager approves or rejects it; requests longer than 5 days also need HR approval…',
+        noteDocsPresent: 'The existing Requirements and Function Unit Design documents are used as input too, so the description can be left empty.',
+        noteDocsAbsent: 'For longer requirements, import a document under Settings → Requirements; it is used as input too.',
+        noteScope: 'Views, email and automation bindings are not generated. Finish them in the guided phases afterwards.',
+        noteDuration: 'Generation usually takes 7–15 minutes. You can leave the page; the result waits for you in AI Studio.',
+        button: 'Generate',
+        confirmTitle: 'Replace the current design?',
+        confirmMsg: 'One-click generation replaces the whole design of this function unit (process, tables, forms, actions and decisions) as soon as the result passes validation, and resets the AI Studio phase progress. This cannot be undone here; use Version Management to go back. Continue?'
+      },
       docSync: {
         finishedElsewhere: 'Documents check finished — see the result in {phase}, or open Documents',
         documentsButton: 'Documents',

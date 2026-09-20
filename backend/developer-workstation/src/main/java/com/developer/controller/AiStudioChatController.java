@@ -1,9 +1,11 @@
 package com.developer.controller;
 
 import com.developer.component.AiStudioChatComponent;
+import com.developer.component.AiStudioOneClickComponent;
 import com.developer.dto.AiStudioApplyRequest;
 import com.developer.dto.AiStudioApplyResponse;
 import com.developer.dto.AiStudioChatRequest;
+import com.developer.dto.AiStudioOneClickRequest;
 import com.developer.dto.AiStudioChatResponse;
 import com.developer.dto.AiStudioProposalJobResponse;
 import com.developer.security.AmTokenResolver;
@@ -44,12 +46,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiStudioChatController extends BaseController {
 
     private final AiStudioChatComponent aiStudioChatComponent;
+    private final AiStudioOneClickComponent aiStudioOneClickComponent;
     private final I18nService i18nService;
     private final AmTokenResolver amTokenResolver;
 
-    public AiStudioChatController(AiStudioChatComponent aiStudioChatComponent, I18nService i18nService,
+    public AiStudioChatController(AiStudioChatComponent aiStudioChatComponent,
+                                  AiStudioOneClickComponent aiStudioOneClickComponent, I18nService i18nService,
                                   AmTokenResolver amTokenResolver) {
         this.aiStudioChatComponent = aiStudioChatComponent;
+        this.aiStudioOneClickComponent = aiStudioOneClickComponent;
         this.i18nService = i18nService;
         this.amTokenResolver = amTokenResolver;
     }
@@ -75,6 +80,18 @@ public class AiStudioChatController extends BaseController {
         String amToken = amTokenResolver.resolve(httpRequest);
         request.setPropose(true);
         return handleRequest(() -> aiStudioChatComponent.startProposal(request, userId, amToken));
+    }
+
+    @PostMapping("/one-click")
+    @Operation(summary = "Generate the whole core design in one model call and apply it when it validates "
+            + "(async; poll GET /proposals/{jobId})")
+    @RequireDeveloperPermission("FUNCTION_UNIT_UPDATE")
+    public ResponseEntity<ApiResponse<AiStudioProposalJobResponse>> startOneClick(
+            @Valid @RequestBody AiStudioOneClickRequest request, HttpServletRequest httpRequest) {
+        String userId = SecurityContextUtils.getCurrentUserId()
+                .orElseThrow(() -> new RuntimeException(i18nService.getMessage("auth.unauthenticated_user")));
+        String amToken = amTokenResolver.resolve(httpRequest);
+        return handleRequest(() -> aiStudioOneClickComponent.start(request, userId, amToken));
     }
 
     @GetMapping("/proposals/active")

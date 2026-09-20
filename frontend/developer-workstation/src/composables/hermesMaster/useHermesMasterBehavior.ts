@@ -12,6 +12,7 @@ import {
   rockLaunchPoint,
   rockPosition,
   rollsRockThrow,
+  toFigurePoint,
   stepFall,
   xBounds,
   type HmPose,
@@ -65,6 +66,8 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
   /** 用户让它去休息：睡到被点醒为止 */
   const resting = ref(false)
   const rock = ref<HmRock | null>(null)
+  /** 望远镜要对准的点（机器人 viewBox 坐标）；只在 spy 姿态期间更新，免得平时每次鼠标移动都触发渲染 */
+  const aim = ref<Point | null>(null)
 
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 
@@ -143,7 +146,14 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
       ensureLoop()
       return
     }
+    if (action.pose === 'spy') updateAim()
     hold(action.pose, action.durationMs, action.pose === 'sleep' ? wakeUp : scheduleNext)
+  }
+
+  function updateAim() {
+    // 鼠标还没在页面上动过：先朝页面上方正中张望
+    const target = lastPointer ?? { x: window.innerWidth / 2, y: window.innerHeight * 0.3 }
+    aim.value = toFigurePoint(target, { x: x.value, y: y.value }, window.innerHeight)
   }
 
   // ---------- 彩蛋：捡起地上的石头扔向鼠标 ----------
@@ -382,6 +392,7 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
       const reach = Math.max(Math.hypot(dx, dy), 140)
       setVar('--hm-look-x', (dx / reach).toFixed(2))
       setVar('--hm-look-y', (dy / reach).toFixed(2))
+      if (pose.value === 'spy') updateAim()
     })
   }
 
@@ -437,6 +448,7 @@ export function useHermesMasterBehavior(el: Ref<HTMLElement | null>, options: He
     y,
     resting,
     rock,
+    aim,
     onPointerDown,
     onPointerMove,
     onPointerUp,

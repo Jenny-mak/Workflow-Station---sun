@@ -185,3 +185,33 @@ Index for remaining Extend and MI shells. Sub-Table is /help/form-ctl-sub-table 
 ## Layout and Auxiliary events (/help/form-events-layout)
 
 Usually click plus hooks. Tabs may also list tabClick, tabChange, tabAdd, tabRemove when Create shows those names. Button click can fill requester from user.
+
+## Requirements and Function Unit Design (/help/fu-documents)
+
+Every Function Unit keeps two Markdown documents, Requirements and Function Unit Design, edited in Function Unit Settings. Each Save adds a version. AI Studio reads both and updates them after a phase is confirmed.
+
+Order: open the Function Unit → Function Unit Settings → Requirements or Function Unit Design tab → type Markdown or Import a file → check the preview → Save.
+
+Toolbar: Edit (two panes), Preview (rendered only; read-only members always), Import, Download, Version History, Save, Unsaved tag, version line (version · saver · time · source), No document yet.
+
+Import accepts .md, .markdown, .txt up to 200 KB and only loads the editor; nothing is stored until Save. With unsaved changes a dialog asks (Replace / Cancel). Download writes what the editor shows; file name example Purchase_Request-requirements-v1.2.md.
+
+Version History: Current tag, View, Compare with current, Restore (adds a new version with the old text). Sources: Manual edit, Imported, Cloned, Restored from v1.1, Rolled back to version 1.0.2, AI Studio · <phase> confirmed, AI Studio · full check, AI Studio · one-click generation. The number before the dot goes up when a new AI design is started in AI Studio; the number after the dot on every Save.
+
+Export carries both documents; importing adds them as a version marked Imported; Clone copies the latest text; a Version Management rollback writes that version's documents back. Older packages leave documents unchanged.
+
+Fail: wrong file type; file or document larger than 200 KB; empty file; Document changed (Load latest / Save anyway); read-only members have no Import, Save, Restore.
+
+Related: /help/ai-studio
+
+## Build with AI (AI Studio) (/help/ai-studio)
+
+The AI Studio button on a Function Unit opens Build with AI. Three modes: Start a new AI design (phase by phase with the copilot; asks before resetting existing progress), Continue AI draft (disabled until someone confirmed a phase or talked to the copilot), One-click generate. Read-only members do not see the button. AI Studio has eleven phases in designer-tab order, Process Design to Validation.
+
+One-click generate (#one-click). Order: AI Studio → One-click generate → describe what the Function Unit should do (up to 4000 characters; optional when a Requirements document exists, otherwise Generate is disabled) → Generate → Replace the current design? → Generate. The description, the current design and both documents go to the model. One round writes process, tables and relations, forms, actions, decisions. It does not write views, connections, email templates, email monitors or automation bindings.
+
+Result (#result): AI Studio opens on Process Design and waits, usually 7 to 15 minutes; Stop cancels without changing the design; the page can be reloaded or left. The Proposed change card groups items by phase (new N, replaces N existing). Applied means the design is written and the designers reloaded. Apply appears when it was generated but not written. Let AI fix it appears when the card lists errors and runs the whole generation again. The description is saved as a new Requirements version (source AI Studio · one-click generation; appended under Additional requirements when text existed). Phase progress returns to Process Design; review each phase and click Confirm phase.
+
+Fail: Generate disabled without description or Requirements document; AI credentials are missing, please sign in again; errors on the card mean nothing was written; a warning that it could not be applied automatically → click Apply; a red copilot message means the round failed and the design is unchanged; no Undo, roll back in Version Management.
+
+Related: /help/fu-documents , /help/table-design , /help/view-design , /help/email-send

@@ -88,6 +88,24 @@ export const aiGenerationApi = {
     )
   },
 
+  /**
+   * 一键生成：一次模型调用产出整套核心设计，预校验无 ERROR 时后端直接写入。作业与 Copilot 提案同一套，
+   * 用 studioGetProposal 轮询、studioCancelProposal 取消；结果卡片落在 Process Design 阶段线程。
+   * followUp = 对上一轮结果的修正轮（修正指令不记进 Requirements 文档）。错误由调用方就地展示。
+   */
+  studioStartOneClick: (data: { functionUnitId: number; requirements: string; followUp?: boolean }) => {
+    const amToken = readAmToken()
+    return api.post<unknown, { data: AiStudioProposalJob }>(
+      '/ai-generation/studio-chat/one-click',
+      data,
+      {
+        timeout: 120000,
+        silentError: true,
+        ...(amToken ? { headers: { 'X-AM-Token': amToken } } : {})
+      }
+    )
+  },
+
   /** 轮询提案作业；作业不存在/已过期/不属于当前用户时后端返回 404。 */
   studioGetProposal: (jobId: string) =>
     api.get<any, { data: AiStudioProposalJob }>(

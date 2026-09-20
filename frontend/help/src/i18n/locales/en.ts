@@ -2,6 +2,8 @@ import formEventMessages from './formEvents.en'
 import formCtlMessages from './formCtl.en'
 import tableDesignMessages from './tableDesign.en'
 import viewDesignMessages from './viewDesign.en'
+import fuDocumentsMessages from './fuDocuments.en'
+import aiStudioMessages from './aiStudio.en'
 
 export default {
   app: {
@@ -107,6 +109,8 @@ export default {
     emailMonitors: 'Email Monitors',
     decisionDesign: 'Decision Design',
     versionManagement: 'Version Management',
+    functionUnitSettings: 'Function Unit Settings',
+    aiStudio: 'AI Studio',
     automation: 'Automation',
     admin: 'Admin Center',
     acDashboard: 'Dashboard',
@@ -149,6 +153,14 @@ export default {
     upProfileSetup: 'User Profile Setup',
   },
   guides: {
+    fuDocuments: {
+      title: 'Requirements and Function Unit Design',
+      summary: 'The two Markdown documents of a Function Unit: edit, import, download, versions, and where AI Studio writes to them.',
+    },
+    aiStudio: {
+      title: 'Build with AI (AI Studio)',
+      summary: 'The three ways into AI Studio, and One-click generate: what it writes, what it leaves out, and what to do when it fails.',
+    },
     computedFields: {
       title: 'Computed field formulas',
       summary: 'How computed columns fill themselves, which functions exist, and what happens when a formula fails.',
@@ -722,4 +734,6 @@ export default {
   ...formCtlMessages,
   ...tableDesignMessages,
   ...viewDesignMessages,
+  ...fuDocumentsMessages,
+  ...aiStudioMessages,
 }
