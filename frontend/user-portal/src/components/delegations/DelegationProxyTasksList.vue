@@ -70,6 +70,12 @@
               <span v-else-if="col.field === 'functionUnitCode'">
                 {{ row.functionUnitName || row.functionUnitCode || '-' }}
               </span>
+              <span v-else-if="col.field === 'delegatorId'">
+                {{ row.delegatorName || row.delegatorId || '-' }}
+              </span>
+              <span v-else-if="col.field === 'delegatedTargetType'">
+                {{ delegatedTargetLabel(row) }}
+              </span>
               <el-tag
                 v-else-if="col.field === 'assignmentType'"
                 size="small"
@@ -128,6 +134,8 @@ const PROXY_VISIBLE_FIELDS = [
   'requestId',
   'functionUnitCode',
   'taskName',
+  'delegatorId',
+  'delegatedTargetType',
   'assignmentType',
   'createTime',
 ] as const
@@ -198,6 +206,18 @@ function ensureLoaded() {
 function viewTask(task: TaskInfo) {
   if (!task.taskId) return
   router.push(`/tasks/${task.taskId}`)
+}
+
+function delegatedTargetLabel(row: TaskInfo): string {
+  if (row.delegatedTargetType === 'BU_ROLE') {
+    const pair = [row.delegatedBuCode, row.delegatedRoleCode].filter(Boolean).join(' / ')
+    const kind = t('delegation.specifyBuRole')
+    return pair ? `${kind} (${pair})` : kind
+  }
+  if (row.delegatedTargetType === 'USER') {
+    return t('delegation.specifyUser')
+  }
+  return row.delegatedTargetType || '-'
 }
 
 function onSort(field: string, direction: 'ASC' | 'DESC') {

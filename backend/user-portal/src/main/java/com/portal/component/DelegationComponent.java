@@ -236,6 +236,13 @@ public class DelegationComponent {
                 && (request.getStartTime() == null || request.getEndTime() == null)) {
             throw new PortalException("400", i18nService.getMessage("portal.delegation_temporary_window_required"));
         }
+        LocalDateTime now = LocalDateTime.now();
+        if (request.getStartTime() != null && request.getStartTime().isBefore(now)) {
+            throw new PortalException("400", i18nService.getMessage("portal.delegation_time_in_past"));
+        }
+        if (request.getEndTime() != null && request.getEndTime().isBefore(now)) {
+            throw new PortalException("400", i18nService.getMessage("portal.delegation_time_in_past"));
+        }
         if (request.isBuRoleTarget()) {
             if (blank(request.getDelegateBuCode()) || blank(request.getDelegateRoleCode())) {
                 throw new PortalException("400", i18nService.getMessage("portal.delegation_bu_role_pair_required"));

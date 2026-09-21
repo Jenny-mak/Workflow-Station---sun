@@ -51,4 +51,15 @@ public class DelegationAudit {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    /** Resolved at list query time; stored value remains {@link #delegatorId}. */
+    @Transient
+    private String delegatorDisplayName;
+
+    /**
+     * Resolved at list query time for user ids only. BU+Role audit tokens
+     * ({@code buCode/roleCode}) stay in {@link #delegateId} without a lookup.
+     */
+    @Transient
+    private String delegateDisplayName;
 }

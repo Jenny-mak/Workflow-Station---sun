@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
@@ -75,6 +75,9 @@ function mountDialog() {
 }
 
 describe('DelegationCreateDialog target pickers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
   it('uses user lookup instead of hardcoded people', async () => {
     vi.mocked(processApi.getDefinitions).mockResolvedValue({
       data: [{ key: 'leave-fu', name: 'Leave Request Delegation' }],
@@ -181,6 +184,27 @@ describe('DelegationCreateDialog target pickers', () => {
         delegateId: 'user-b',
       }),
     )
+    wrapper.unmount()
+  })
+
+  it('does not submit a start time in the past', async () => {
+    vi.mocked(processApi.getDefinitions).mockResolvedValue({
+      data: [{ key: 'leave-fu', name: 'Leave Request Delegation' }],
+    } as never)
+    vi.mocked(createDelegationRule).mockResolvedValue({} as never)
+    const wrapper = mountDialog()
+    await nextTick()
+    await Promise.resolve()
+    await nextTick()
+    const vm = wrapper.vm as unknown as {
+      form: { delegateId: string; startTime: Date | null; delegationType: string }
+      submit: () => Promise<void>
+    }
+    vm.form.delegateId = 'user-b'
+    vm.form.delegationType = 'ALL'
+    vm.form.startTime = new Date(Date.now() - 60_000)
+    await vm.submit()
+    expect(createDelegationRule).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

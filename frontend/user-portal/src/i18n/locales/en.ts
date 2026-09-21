@@ -705,6 +705,8 @@ export default {
     partialProcessTypesRequired: 'Partial delegation needs at least one function unit',
     processTypesLoadFailed: 'Could not load function units',
     temporaryWindowRequired: 'Temporary delegation needs start and end time',
+    timeInPast: 'Start and end time cannot be in the past',
+    delegatedTargetKind: 'User or BU',
     guideLinkAria: 'Open standing-delegation guidelines',
     createSuccess: 'Created successfully',
     suspendSuccess: 'Suspended successfully',

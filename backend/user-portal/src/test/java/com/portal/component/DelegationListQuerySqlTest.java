@@ -31,12 +31,15 @@ class DelegationListQuerySqlTest {
     @Mock
     private JdbcTemplate jdbcTemplate;
 
+    @Mock
+    private DelegationUserDisplayEnricher userDisplayEnricher;
+
     private DelegationListQueryComponent component;
     private final List<String> preparedSql = new ArrayList<>();
 
     @BeforeEach
     void setUp() throws Exception {
-        component = new DelegationListQueryComponent(jdbcTemplate);
+        component = new DelegationListQueryComponent(jdbcTemplate, userDisplayEnricher);
         Connection connection = mock(Connection.class);
         PreparedStatement statement = mock(PreparedStatement.class);
         when(connection.prepareStatement(anyString())).thenAnswer(call -> {

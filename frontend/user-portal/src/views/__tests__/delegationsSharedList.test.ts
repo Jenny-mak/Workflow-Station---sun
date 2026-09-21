@@ -110,6 +110,7 @@ describe('Delegations shared list', () => {
           id: 41,
           delegatorId: 'u-me',
           delegateId: 'u-other',
+          delegateDisplayName: 'Lina Chen',
           delegationType: 'FULL',
           status: 'ACTIVE',
           createdAt: '2026-08-01T00:00:00Z',
@@ -126,6 +127,7 @@ describe('Delegations shared list', () => {
     )
     expect(actionCol).toBeTruthy()
     expect(Number(actionCol!.props('width'))).toBe(200)
+    expect(w.text()).toContain('Lina Chen')
     expect(w.text()).toContain('delegation.suspend')
     expect(w.text()).toContain('common.delete')
     expect(w.findAll('.row-actions .el-button').length).toBeGreaterThanOrEqual(2)
@@ -141,5 +143,41 @@ describe('Delegations shared list', () => {
     expect(todoApi).toHaveBeenCalled()
     const body = todoApi.mock.calls[todoApi.mock.calls.length - 1][0]
     expect(body.assignmentTypes).toEqual(['DELEGATED'])
+  })
+
+  it('shows who delegated and user-or-BU on the Delegated tab', async () => {
+    todoApi.mockResolvedValue({
+      data: {
+        columns: [
+          { field: 'requestId', label: 'task.requestId', kind: 'TEXT', filterable: true, sortable: true, operators: ['contains'] },
+          { field: 'functionUnitCode', label: 'task.functionUnit', kind: 'TEXT', filterable: true, sortable: true, operators: ['contains'] },
+          { field: 'taskName', label: 'task.taskName', kind: 'TEXT', filterable: true, sortable: true, operators: ['contains'] },
+          { field: 'delegatorId', label: 'delegation.delegator', kind: 'USER', filterable: true, sortable: true, operators: ['eq'] },
+          { field: 'delegatedTargetType', label: 'delegation.delegatedTargetKind', kind: 'ENUM', filterable: true, sortable: true, operators: ['eq'] },
+          { field: 'assignmentType', label: 'task.assignmentType', kind: 'ENUM', filterable: true, sortable: true, operators: ['eq'] },
+          { field: 'createTime', label: 'task.createTime', kind: 'DATETIME', filterable: true, sortable: true, operators: ['between'] },
+        ],
+        content: [{
+          taskId: 't-1',
+          requestId: 'R-1',
+          functionUnitCode: 'owner-demo',
+          taskName: 'Review',
+          delegatorId: 'user-e2e-lina',
+          delegatorName: '李娜',
+          delegatedTargetType: 'USER',
+          assignmentType: 'DELEGATED',
+          createTime: '2026-09-18T00:00:00Z',
+        }],
+        totalElements: 1,
+        page: 0,
+        size: 20,
+      },
+    } as never)
+    const w = await mountPage()
+    const tabs = w.findAll('.el-tabs__item')
+    await tabs[1].trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('李娜')
+    expect(w.text()).toContain('delegation.specifyUser')
   })
 })

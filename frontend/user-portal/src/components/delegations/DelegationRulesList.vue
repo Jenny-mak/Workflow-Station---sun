@@ -256,7 +256,7 @@ function targetLabel(row: DelegationRule): string {
       role: row.delegateRoleCode || '-',
     })
   }
-  return row.delegateId || '-'
+  return row.delegateDisplayName || row.delegateId || '-'
 }
 
 async function load() {

@@ -48,7 +48,8 @@ class DelegatedTaskQueryComponentWorkspaceFilterTest {
         component = new DelegatedTaskQueryComponent(
                 workflowEngineClient,
                 new DelegationRuleMatcher(delegationRuleRepository, workspaceTaskFilterComponent),
-                requestIdEnricher);
+                requestIdEnricher,
+                org.mockito.Mockito.mock(DelegationUserDisplayEnricher.class));
     }
 
     @Test
@@ -83,6 +84,8 @@ class DelegatedTaskQueryComponentWorkspaceFilterTest {
         List<TaskInfo> result = component.queryDelegatedTasks("user-e2e-wangfang");
 
         assertThat(result).extracting(TaskInfo::getTaskId).containsExactly("review-1");
+        assertThat(result.get(0).getDelegatorId()).isEqualTo("user-e2e-lina");
+        assertThat(result.get(0).getDelegatedTargetType()).isEqualTo("USER");
         verify(workflowEngineClient).getDelegatorAssignedTasks("user-e2e-lina", 0, 200);
         verify(workflowEngineClient, never()).getUserTasks(anyString(), anyInt(), anyInt());
         verify(workflowEngineClient, never()).getUserTasks(anyString(), anyInt(), anyInt(), eq(false));

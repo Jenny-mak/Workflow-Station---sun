@@ -141,6 +141,7 @@
           v-model="form.startTime"
           type="datetime"
           style="width: 100%;"
+          :disabled-date="disablePastDate"
         />
       </el-form-item>
       <el-form-item :label="t('delegation.endTime')">
@@ -148,6 +149,7 @@
           v-model="form.endTime"
           type="datetime"
           style="width: 100%;"
+          :disabled-date="disablePastDate"
         />
       </el-form-item>
       <el-form-item :label="t('delegation.reason')">
@@ -311,7 +313,21 @@ function validate(): boolean {
     ElMessage.warning(t('delegation.temporaryWindowRequired'))
     return false
   }
+  if (isPastDateTime(form.startTime) || isPastDateTime(form.endTime)) {
+    ElMessage.warning(t('delegation.timeInPast'))
+    return false
+  }
   return true
+}
+
+function disablePastDate(date: Date): boolean {
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  return date.getTime() < startOfToday.getTime()
+}
+
+function isPastDateTime(value: Date | null): boolean {
+  return !!value && value.getTime() < Date.now()
 }
 
 async function submit() {

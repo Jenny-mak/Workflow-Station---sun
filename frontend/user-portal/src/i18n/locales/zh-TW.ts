@@ -664,6 +664,8 @@ export default {
     partialProcessTypesRequired: '部分委託必須選擇至少一個功能單元',
     processTypesLoadFailed: '功能單元列表載入失敗',
     temporaryWindowRequired: '臨時委託必須填寫起止時間',
+    timeInPast: '開始和結束時間不能早於目前時間',
+    delegatedTargetKind: '用戶或 BU',
     guideLinkAria: '開啟站立委託指南',
     createSuccess: '建立成功',
     suspendSuccess: '暫停成功',

@@ -6,6 +6,7 @@ export interface DelegationRule {
   id: number
   delegatorId: string
   delegateId?: string | null
+  delegateDisplayName?: string | null
   delegateTargetType?: 'USER' | 'BU_ROLE' | null
   delegateBuCode?: string | null
   delegateRoleCode?: string | null
@@ -36,7 +37,9 @@ export interface DelegationRuleRequest {
 export interface DelegationAudit {
   id: number
   delegatorId: string
+  delegatorDisplayName?: string | null
   delegateId: string
+  delegateDisplayName?: string | null
   taskId?: string
   operationType: string
   operationResult?: string

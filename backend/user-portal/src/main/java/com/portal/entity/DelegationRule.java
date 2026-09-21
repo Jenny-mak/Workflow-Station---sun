@@ -89,6 +89,10 @@ public class DelegationRule {
     @Column(name = "lock_version")
     private Long lockVersion;
 
+    /** Resolved at list query time; stored value remains {@link #delegateId}. */
+    @Transient
+    private String delegateDisplayName;
+
     public boolean isUserTarget() {
         return delegateTargetType == null || delegateTargetType == DelegateTargetType.USER;
     }

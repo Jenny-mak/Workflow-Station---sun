@@ -38,6 +38,7 @@ public class DelegatedTaskQueryComponent {
     private final WorkflowEngineClient workflowEngineClient;
     private final DelegationRuleMatcher delegationRuleMatcher;
     private final RequestIdEnricher requestIdEnricher;
+    private final DelegationUserDisplayEnricher userDisplayEnricher;
 
     public List<TaskInfo> queryDelegatedTasks(String userId) {
         if (!workflowEngineClient.isAvailable()) {
@@ -55,7 +56,9 @@ public class DelegatedTaskQueryComponent {
                 byId.putIfAbsent(standing.getTaskId(), standing);
             }
         }
-        return new ArrayList<>(byId.values());
+        List<TaskInfo> rows = new ArrayList<>(byId.values());
+        userDisplayEnricher.enrichDelegatedTasks(rows);
+        return rows;
     }
 
     private List<TaskInfo> loadEngineRuntimeOverlay(String userId) {
@@ -75,6 +78,9 @@ public class DelegatedTaskQueryComponent {
             mapped.setAssignmentType("DELEGATED");
             mapped.setDelegatorId(mapped.getDelegatorId() != null ? mapped.getDelegatorId() : mapped.getAssignee());
             mapped.setDelegatorName(mapped.getDelegatorName() != null ? mapped.getDelegatorName() : mapped.getAssigneeName());
+            if (mapped.getDelegatedTargetType() == null || mapped.getDelegatedTargetType().isBlank()) {
+                mapped.setDelegatedTargetType("USER");
+            }
             out.add(mapped);
         }
         return out;
@@ -142,36 +148,42 @@ public class DelegatedTaskQueryComponent {
         requestIdEnricher.enrichTaskRequestIds(mapped);
         List<TaskInfo> matched = new ArrayList<>();
         for (TaskInfo taskInfo : mapped) {
-            if (!standingTaskMatches(taskInfo, delegatorId, rules)) {
+            DelegationRule matchedRule = matchingStandingRule(taskInfo, delegatorId, rules);
+            if (matchedRule == null) {
                 continue;
             }
-            stampStandingOverlay(taskInfo, delegatorId);
+            stampStandingOverlay(taskInfo, matchedRule);
             matched.add(taskInfo);
         }
         return matched;
     }
 
-    private static void stampStandingOverlay(TaskInfo taskInfo, String delegatorId) {
+    private static void stampStandingOverlay(TaskInfo taskInfo, DelegationRule rule) {
         taskInfo.setAssignmentType("DELEGATED");
-        taskInfo.setDelegatorId(delegatorId);
-        if (taskInfo.getDelegatorName() == null || taskInfo.getDelegatorName().isBlank()) {
-            taskInfo.setDelegatorName(taskInfo.getAssigneeName() != null
-                    ? taskInfo.getAssigneeName() : delegatorId);
+        taskInfo.setDelegatorId(rule.getDelegatorId());
+        if (rule.isBuRoleTarget()) {
+            taskInfo.setDelegatedTargetType("BU_ROLE");
+            taskInfo.setDelegatedBuCode(rule.getDelegateBuCode());
+            taskInfo.setDelegatedRoleCode(rule.getDelegateRoleCode());
+            taskInfo.setDelegatedTo(null);
+        } else {
+            taskInfo.setDelegatedTargetType("USER");
+            taskInfo.setDelegatedTo(rule.getDelegateId());
         }
     }
 
-    private boolean standingTaskMatches(TaskInfo task, String delegatorId, List<DelegationRule> rules) {
+    private DelegationRule matchingStandingRule(TaskInfo task, String delegatorId, List<DelegationRule> rules) {
         if (!delegationRuleMatcher.isAssignedDelegatableTask(task)) {
-            return false;
+            return null;
         }
         if (!DelegationRuleMatcher.matchesPortalIdentity(task.getAssignee(), delegatorId, null)) {
-            return false;
+            return null;
         }
         for (DelegationRule rule : rules) {
             if (delegationRuleMatcher.ruleMatches(task, rule)) {
-                return true;
+                return rule;
             }
         }
-        return false;
+        return null;
     }
 }

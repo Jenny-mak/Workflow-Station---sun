@@ -252,6 +252,20 @@ class DelegationRuleProperties {
         assertEquals(DelegationType.TEMPORARY, rule.getDelegationType());
     }
 
+    @Test
+    void pastStartTimeIsRejected() {
+        DelegationRuleRequest request = DelegationRuleRequest.builder()
+                .delegateId("delegate_1")
+                .delegationType(DelegationType.TEMPORARY)
+                .startTime(LocalDateTime.now().minusHours(1))
+                .endTime(LocalDateTime.now().plusDays(1))
+                .build();
+
+        assertThrows(PortalException.class,
+                () -> delegationComponent.createDelegationRule("delegator_1", request));
+        verify(delegationRuleRepository, never()).save(any(DelegationRule.class));
+    }
+
     /**
      * 属性8: 委托规则的流程类型筛选应该被正确保存
      */

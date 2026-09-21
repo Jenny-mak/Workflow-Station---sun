@@ -42,6 +42,7 @@ public class DelegationListQueryComponent {
             " FROM up_delegation_audit a WHERE (a.delegator_id = ? OR a.delegate_id = ?)";
 
     private final JdbcTemplate jdbcTemplate;
+    private final DelegationUserDisplayEnricher userDisplayEnricher;
 
     public PortalListPage<DelegationRule> queryRules(String userId, DelegationListQueryRequest request) {
         requireUser(userId);
@@ -59,6 +60,7 @@ public class DelegationListQueryComponent {
 
 
         List<DelegationRule> rows = loadRulesPage(filterSql, where.toString(), params, request);
+        userDisplayEnricher.enrichRules(rows);
         long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
         ListQuerySupport.logIfSlow(log, RULES_KEY, request.page(), request.size(), total, started);
         ListQuerySupport.logIfOverSla(log, RULES_KEY, request.page(), request.size(), total, elapsedMs, elapsedMs, 0L);
@@ -83,6 +85,7 @@ public class DelegationListQueryComponent {
 
 
         List<DelegationAudit> rows = loadAuditPage(filterSql, where.toString(), params, request);
+        userDisplayEnricher.enrichAudit(rows);
         long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
         ListQuerySupport.logIfSlow(log, AUDIT_KEY, request.page(), request.size(), total, started);
         ListQuerySupport.logIfOverSla(log, AUDIT_KEY, request.page(), request.size(), total, elapsedMs, elapsedMs, 0L);

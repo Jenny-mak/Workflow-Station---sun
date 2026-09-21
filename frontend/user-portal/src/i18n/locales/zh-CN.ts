@@ -705,6 +705,8 @@ export default {
     partialProcessTypesRequired: '部分委托必须选择至少一个功能单元',
     processTypesLoadFailed: '功能单元列表加载失败',
     temporaryWindowRequired: '临时委托必须填写起止时间',
+    timeInPast: '开始和结束时间不能早于当前时间',
+    delegatedTargetKind: '用户或 BU',
     guideLinkAria: '打开站立委托指南',
     createSuccess: '创建成功',
     suspendSuccess: '暂停成功',

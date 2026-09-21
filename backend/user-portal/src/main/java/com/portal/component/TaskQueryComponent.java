@@ -11,6 +11,7 @@ import com.portal.dto.TaskQueryRequest;
 import com.portal.dto.TaskStatistics;
 import com.portal.dto.TodoTaskQueryRequest;
 import com.portal.exception.PortalException;
+import com.portal.util.DelegatedTaskColumnSpec;
 import com.portal.util.EngineTaskPushdown;
 import com.portal.util.ListQuerySupport;
 import com.portal.util.TaskInfoListOps;
@@ -87,7 +88,11 @@ public class TaskQueryComponent {
         ListQuerySupport.logIfSlow(log, TODO_LIST_KEY, request.page(), request.size(), total, started);
         ListQuerySupport.logIfOverSla(log, TODO_LIST_KEY, request.page(), request.size(), total,
                 elapsedMs, elapsedMs, 0L);
-        return new PortalListPage<>(TodoTaskColumnSpec.columns(), page.getContent(),
+        return new PortalListPage<>(
+                isDelegatedOnlyAssignmentFilter(adapted.getAssignmentTypes())
+                        ? DelegatedTaskColumnSpec.columns()
+                        : TodoTaskColumnSpec.columns(),
+                page.getContent(),
                 request.page(), request.size(), total);
     }
 

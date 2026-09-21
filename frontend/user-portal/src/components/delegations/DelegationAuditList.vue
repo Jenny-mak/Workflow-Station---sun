@@ -92,7 +92,7 @@
                 style="white-space: nowrap;"
               >{{ formatDate(row.createdAt) }}</span>
               <template v-else>
-                {{ row[col.field as keyof DelegationAudit] || '-' }}
+                {{ userFacingCell(row, col.field) }}
               </template>
             </template>
           </el-table-column>
@@ -174,6 +174,20 @@ const {
   storageKey: 'portal-list-layout:delegation-audit',
   selection: true,
 })
+
+function userFacingCell(row: DelegationAudit, field: string): string {
+  if (field === 'delegatorId') {
+    return row.delegatorDisplayName || row.delegatorId || '-'
+  }
+  if (field === 'delegateId') {
+    return row.delegateDisplayName || row.delegateId || '-'
+  }
+  const value = row[field as keyof DelegationAudit]
+  if (value == null || value === '') {
+    return '-'
+  }
+  return String(value)
+}
 
 async function load() {
   const seq = beginQuery()
