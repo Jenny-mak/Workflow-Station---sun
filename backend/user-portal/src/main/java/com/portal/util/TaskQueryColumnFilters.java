@@ -18,9 +18,10 @@ import java.util.function.Function;
 /**
  * In-memory column filters for Portal To Do lists ({@link ListColumnFilter}).
  *
- * <p>Whitelist fields: taskName, requestId, functionUnitCode, processDefinitionName, initiatorName, priority,
- * assignmentType, currentStepName (alias currentNode), createTime, dueDate.
+ * <p>Whitelist fields: taskName, requestId, functionUnitCode, processDefinitionName, initiatorName,
+ * assigneeName, priority, assignmentType, currentStepName (alias currentNode), createTime, dueDate.
  * DATETIME operators mirror {@link ListFilterSql} / {@link ListRelativeDates}.
+ * {@code assigneeName} matches display name or user id (the painted cell may say You / 我).
  */
 public final class TaskQueryColumnFilters {
 
@@ -30,6 +31,7 @@ public final class TaskQueryColumnFilters {
             "functionUnitCode",
             "processDefinitionName",
             "initiatorName",
+            "assigneeName",
             "priority",
             "assignmentType",
             "currentNode",
@@ -40,6 +42,11 @@ public final class TaskQueryColumnFilters {
     private static final Set<String> DATETIME_FIELDS = Set.of("createTime", "dueDate");
     /** Same paint as Portal {@code formatDate} default: {@code YYYY-MM-DD HH:mm}. */
     private static final DateTimeFormatter KEYWORD_CREATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    /**
+     * Portal {@code task.claimedByMe}: en You, zh-CN/zh-TW 我. Keep in sync with
+     * {@code frontend/user-portal/src/i18n/locales}.
+     */
+    private static final List<String> PAINTED_CLAIMED_BY_ME = List.of("You", "我");
 
     private static Clock clock = Clock.system(ListRelativeDates.ZONE);
 
@@ -155,6 +162,9 @@ public final class TaskQueryColumnFilters {
         if ("functionUnitCode".equals(filter.field())) {
             return functionUnitMatches(task, filter);
         }
+        if ("assigneeName".equals(filter.field())) {
+            return assigneeNameMatches(task, filter);
+        }
         String actual = resolveFieldValue(task, filter.field());
         return textMatches(actual, filter.operator(), filter.value() != null ? filter.value() : "");
     }
@@ -209,6 +219,44 @@ public final class TaskQueryColumnFilters {
             default -> throw new IllegalArgumentException(
                     "Operator " + op + " is not allowed on TEXT column functionUnitCode");
         };
+    }
+
+    /**
+     * Cell may paint You / 我 when the current user holds a claim-pool row. Filter matches
+     * that painted label, {@code assigneeName}, or {@code assignee}.
+     */
+    static boolean assigneeNameMatches(TaskInfo task, ListColumnFilter filter) {
+        String op = filter.operator() != null ? filter.operator().trim() : "";
+        String expected = filter.value() != null ? filter.value() : "";
+        String name = task.getAssigneeName();
+        String id = task.getAssignee();
+        if ("isNull".equals(op)) {
+            return isBlank(name) && isBlank(id);
+        }
+        if ("isNotNull".equals(op)) {
+            return !isBlank(name) || !isBlank(id);
+        }
+        boolean nameHit = textMatches(name, positiveTextOp(op), expected);
+        boolean idHit = textMatches(id, positiveTextOp(op), expected);
+        boolean paintedHit = paintedClaimedByMeMatches(task, positiveTextOp(op), expected);
+        return switch (op) {
+            case "eq", "contains", "startsWith", "endsWith" -> nameHit || idHit || paintedHit;
+            case "ne", "notContains" -> !nameHit && !idHit && !paintedHit;
+            default -> throw new IllegalArgumentException(
+                    "Operator " + op + " is not allowed on TEXT column assigneeName");
+        };
+    }
+
+    private static boolean paintedClaimedByMeMatches(TaskInfo task, String positiveOp, String expected) {
+        if (!task.isClaimedByCurrentUser()) {
+            return false;
+        }
+        for (String label : PAINTED_CLAIMED_BY_ME) {
+            if (textMatches(label, positiveOp, expected)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String positiveTextOp(String op) {
@@ -337,6 +385,11 @@ public final class TaskQueryColumnFilters {
             return textMatches(resolveFieldValue(task, "functionUnitCode"), "contains", expected)
                     || textMatches(resolveFieldValue(task, "functionUnitName"), "contains", expected);
         }
+        if ("assigneeName".equals(field)) {
+            return textMatches(task.getAssigneeName(), "contains", expected)
+                    || textMatches(task.getAssignee(), "contains", expected)
+                    || paintedClaimedByMeMatches(task, "contains", expected);
+        }
         return textMatches(resolveFieldValue(task, field), "contains", expected);
     }
 
@@ -352,6 +405,7 @@ public final class TaskQueryColumnFilters {
             case "functionUnitName" -> TaskInfo::getFunctionUnitName;
             case "processDefinitionName" -> TaskInfo::getProcessDefinitionName;
             case "initiatorName" -> TaskInfo::getInitiatorName;
+            case "assigneeName" -> TaskInfo::getAssigneeName;
             case "priority" -> TaskInfo::getPriority;
             case "assignmentType" -> TaskInfo::getAssignmentType;
             case "currentStepName", "currentNode" ->

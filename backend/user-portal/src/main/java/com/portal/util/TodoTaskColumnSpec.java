@@ -13,6 +13,7 @@ import java.util.List;
  * is filled from {@code up_process_instance} in the same enrich pass. {@code priority} is stored as Flowable's
  * numeric string ({@code "50"}); ENUM options map to numeric bands in
  * {@link TaskQueryColumnFilters} so chrome labels match the cell renderer.
+ * {@code assigneeName} is TEXT fullScan on display name or user id.
  *
  * <p>Process Name / Initiator / Priority / Due Date stay declared (after Create Time) so they can be
  * restored without a spec rewrite; Portal currently hides them via {@code visibleFields}.

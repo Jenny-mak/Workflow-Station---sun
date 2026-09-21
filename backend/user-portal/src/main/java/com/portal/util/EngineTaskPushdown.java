@@ -16,7 +16,8 @@ import java.util.Set;
  *
  * <p>Pushable: taskName / currentStepName, processDefinitionName, priority ENUM bands,
  * createTime / dueDate (incl. relative day ops), and sorts on createTime/dueDate/priority/name.
- * Memory-only: initiatorName, requestId, functionUnitCode, assignmentType, keyword / legacy list filters.
+ * Memory-only: initiatorName, assigneeName, requestId, functionUnitCode, assignmentType,
+ * keyword / legacy list filters.
  */
 public final class EngineTaskPushdown {
 

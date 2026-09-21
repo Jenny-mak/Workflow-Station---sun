@@ -51,6 +51,8 @@ public final class TaskInfoListOps {
                     TaskInfoListOps::functionUnitSortKey, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
             case "initiatorName" -> Comparator.comparing(
                     TaskInfo::getInitiatorName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+            case "assigneeName" -> Comparator.comparing(
+                    TaskInfoListOps::assigneeSortKey, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
             case "assignmentType" -> Comparator.comparing(
                     TaskInfo::getAssignmentType, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
             case "currentStepName", "currentNode" -> Comparator.comparing(
@@ -83,6 +85,14 @@ public final class TaskInfoListOps {
             return name;
         }
         return task.getFunctionUnitCode();
+    }
+
+    private static String assigneeSortKey(TaskInfo task) {
+        String name = task.getAssigneeName();
+        if (name != null && !name.isBlank()) {
+            return name;
+        }
+        return task.getAssignee();
     }
 
     private static Integer prioritySortKey(TaskInfo task) {

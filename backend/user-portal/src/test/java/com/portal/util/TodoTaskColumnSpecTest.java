@@ -37,7 +37,12 @@ class TodoTaskColumnSpecTest {
 
     @Test
     void currentAssigneeColumnIsPresent() {
-        assertThat(column("assigneeName").label()).isEqualTo("task.currentAssignee");
+        ListColumnMeta assignee = column("assigneeName");
+        assertThat(assignee.label()).isEqualTo("task.currentAssignee");
+        assertThat(assignee.kind()).isEqualTo(Kind.TEXT);
+        assertThat(assignee.filterable()).isTrue();
+        assertThat(assignee.sortable()).isTrue();
+        assertThat(assignee.operators()).contains("contains", "eq", "isNull");
     }
 
     @Test

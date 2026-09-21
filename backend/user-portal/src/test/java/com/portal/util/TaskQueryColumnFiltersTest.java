@@ -115,6 +115,47 @@ class TaskQueryColumnFiltersTest {
     }
 
     @Test
+    void assigneeNameFilterMatchesDisplayNameOrUserId() {
+        TaskInfo named = TaskInfo.builder()
+                .taskId("1")
+                .assignee("u-ada")
+                .assigneeName("Ada Chen")
+                .claimedByCurrentUser(true)
+                .build();
+        TaskInfo idOnly = TaskInfo.builder().taskId("2").assignee("u-bo").build();
+        TaskInfo other = TaskInfo.builder()
+                .taskId("3")
+                .assignee("u-other")
+                .assigneeName("Bo Li")
+                .build();
+        assertTrue(TaskQueryColumnFilters.matches(named, List.of(
+                new ListColumnFilter("assigneeName", "contains", "Ada", null))));
+        assertTrue(TaskQueryColumnFilters.matches(named, List.of(
+                new ListColumnFilter("assigneeName", "eq", "u-ada", null))));
+        assertTrue(TaskQueryColumnFilters.matches(idOnly, List.of(
+                new ListColumnFilter("assigneeName", "contains", "u-bo", null))));
+        assertFalse(TaskQueryColumnFilters.matches(other, List.of(
+                new ListColumnFilter("assigneeName", "contains", "Ada", null))));
+        assertTrue(TaskQueryColumnFilters.toolbarKeywordMatches(named, "Ada"));
+        assertTrue(TaskQueryColumnFilters.toolbarKeywordMatches(named, "u-ada"));
+        assertTrue(TaskQueryColumnFilters.matches(named, List.of(
+                new ListColumnFilter("assigneeName", "contains", "You", null))));
+        assertTrue(TaskQueryColumnFilters.matches(named, List.of(
+                new ListColumnFilter("assigneeName", "eq", "我", null))));
+        assertTrue(TaskQueryColumnFilters.toolbarKeywordMatches(named, "You"));
+        assertFalse(TaskQueryColumnFilters.matches(other, List.of(
+                new ListColumnFilter("assigneeName", "contains", "You", null))));
+    }
+
+    @Test
+    void unknownAssigneeFilterFieldStillThrows() {
+        IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class,
+                () -> TaskQueryColumnFilters.normalize(List.of(
+                        new ListColumnFilter("assignee", "contains", "Ada", null))));
+        assertTrue(thrown.getMessage().contains("Unknown todo-task filter field"));
+    }
+
+    @Test
     void derivedColumnsNeededForKeywordFilterAndSort() {
         assertTrue(TaskQueryColumnFilters.needsPortalDerivedTaskColumns(
                 TaskQueryRequest.builder().keyword("ATM").build()));

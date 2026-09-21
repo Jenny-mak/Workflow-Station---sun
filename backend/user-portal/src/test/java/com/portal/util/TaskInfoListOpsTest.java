@@ -69,4 +69,22 @@ class TaskInfoListOpsTest {
         assertEquals("2", sorted.get(0).getTaskId());
         assertEquals("1", sorted.get(1).getTaskId());
     }
+
+    @Test
+    void applySortingByAssigneeUsesNameThenId() {
+        TaskInfo later = TaskInfo.builder()
+                .taskId("1")
+                .assignee("z-id")
+                .assigneeName("Zeta")
+                .build();
+        TaskInfo earlier = TaskInfo.builder()
+                .taskId("2")
+                .assignee("a-id")
+                .build();
+        List<TaskInfo> sorted = TaskInfoListOps.applySorting(
+                List.of(later, earlier),
+                TaskQueryRequest.builder().sortBy("assigneeName").sortDirection("ASC").build());
+        assertEquals("2", sorted.get(0).getTaskId());
+        assertEquals("1", sorted.get(1).getTaskId());
+    }
 }

@@ -73,6 +73,17 @@ class EngineTaskPushdownTest {
     }
 
     @Test
+    void assigneeNameFilterAndSortForceFullScan() {
+        assertFalse(EngineTaskPushdown.canFullyPush(TaskQueryRequest.builder()
+                .filters(List.of(new ListColumnFilter("assigneeName", "contains", "Ada", null)))
+                .build()));
+        assertFalse(EngineTaskPushdown.canFullyPush(TaskQueryRequest.builder()
+                .sortBy("assigneeName")
+                .sortDirection("ASC")
+                .build()));
+    }
+
+    @Test
     void toolbarPriorityInFilterForcesFullScan() {
         TaskQueryRequest request = TaskQueryRequest.builder()
                 .filters(List.of(new ListColumnFilter("priority", "in", "HIGH,URGENT", null)))
